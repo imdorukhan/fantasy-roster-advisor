@@ -1,0 +1,84 @@
+{
+  "league": {
+    "id": 85892,
+    "name": "Game of Trolls",
+    "teamId": 5,
+    "teams": 14,
+    "scoring": "h2h-categories",
+    "season": "2026-27"
+  },
+  "categories": [
+    "FG%",
+    "FT%",
+    "3PM",
+    "PTS",
+    "REB",
+    "AST",
+    "STL",
+    "BLK",
+    "TO"
+  ],
+  "statAliases": {
+    "3PTM": "3PM",
+    "ST": "STL"
+  },
+  "rosterSlots": [
+    "PG",
+    "SG",
+    "G",
+    "SF",
+    "PF",
+    "F",
+    "C",
+    "FC",
+    "UTIL",
+    "UTIL",
+    "BN",
+    "BN",
+    "BN",
+    "IL",
+    "IL"
+  ],
+  "limits": {
+    "weeklyAdds": 7,
+    "seasonAdds": null,
+    "maxTradesSeason": 3
+  },
+  "waivers": {
+    "mode": "continuous",
+    "processingDays": [
+      "Sun",
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat"
+    ],
+    "budgetType": "FAB",
+    "tiebreaker": "rolling",
+    "waiverTimeLabel": "No waivers",
+    "bidPolicy": "manual"
+  },
+  "deadlines": {
+    "lineup": "daily-today",
+    "trades": "2027-03-04"
+  },
+  "rules": {
+    "cantCutProvider": "Yahoo Sports",
+    "injuredDirectToIL": true,
+    "benchLocked": false
+  },
+  "scoringTargets": {
+    "PTS": 120,
+    "REB": 45,
+    "AST": 25,
+    "STL": 9,
+    "BLK": 6,
+    "3PM": 16,
+    "FG%": 48,
+    "FT%": 78,
+    "TO": 15
+  },
+  "targetsAreEstimates": true
+}
