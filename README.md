@@ -86,3 +86,11 @@ Inputs must contain actual box scores with game dates and properly attributed in
 ## Deployment
 
 Production dashboard: https://salarycaptain.vercel.app/ . The intended production branch is `main`; Git-connected deployments should be verified in the Vercel project deployment history.
+
+## Public matchup fallback
+
+`/public-matchup.html` fetches `/api/public-matchup` on demand. The server reads public Yahoo league 85892/team 5 matchup and both current roster pages, discovers the opponent from the category table, and compares all nine observed categories (lower TO wins). Yahoo remaining-game counts are observations, not guaranteed future starts. NBA.com schedule is cross-checked with ESPN scoreboard when accessible; failed/changed/blocked sources are labeled, with single-source or conflict status retained. ESPN game scores are not Yahoo category totals. Scheduled game scores remain unknown. Player box-score/stat cross-validation and reliable projections are still pending.
+
+No OAuth access is implied. Public observations do not verify free agents, waiver status, can-cut rules, remaining acquisitions or FAB balance, and are never promoted to `liveYahooVerified`. The endpoint accepts GET only and returns `private, no-store`; neither raw HTML nor roster snapshots are committed. Refresh failures clear displayed scores rather than re-labeling stale data as current. Source timestamps indicate retrieval, not publisher update times. The dashboard is public: this view uses only anonymously accessible Yahoo information. No transactions occur.
+
+Run `node --test *.test.mjs`. Live verification can run `node --input-type=module -e "import {ingest} from './matchup-data.mjs'; console.log(await ingest())"` locally; do not commit the output. Vercel serves the `.mjs` API route with its Node runtime.
