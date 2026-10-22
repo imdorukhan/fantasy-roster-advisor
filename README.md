@@ -35,3 +35,9 @@ One personal user, one Yahoo Fantasy NBA league (league ID 85892, team ID 5). No
 ## Disclaimer
 
 Independent personal project, not endorsed by or affiliated with Yahoo. Access and permitted uses are subject to Yahoo's approval and developer terms.
+
+## Recommendation engine (offline testing)
+
+Run `node engine.test.mjs` to verify the category evaluator without Yahoo API credentials. The `rankMoves({roster, agents, config})` function accepts explicit player stat projections and remaining games. It calculates weighted nine-category deltas (including team-level attempt-weighted FG% and FT%), excludes protected drops and waiver-only additions, and returns read-only, approval-required recommendations.
+
+**Limitations:** All projections, category weights and league settings must be provided and verified. The current tests use invented players and do not represent actual Yahoo roster or free-agent data. No OAuth flow, automated scheduling, transaction execution, or approval interface has been implemented yet.
