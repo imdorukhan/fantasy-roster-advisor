@@ -14,7 +14,7 @@ export function verifyDataset(d,{now=new Date().toISOString(),maxAgeHours=48}={}
  if(playerIds.some(x=>typeof x!=='string'||!x)||new Set(playerIds).size!==playerIds.length)fail('Missing or duplicate player IDs');
  if(d.roster.some(p=>!Array.isArray(p.positions)||!numeric(p.projection))||d.freeAgents.some(p=>!Array.isArray(p.positions)||!numeric(p.projection)))fail('Invalid player projections');
  if(!d.schedule.every(s=>typeof s.playerId==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s.date)))fail('Invalid schedule');
- return {valid:true,ageHours:tidy(age),fresh:age<=maxAgeHours,liveYahooVerified:d.provenance.yahooOwnershipVerified===true,source:d.provenance.source,observedAt:d.provenance.observedAt,actionable:age<=maxAgeHours&&d.provenance.yahooOwnershipVerified===true};
+ return {valid:true,ageHours:tidy(age),fresh:age<=maxAgeHours,liveYahooVerified:d.provenance.yahooOwnershipVerified===true,source:d.provenance.source,observedAt:d.provenance.observedAt,actionable:age<=maxAgeHours&&d.provenance.yahooOwnershipVerified===true&&d.provenance.scheduleVerified===true&&d.provenance.projectionsVerified===true};
 }
 function eligible(pos,slot){return slot==='UTIL'||pos.includes(slot)||(slot==='G'&&(pos.includes('PG')||pos.includes('SG')))||(slot==='F'&&(pos.includes('SF')||pos.includes('PF')))||(slot==='FC'&&(pos.includes('PF')||pos.includes('C')))}
 function lineupDP(players,slots,metric){
@@ -27,7 +27,7 @@ function lineupDP(players,slots,metric){
    if(!next.has(mask2)||score>next.get(mask2).score)next.set(mask2,{score,items:[...v.items,{slot:slots[i],playerId:p.id,name:p.name}]});
   }dp=next;
  }
- return [...dp.values()].sort((a,b)=>b.score-a.score)[0]||{score:0,items:[]};
+ return [...dp.values()].sort((a,b)=>b.items.length-a.items.length||b.score-a.score)[0]||{score:0,items:[]};
 }
 function value(p,weights){const s=p.projection;return CAT.reduce((v,k)=>{
   const raw=k==='FG%'?(s.FGM-.47*s.FGA)/5:k==='FT%'?(s.FTM-.78*s.FTA)/3:(k==='TO'?-s.TO:s[k]);
@@ -40,7 +40,7 @@ export function optimalLineup({players,slots,weights={}}){
 export function projectedTeamTotals({players,schedule,dates,slots,weights={}}){
  const totals=Object.fromEntries(COUNT.map(k=>[k,0]));const lineups=[];
  for(const date of dates){
-  const active=players.filter(p=>schedule.some(g=>g.playerId===p.id&&g.date===date));
+  const active=players.filter(p=>!['OUT','INJ','SUSP','IL'].includes(String(p.injuryStatus||'').toUpperCase())&&schedule.some(g=>g.playerId===p.id&&g.date===date));
   const lineup=optimalLineup({players:active,slots,weights});
   lineups.push({date,...lineup});
   for(const x of lineup.items){const p=players.find(q=>q.id===x.playerId);for(const k of COUNT)totals[k]+=p.projection[k]}
