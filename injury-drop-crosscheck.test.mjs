@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {assessSlumpsWithInjuries} from './injury-drop-crosscheck.mjs';
+const b={PTS:15,REB:5,AST:4,STL:1,BLK:.5,'3PM':2,TO:2,FGM:6,FGA:13,FTM:3,FTA:4};
+const g=date=>({played:true,date,minutes:24,PTS:4,REB:1,AST:1,STL:0,BLK:0,'3PM':0,TO:4,FGM:2,FGA:12,FTM:1,FTA:4});
+const player=(name,extra={})=>({name,baselinePerGame:b,baselineMinutes:30,lastGames:['2026-10-19','2026-10-20','2026-10-21'].map(g),longTermTier:'fringe',cantCutVerified:true,roleTrendVerified:true,...extra});
+const roster=[player('Injured Example'),player('No Evidence'),player('Other Injured')];
+const reports=[{player:'Injured Example',source:'team_statement',url:'https://example.org/team',publishedAt:'2026-10-21',injuryStart:'2026-10-20',status:'questionable'},{player:'Other Injured',source:'cbs',url:'https://example.org/news',publishedAt:'2026-10-20',status:'out'}];
+const result=assessSlumpsWithInjuries({roster,reports,today:'2026-10-22'});
+assert.equal(result.find(x=>x.player==='Injured Example').status,'INJURY_REVIEW');
+assert.equal(result.find(x=>x.player==='Injured Example').injuryConfirmedCausal,false);
+assert.equal(result.find(x=>x.player==='No Evidence').status,'DROP_REVIEW');
+assert.equal(result.find(x=>x.player==='Other Injured').status,'INJURY_REVIEW');
+assert.equal(result.find(x=>x.player==='Other Injured').injuryAssociation,'UNCONFIRMED_INJURY_CONNECTION');
+assert(result.every(x=>!x.executable&&x.requiresApproval));
+assert.equal(assessSlumpsWithInjuries({roster,reports:[],today:'2026-10-22'}).find(x=>x.player==='Injured Example').injuryAssociation,'NO_RECENT_MATCHING_REPORT');
+console.log('PASS: injury-linked decline, source strength, no causal overclaim, no automatic drops.');
