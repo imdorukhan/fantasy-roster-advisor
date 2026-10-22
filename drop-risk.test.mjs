@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {rankDropRisk} from './drop-risk.mjs';
+const baseline={PTS:15,REB:5,AST:4,STL:1,BLK:.5,'3PM':2,TO:2,FGM:6,FGA:13,FTM:3,FTA:4};
+const game=(pts,mins=27)=>({played:true,minutes:mins,PTS:pts,REB:2,AST:1,STL:0,BLK:0,'3PM':0,TO:4,FGM:2,FGA:12,FTM:1,FTA:4});
+const lastGames=[game(5),game(6),game(4)];
+const player=(name,extra={})=>({name,baselinePerGame:baseline,baselineMinutes:30,lastGames,longTermTier:'fringe',cantCutVerified:true,roleTrendVerified:true,...extra});
+const list=rankDropRisk({roster:[player('Fringe Player'),player('Star',{longTermTier:'star'}),player('Injured',{status:'OUT'}),player('Can’t Cut',{undroppable:true}),player('Unknown Rule',{cantCutVerified:false}),player('Small Sample',{lastGames:[game(4)]})]});
+assert.equal(list.find(x=>x.player==='Fringe Player').status,'DROP_REVIEW');
+assert.equal(list.find(x=>x.player==='Star').status,'WATCH_SLUMP');
+assert.equal(list.find(x=>x.player==='Injured').dropCandidate,false);
+assert.equal(list.find(x=>x.player==='Can’t Cut').dropCandidate,false);
+assert.equal(list.find(x=>x.player==='Unknown Rule').dropCandidate,false);
+assert.equal(list.find(x=>x.player==='Small Sample').status,'INSUFFICIENT_DATA');
+assert(list.every(x=>!x.executable));
+console.log('PASS: 9-cat last-three slump, stars protected, injury guard, can-cut guard, minimum sample, review-only.');
