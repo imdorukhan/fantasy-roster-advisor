@@ -72,3 +72,7 @@ Windows local persistence is provided by `injury-ledger.mjs`, which writes to `d
 - `node injury-ledger.mjs settle forecastId outcome.json`
 
 `forecast.json` must include `forecastId,source,player,injuryEpisodeId,publishedAt,predictedReturn,url`. `outcome.json` must include `actualReturn,actualEvidence,verifiedAt` (all dates YYYY-MM-DD). This is an audit trail for future verified inputs, not a claim that historic source predictions have already been collected. Run `node injury-scope.test.mjs`.
+
+## Drop Risk / Keep-or-Cut (offline prototype)
+
+`drop-risk.mjs` ranks **our own roster only** by the last three *played* NBA games versus a verified longer-term per-game baseline across the nine league categories. FG% and FT% calculations use makes/attempts (not naive averages), and turnovers are reversed. Injury, minutes restriction, short sample size, Yahoo can't-cut restrictions and star/keeper protection prevent a three-game slump from being treated as an automatic drop. `DROP_REVIEW` requires verified fringe/streamer role and can-cut status, plus a human review and a real replacement comparison before any roster action. Run `node drop-risk.test.mjs` to test. There is **no live Yahoo or NBA box-score ingestion yet**, so no actual players have been scored with this module.
