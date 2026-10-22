@@ -1,0 +1,65 @@
+{
+  "provenance": {
+    "source": "MANUAL_SAMPLE_NOT_LIVE",
+    "observedAt": "2026-10-22T08:00:00Z",
+    "yahooOwnershipVerified": false
+  },
+  "roster": [
+    {
+      "id": "example1",
+      "name": "Example Guard (not real)",
+      "positions": [
+        "PG"
+      ],
+      "canCutVerified": false,
+      "keeperProtected": false,
+      "projection": {
+        "PTS": 20,
+        "REB": 5,
+        "AST": 7,
+        "STL": 1.4,
+        "BLK": 0.2,
+        "3PM": 3,
+        "TO": 2.5,
+        "FGM": 7,
+        "FGA": 15,
+        "FTM": 3,
+        "FTA": 4
+      }
+    }
+  ],
+  "freeAgents": [
+    {
+      "id": "example2",
+      "name": "Example Free Agent (not real)",
+      "positions": [
+        "SG"
+      ],
+      "availability": "UNKNOWN",
+      "liveYahooVerified": false,
+      "projection": {
+        "PTS": 10,
+        "REB": 3,
+        "AST": 2,
+        "STL": 1,
+        "BLK": 0.4,
+        "3PM": 2,
+        "TO": 1,
+        "FGM": 4,
+        "FGA": 9,
+        "FTM": 1,
+        "FTA": 2
+      }
+    }
+  ],
+  "schedule": [
+    {
+      "playerId": "example1",
+      "date": "2026-10-23"
+    }
+  ],
+  "matchup": {
+    "opponent": null,
+    "uncertainty": null
+  }
+}
