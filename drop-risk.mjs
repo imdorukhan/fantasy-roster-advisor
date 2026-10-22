@@ -3,7 +3,7 @@ const counting=['PTS','REB','AST','STL','BLK','3PM','TO'];
 const attempts=['FGM','FGA','FTM','FTA'];
 const all=[...counting,...attempts];
 const goodNumber=x=>typeof x==='number'&&Number.isFinite(x)&&x>=0;
-const safeGames=arr=>Array.isArray(arr)?arr.filter(g=>g&&g.played===true&&g.minutes>0&&all.every(k=>goodNumber(g[k]??0))).slice(-3):[];
+const safeGames=arr=>Array.isArray(arr)?arr.filter(g=>g&&g.played===true&&g.minutes>0&&all.every(k=>goodNumber(g[k]))).slice(-3):[];
 const avg=(arr,key)=>arr.reduce((sum,x)=>sum+(x[key]||0),0)/arr.length;
 const rounded=n=>Number(n.toFixed(3));
 function vector(games){return Object.fromEntries(all.map(k=>[k,avg(games,k)]))}
@@ -36,7 +36,7 @@ export function rankDropRisk({roster,weights={},minRecentGames=3}){
   const base=p.baselinePerGame;
   const protectedPlayer=p.undroppable===true||p.keeperProtected===true;
   const injured=['OUT','INJ','IL','O','GTD','Q'].includes(String(p.status||'').toUpperCase())||p.minutesRestriction===true;
-  if(played.length<minRecentGames||!base||all.some(k=>!goodNumber(base[k]??0))){
+  if(played.length<minRecentGames||!base||all.some(k=>!goodNumber(base[k]))){
    result.push({player:p.name,status:'INSUFFICIENT_DATA',recentGames:played.length,dropCandidate:false,executable:false,reason:'Need three played games and a verified longer-term baseline.'});continue;
   }
   const score=impact(played,base,weights);
