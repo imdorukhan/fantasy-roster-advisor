@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {findSnapshotOwner,filterPossiblyFreeAgents,getUserSnapshot,rosterSnapshotSummary} from './ownership.mjs';
+assert.equal(rosterSnapshotSummary().teams,14);
+assert.equal(rosterSnapshotSummary().ownedPlayers,193);
+assert.equal(findSnapshotOwner('Nikola Jokic'),'Ege Karması');
+assert.equal(findSnapshotOwner('De\u2019Aaron Fox'),'Boom Shaka Laka');
+assert.equal(findSnapshotOwner('Victor Wembanyama'),'Salary CAPtain');
+assert.deepEqual(filterPossiblyFreeAgents([{name:'Victor Wembanyama'},{name:'Example Unrostered Prospect'}]),[{name:'Example Unrostered Prospect'}]);
+assert.equal(getUserSnapshot().players.length,14);
+assert.equal(getUserSnapshot().teamIdVerified,false);
+console.log('PASS: 193 unique owned players, 14 teams, name normalization, user roster, ownership screening.');
