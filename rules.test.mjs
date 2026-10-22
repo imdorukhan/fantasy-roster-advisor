@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {evaluateLeagueMoves,LEAGUE} from './rules.mjs';
+const p=(id,name,extra={})=>({id,name,games:3,stats:{PTS:12,REB:4,AST:3,STL:1,BLK:.5,'3PM':1,TO:1,FGM:5,FGA:11,FTM:2,FTA:3},...extra});
+const roster=[p('a','Protected Star'),p('b','Verified Droppable',{undroppable:false,games:1})];
+const pool=[p('c','Free Agent',{availability:'FA',available:true,games:4}),p('d','Waiver Player',{availability:'W',waiver:true,games:5}),p('e','Unknown Availability')];
+assert.deepEqual(LEAGUE.categories,['FG%','FT%','3PM','PTS','REB','AST','STL','BLK','TO']);
+assert.equal(LEAGUE.rosterSlots.filter(x=>x==='IL').length,2);
+assert.equal(evaluateLeagueMoves({roster,availablePlayers:pool,weeklyAcquisitionsUsed:7}).status,'LIMIT_REACHED');
+assert.equal(evaluateLeagueMoves({roster,availablePlayers:pool}).status,'NEEDS_VERIFICATION');
+const out=evaluateLeagueMoves({roster,availablePlayers:pool,weeklyAcquisitionsUsed:5,weeklyAcquisitionsPending:1});
+assert.equal(out.remainingAcquisitions,1);
+assert(out.moves.every(m=>m.drop.id==='b' && m.add.id==='c' && !m.executable && m.requiresApproval));
+assert.equal(out.waiverWatchlist[0].name,'Waiver Player');
+assert.equal(out.waiverWatchlist[0].suggestedBid,null);
+assert.equal(evaluateLeagueMoves({roster,availablePlayers:pool,weeklyAcquisitionsUsed:0,weeklyAcquisitionsPending:0}).status,'SIMULATION_TARGETS');
+console.log('PASS: Game of Trolls settings, 7-add guard, FAB separation, can-cut verification, read-only approvals.');
+console.log(JSON.stringify({status:out.status,remainingAcquisitions:out.remainingAcquisitions,example:out.moves[0],waivers:out.waiverWatchlist.length},null,2));
