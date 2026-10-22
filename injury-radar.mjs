@@ -21,7 +21,7 @@ export function evaluateInjuryRadar({players,reports,today,daysAhead=14,minFanta
   const recent=(grouped.get(normalize(player.name))||[]).filter(r=>dayDiff(today,r.observedAt)>=0&&dayDiff(today,r.observedAt)<=3).sort((a,b)=>b.sourceWeight-a.sourceWeight||b.observedAt.localeCompare(a.observedAt));
   if(!recent.length)continue;
   const dates=recent.filter(r=>dateOnly(r.estimatedReturnDate)&&!r.seasonEnding);
-  const top=dates[0]||recent[0];
+  const top=dates.find(r=>dayDiff(r.estimatedReturnDate,today)>=-1&&dayDiff(r.estimatedReturnDate,today)<=daysAhead)||dates[0]||recent[0];
   const days=top.estimatedReturnDate?dayDiff(top.estimatedReturnDate,today):null;
   const upcoming=days!==null&&days>=-1&&days<=daysAhead;
   const signals=recent.some(r=>r.practiceStatus==='full'||r.practiceStatus==='returned'||r.status==='probable'||r.status==='available');
