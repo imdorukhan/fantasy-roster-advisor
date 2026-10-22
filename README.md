@@ -82,3 +82,7 @@ Windows local persistence is provided by `injury-ledger.mjs`, which writes to `d
 `injury-drop-crosscheck.mjs` combines `rankDropRisk` with source-attributed injury reports. It compares reported injury timelines against each player's most recent three **dated** games and outputs `INJURY_REVIEW` instead of `DROP_REVIEW` when evidence suggests a possible link. It distinguishes corroborated reporting from a single secondary source, includes dated URLs, and never asserts medical causation. Run `node injury-drop-crosscheck.test.mjs`.
 
 Inputs must contain actual box scores with game dates and properly attributed injury reports; **the scraper/feed ingestion is not implemented yet**. Missing news is not evidence of health. No roster transaction is executed, and any eventual recommendation requires verification of current ownership, roster restrictions and a real replacement.
+
+## Deployment
+
+Production dashboard: https://salarycaptain.vercel.app/ . The intended production branch is `main`; Git-connected deployments should be verified in the Vercel project deployment history.
