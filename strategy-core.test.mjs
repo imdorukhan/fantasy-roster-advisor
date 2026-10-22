@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {breakoutCandidates,fabPlan,puntSimulation,playoffScheduleValue,forecastError,alertCandidates} from './strategy-core.mjs';
+const stars=[{id:'1',name:'Available Breakout',availability:'FA',liveYahooVerified:true,baselineMinutes:20,recentGames:Array(5).fill({minutes:30})},{id:'2',name:'Owned',availability:'OWNED',liveYahooVerified:false,baselineMinutes:20,recentGames:Array(5).fill({minutes:34})}];
+assert.deepEqual(breakoutCandidates({players:stars}).map(x=>x.name),['Available Breakout']);
+assert.equal(fabPlan({budget:98,weeksLeft:20,claims:[{name:'Target',availableVerified:true,estimatedValue:2}]}).length,1);
+const probs=Object.fromEntries(['FG%','FT%','3PM','PTS','REB','AST','STL','BLK','TO'].map(k=>[k,.6]));
+assert.equal(puntSimulation({categoryWinProbabilities:probs,puntCategory:'TO'}).retainedExpectedWins,4.8);
+assert.equal(playoffScheduleValue({players:stars,schedule:[{playerId:'1',date:'2027-03-20'}],dates:['2027-03-20']})[0].games,1);
+assert.equal(forecastError({predictions:[{id:'x',predicted:10}],outcomes:{x:8}}).meanAbsoluteError,2);
+assert.equal(alertCandidates({myRoster:[stars[1]],verifiedFreeAgents:[stars[0]],news:[{playerId:'1',important:true,verifiedSource:true,message:'Status changed'},{playerId:'unknown',important:true,verifiedSource:true}]}).length,1);
+console.log('PASS: breakout, FAB budget guard, punt, playoff schedule, model error, owned/FA alerts.');
