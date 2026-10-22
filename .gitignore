@@ -1,0 +1,10 @@
+node_modules/
+.env
+.env.*
+!.env.example
+*token*
+*secret*
+yahoo-teams.json
+snapshot.json
+players-summary.json
+*.log
