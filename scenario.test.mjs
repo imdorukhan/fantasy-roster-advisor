@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {forecastRosterScenario} from './scenario.mjs';
+const v=forecastRosterScenario();
+assert.equal(v.addsUsedNow,1);
+assert.equal(v.addsAvailableNow,6);
+assert.equal(v.projectedAddsUsed,2);
+assert.equal(v.projectedAddsAvailable,5);
+assert.equal(v.ilOccupiedProjected,2);
+assert.equal(v.ilEligibilityVerified,false);
+assert.equal(v.fabBudgetProjected,null);
+assert.equal(v.confirmed,false);
+console.log('PASS: pending Raynaud waiver, 7 weekly adds, two IL slots, unknown IL eligibility & FAB bid.');
+console.log(JSON.stringify(v,null,2));
