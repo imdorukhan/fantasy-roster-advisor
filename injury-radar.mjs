@@ -16,7 +16,7 @@ export function evaluateInjuryRadar({players,reports,today,daysAhead=14,minFanta
  const trust=sourceReliability(history);
  const output=[];
  for(const p of players){
-  const own=p.ownership==='MY_TEAM'||p.availability==='MY_TEAM'||(ownSnapshot.has(norm(p.name))&&p.ownership!=='OTHER_TEAM'&&p.availability!=='OWNED_OTHER');
+  const own=p.ownership==='MY_TEAM'||p.availability==='MY_TEAM'||(ownSnapshot.has(norm(p.name))&&p.liveYahooVerified!==true&&p.ownership!=='OTHER_TEAM'&&p.availability!=='OWNED_OTHER');
   const free=p.availability==='FA'&&p.liveYahooVerified===true&&!own;
   // Unknown, waiver-only, and everyone else's roster are outside the alert scope.
   if(!own&&!free)continue;
