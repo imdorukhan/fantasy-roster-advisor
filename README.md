@@ -55,3 +55,20 @@ The independent `injury-radar.mjs` evaluator compares externally supplied, times
 Source hierarchy: [NBA official injury reports](https://official.nba.com/nba-injury-report-2026-27-season/) and team announcements (participation and confirmed updates), [ESPN](https://www.espn.com/nba/injuries), [CBS Sports](https://www.cbssports.com/nba/injuries/), Rotowire, and reputable beat reporters. Game status is not a confirmed return date; estimates must retain their attribution and uncertainty. Source disagreements force a watch-only result. Results are non-executable and require review.
 
 **Not yet implemented in this repository:** automated licensed source ingestors, persistent source-change history, current Yahoo FA/waiver ownership access, verified projections, or a running notification daemon. A separate scheduled ChatGPT injury-news watch can send informational alerts; it does not establish Yahoo ownership or execute transactions. Respect each publisher's terms, robots and licensing requirements before automating collection.
+
+## Injury Return Radar — scoped
+
+Only two sets of players may appear: the manager's Salary CAPtain roster, and players whose **current Yahoo free-agent status has been verified**. Other managers' rostered players, waiver-only players, and unknown ownership are not alert targets. Snapshot-based own-team identification is provisional until refreshed.
+
+The injury return module accepts sourced reports; it does **not yet fetch Yahoo, NBA, ESPN, CBS, or Rotowire feeds automatically**. Alerts and category values require up-to-date source inputs. All suggestions remain manual-review-only.
+
+## Source reliability / immutable evidence ledger
+
+`source-reliability.mjs` records a forecast with its original source URL, publication date, predicted return date, player and injury-episode ID. Following a **verified actual game appearance**, `settleForecast` records actual date and evidence. Reports are scored with mean absolute error in days, fraction of first forecasts within ±3 days, and a smoothed, sample-size-adjusted provisional confidence (20 episodes minimum before flag clears). Multiple updates for the same source/player/injury episode count **only the first forecast**.
+
+Windows local persistence is provided by `injury-ledger.mjs`, which writes to `data/injury-forecast-history.local.json` (excluded from Git). Usage:
+- `node injury-ledger.mjs show`
+- `node injury-ledger.mjs forecast forecast.json`
+- `node injury-ledger.mjs settle forecastId outcome.json`
+
+`forecast.json` must include `forecastId,source,player,injuryEpisodeId,publishedAt,predictedReturn,url`. `outcome.json` must include `actualReturn,actualEvidence,verifiedAt` (all dates YYYY-MM-DD). This is an audit trail for future verified inputs, not a claim that historic source predictions have already been collected. Run `node injury-scope.test.mjs`.
