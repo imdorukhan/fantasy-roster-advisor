@@ -5,7 +5,7 @@
   "source": "User-supplied Yahoo Starting Rosters PDF, Thu Oct 22 selected",
   "team_id_mapping_verified": false,
   "user_team_id": 5,
-  "user_team_name": null,
+  "user_team_name": "Salary CAPtain",
   "live_availability_verified": false,
   "teams": [
     {
@@ -263,7 +263,7 @@
     },
     {
       "team_name": "Salary CAPtain",
-      "yahoo_team_id": null,
+      "yahoo_team_id": 5,
       "players": [
         {
           "name": "Stephen Curry",
@@ -884,5 +884,6 @@
         }
       ]
     }
-  ]
+  ],
+  "user_team_identification_source": "Prior 2026 draft conversation (not independently confirmed through Yahoo team API)"
 }
