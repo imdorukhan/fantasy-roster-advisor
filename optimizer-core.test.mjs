@@ -7,7 +7,7 @@ const add=p('c','FA Guard',['PG'],{availability:'FA',liveYahooVerified:true,proj
 const schedule=[{playerId:'a',date:'2026-10-23'},{playerId:'b',date:'2026-10-23'},{playerId:'c',date:'2026-10-23'},{playerId:'c',date:'2026-10-24'}];
 const dataset={provenance:{source:'manual verified report',observedAt:'2026-10-22T08:00:00Z',yahooOwnershipVerified:false},roster,freeAgents:[add],schedule};
 assert.equal(verifyDataset(dataset,{now:'2026-10-22T09:00:00Z'}).actionable,false);
-assert.equal(verifyDataset({...dataset,provenance:{...dataset.provenance,yahooOwnershipVerified:true}},{now:'2026-10-22T09:00:00Z'}).actionable,true);
+assert.equal(verifyDataset({...dataset,provenance:{...dataset.provenance,yahooOwnershipVerified:true,scheduleVerified:true,projectionsVerified:true}},{now:'2026-10-22T09:00:00Z'}).actionable,true);
 assert.equal(verifyDataset(dataset,{now:'2026-10-25T09:00:00Z'}).fresh,false);
 assert.throws(()=>verifyDataset({...dataset,roster:[...roster,roster[0]]}));
 assert.equal(optimalLineup({players:roster,slots:['PG','C']}).items.length,2);
