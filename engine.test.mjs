@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {rankMoves} from './engine.mjs';
+const categories=['PTS','REB','AST','STL','BLK','3PM','FG%','FT%','TO'];
+const config={scoring:'h2h-categories',categories,targets:{PTS:120,REB:45,AST:25,STL:9,BLK:6,'3PM':16,'FG%':48,'FT%':78,TO:15},weights:{STL:2,BLK:2}};
+const player=(id,name,games,stats,extra={})=>({id,name,games,stats,...extra});
+const roster=[player('a','Star',3,{PTS:25,REB:10,FGM:10,FGA:20,FTM:5,FTA:6},{undroppable:true}),player('b','Streamer',2,{PTS:8,STL:.5,FGM:3,FGA:8,FTM:2,FTA:3})];
+const agents=[player('c','Category Helper',4,{PTS:14,REB:5,AST:4,STL:2,BLK:1,'3PM':2,TO:1,FGM:5,FGA:10,FTM:2,FTA:3}),player('d','Waiver',4,{PTS:40},{waiver:true}),player('e','Injured',4,{PTS:25},{status:'OUT'})];
+const ranked=rankMoves({roster,agents,config});
+assert.equal(ranked[0].add.id,'c');assert(ranked.every(x=>x.drop.id==='b'&&x.add.id!=='d'&&x.requiresApproval&&!x.executable));
+assert.throws(()=>rankMoves({roster,agents,config:{...config,scoring:'points'}}));
+assert.throws(()=>rankMoves({roster:[...roster,roster[0]],agents,config}));
+console.log('PASS: safety, waiver filters, category ranking, scoring-format guard, duplicate protection');
+console.log(JSON.stringify(ranked[0],null,2));
