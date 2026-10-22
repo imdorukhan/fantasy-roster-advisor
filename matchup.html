@@ -9,7 +9,7 @@
 <section class="card"><h2>Bu analizin sonraki aşaması</h2><p class="muted">Yahoo matchup aktif oyuncularını ve kategori skorlarını okuduğumuzda bu ESPN karşılaştırmasıyla birleştirip, <strong>hangi kategoriyi çevirebileceğimizi</strong> ve kalan maçlarda kimin ilk beşte olması gerektiğini hesaplayacağız. Gerçek Yahoo ekranıyla doğrulama olmadan bu sayfa bir add/drop kararını tetiklemez.</p><a href="/optimizer.html">Optimization Lab →</a></section>
 <div class="foot">Bağımsız fantasy analiz prototipi · Hiçbir roster işlemi yapılmaz · Tüm öneriler manuel onay gerektirir.</div></main>
 <script>
-const $=id=>document.getElementById(id),escapeHtml=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;':'&quot;',"'":'&#39;'}[c]));
+const $=id=>document.getElementById(id),escapeHtml=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const f=n=>n===null||n===undefined?'—':Number.isInteger(n)?String(n):Number(n).toFixed(2).replace(/0+$/,'').replace(/\.$/,'');
 function playerTable(players){return '<table><thead><tr><th>Oyuncu</th><th>Maç</th><th>PTS</th><th>REB</th><th>AST</th></tr></thead><tbody>'+players.map(p=>'<tr><td>'+escapeHtml(p.name)+'</td><td>'+p.games+'</td><td>'+p.boxScore.PTS+'</td><td>'+p.boxScore.REB+'</td><td>'+p.boxScore.AST+'</td></tr>').join('')+'</tbody></table>'}
 async function load(){const btn=$('refresh');btn.disabled=true;try{const r=await fetch('/api/matchup');if(!r.ok)throw Error('HTTP '+r.status);const d=await r.json();const w={OURS:0,OPPONENT:0,TIE:0,UNKNOWN:0};for(const c of d.comparison)w[c.leader]=(w[c.leader]||0)+1;const any=d.gamesAnalyzed>0;
