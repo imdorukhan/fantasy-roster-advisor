@@ -8,3 +8,6 @@ yahoo-teams.json
 snapshot.json
 players-summary.json
 *.log
+
+# Private injury prediction and outcomes ledger
+data/*.local.json
