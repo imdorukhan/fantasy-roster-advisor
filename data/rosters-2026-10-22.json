@@ -1,0 +1,888 @@
+{
+  "league_id": 85892,
+  "snapshot_date": "2026-10-22",
+  "snapshot_kind": "starting_rosters",
+  "source": "User-supplied Yahoo Starting Rosters PDF, Thu Oct 22 selected",
+  "team_id_mapping_verified": false,
+  "user_team_id": 5,
+  "user_team_name": null,
+  "live_availability_verified": false,
+  "teams": [
+    {
+      "team_name": "Sihirbaz",
+      "yahoo_team_id": null,
+      "players": [
+        {
+          "name": "Donovan Mitchell",
+          "slot": "PG"
+        },
+        {
+          "name": "Austin Reaves",
+          "slot": "SG"
+        },
+        {
+          "name": "Kyshawn George",
+          "slot": "G"
+        },
+        {
+          "name": "DeMar DeRozan",
+          "slot": "SF"
+        },
+        {
+          "name": "Trevon Brazile",
+          "slot": "PF"
+        },
+        {
+          "name": "Grayson Allen",
+          "slot": "F"
+        },
+        {
+          "name": "Wendell Carter Jr.",
+          "slot": "C"
+        },
+        {
+          "name": "Yves Missi",
+          "slot": "FC"
+        },
+        {
+          "name": "Moussa Diabaté",
+          "slot": "Util"
+        },
+        {
+          "name": "Brayden Burries",
+          "slot": "Util"
+        },
+        {
+          "name": "Tyrese Haliburton",
+          "slot": "BN"
+        },
+        {
+          "name": "Matas Buzelis",
+          "slot": "BN"
+        },
+        {
+          "name": "Anthony Davis",
+          "slot": "BN"
+        },
+        {
+          "name": "Cameron Carr",
+          "slot": "IL",
+          "status": "Q"
+        }
+      ]
+    },
+    {
+      "team_name": "İçinden Geçicem",
+      "yahoo_team_id": null,
+      "players": [
+        {
+          "name": "Jamal Murray",
+          "slot": "PG"
+        },
+        {
+          "name": "Ausar Thompson",
+          "slot": "SG"
+        },
+        {
+          "name": "Darius Acuff Jr.",
+          "slot": "G"
+        },
+        {
+          "name": "Jaylen Brown",
+          "slot": "SF"
+        },
+        {
+          "name": "Jaren Jackson Jr.",
+          "slot": "PF"
+        },
+        {
+          "name": "Domantas Sabonis",
+          "slot": "F"
+        },
+        {
+          "name": "Pascal Siakam",
+          "slot": "C"
+        },
+        {
+          "name": "Ace Bailey",
+          "slot": "FC"
+        },
+        {
+          "name": "VJ Edgecombe",
+          "slot": "Util"
+        },
+        {
+          "name": "Darryn Peterson",
+          "slot": "Util"
+        },
+        {
+          "name": "Trae Young",
+          "slot": "BN"
+        },
+        {
+          "name": "Zaccharie Risacher",
+          "slot": "BN"
+        },
+        {
+          "name": "AJ Dybantsa",
+          "slot": "BN",
+          "status": "Q"
+        },
+        {
+          "name": "Shaedon Sharpe",
+          "slot": "IL",
+          "status": "O"
+        }
+      ]
+    },
+    {
+      "team_name": "Big Poppa",
+      "yahoo_team_id": null,
+      "players": [
+        {
+          "name": "LaMelo Ball",
+          "slot": "PG"
+        },
+        {
+          "name": "Anthony Edwards",
+          "slot": "SG"
+        },
+        {
+          "name": "Kyrie Irving",
+          "slot": "G"
+        },
+        {
+          "name": "Pelle Larsson",
+          "slot": "SF"
+        },
+        {
+          "name": "Aaron Gordon",
+          "slot": "PF"
+        },
+        {
+          "name": "Tim Hardaway Jr.",
+          "slot": "F"
+        },
+        {
+          "name": "Aday Mara",
+          "slot": "C"
+        },
+        {
+          "name": "Cooper Flagg",
+          "slot": "FC"
+        },
+        {
+          "name": "Keaton Wagler",
+          "slot": "Util"
+        },
+        {
+          "name": "CJ McCollum",
+          "slot": "Util"
+        },
+        {
+          "name": "Gui Santos",
+          "slot": "BN"
+        },
+        {
+          "name": "Derik Queen",
+          "slot": "BN"
+        },
+        {
+          "name": "Mitchell Robinson",
+          "slot": "BN"
+        },
+        {
+          "name": "Mark Williams",
+          "slot": "IL",
+          "status": "O"
+        }
+      ]
+    },
+    {
+      "team_name": "Boom Shaka Laka",
+      "yahoo_team_id": null,
+      "players": [
+        {
+          "name": "Josh Giddey",
+          "slot": "PG"
+        },
+        {
+          "name": "Cam Spencer",
+          "slot": "SG"
+        },
+        {
+          "name": "De'Aaron Fox",
+          "slot": "G"
+        },
+        {
+          "name": "RJ Barrett",
+          "slot": "SF"
+        },
+        {
+          "name": "Michael Porter Jr.",
+          "slot": "PF"
+        },
+        {
+          "name": "Evan Mobley",
+          "slot": "F"
+        },
+        {
+          "name": "Ryan Kalkbrenner",
+          "slot": "C"
+        },
+        {
+          "name": "Deandre Ayton",
+          "slot": "FC"
+        },
+        {
+          "name": "Ja Morant",
+          "slot": "Util"
+        },
+        {
+          "name": "Dillon Brooks",
+          "slot": "Util"
+        },
+        {
+          "name": "Stephon Castle",
+          "slot": "BN"
+        },
+        {
+          "name": "OG Anunoby",
+          "slot": "BN"
+        },
+        {
+          "name": "Karl-Anthony Towns",
+          "slot": "BN"
+        },
+        {
+          "name": "Jimmy Butler III",
+          "slot": "IL",
+          "status": "O"
+        }
+      ]
+    },
+    {
+      "team_name": "Salary CAPtain",
+      "yahoo_team_id": null,
+      "players": [
+        {
+          "name": "Stephen Curry",
+          "slot": "PG"
+        },
+        {
+          "name": "Tre Jones",
+          "slot": "SG"
+        },
+        {
+          "name": "Zach LaVine",
+          "slot": "G"
+        },
+        {
+          "name": "Scottie Barnes",
+          "slot": "SF"
+        },
+        {
+          "name": "Draymond Green",
+          "slot": "PF"
+        },
+        {
+          "name": "Andrew Wiggins",
+          "slot": "F"
+        },
+        {
+          "name": "Victor Wembanyama",
+          "slot": "C"
+        },
+        {
+          "name": "Jaylon Tyson",
+          "slot": "FC"
+        },
+        {
+          "name": "Kris Dunn",
+          "slot": "Util"
+        },
+        {
+          "name": "Cameron Johnson",
+          "slot": "Util"
+        },
+        {
+          "name": "Devin Vassell",
+          "slot": "BN"
+        },
+        {
+          "name": "Nikola Vučević",
+          "slot": "BN"
+        },
+        {
+          "name": "Jay Huff",
+          "slot": "BN"
+        },
+        {
+          "name": "Kristaps Porziņģis",
+          "slot": "IL",
+          "status": "O"
+        }
+      ]
+    },
+    {
+      "team_name": "Team Code Blue",
+      "yahoo_team_id": null,
+      "players": [
+        {
+          "name": "Cason Wallace",
+          "slot": "PG"
+        },
+        {
+          "name": "Kevin Durant",
+          "slot": "SG"
+        },
+        {
+          "name": "Brandin Podziemski",
+          "slot": "G",
+          "status": "Q"
+        },
+        {
+          "name": "Jalen Green",
+          "slot": "SF"
+        },
+        {
+          "name": "Christian Braun",
+          "slot": "PF"
+        },
+        {
+          "name": "Rui Hachimura",
+          "slot": "F"
+        },
+        {
+          "name": "Isaiah Hartenstein",
+          "slot": "C"
+        },
+        {
+          "name": "Neemias Queta",
+          "slot": "FC"
+        },
+        {
+          "name": "Ayo Dosunmu",
+          "slot": "Util"
+        },
+        {
+          "name": "Reed Sheppard",
+          "slot": "Util"
+        },
+        {
+          "name": "Amen Thompson",
+          "slot": "BN"
+        },
+        {
+          "name": "Donovan Clingan",
+          "slot": "BN"
+        },
+        {
+          "name": "Jayson Tatum",
+          "slot": "BN"
+        }
+      ]
+    },
+    {
+      "team_name": "Ege Karması",
+      "yahoo_team_id": null,
+      "players": [
+        {
+          "name": "Shai Gilgeous-Alexander",
+          "slot": "PG"
+        },
+        {
+          "name": "Naji Marshall",
+          "slot": "SG"
+        },
+        {
+          "name": "Obi Toppin",
+          "slot": "SF"
+        },
+        {
+          "name": "Saddiq Bey",
+          "slot": "PF"
+        },
+        {
+          "name": "Justin Champagnie",
+          "slot": "F"
+        },
+        {
+          "name": "Nikola Jokić",
+          "slot": "C"
+        },
+        {
+          "name": "Jarrett Allen",
+          "slot": "FC",
+          "status": "Q"
+        },
+        {
+          "name": "Robert Williams III",
+          "slot": "Util"
+        },
+        {
+          "name": "Kyle Kuzma",
+          "slot": "Util"
+        },
+        {
+          "name": "Kelly Oubre Jr.",
+          "slot": "BN"
+        },
+        {
+          "name": "Duncan Robinson",
+          "slot": "BN"
+        },
+        {
+          "name": "Coby White",
+          "slot": "IL",
+          "status": "O"
+        },
+        {
+          "name": "Collin Sexton",
+          "slot": "IL",
+          "status": "Q"
+        }
+      ]
+    },
+    {
+      "team_name": "Dynasty Reloaded",
+      "yahoo_team_id": null,
+      "players": [
+        {
+          "name": "Luka Dončić",
+          "slot": "PG"
+        },
+        {
+          "name": "Tyler Herro",
+          "slot": "SG"
+        },
+        {
+          "name": "Kevin Porter Jr.",
+          "slot": "G",
+          "status": "NA"
+        },
+        {
+          "name": "Jalen Johnson",
+          "slot": "SF"
+        },
+        {
+          "name": "Zion Williamson",
+          "slot": "PF"
+        },
+        {
+          "name": "Keegan Murray",
+          "slot": "F"
+        },
+        {
+          "name": "Adem Bona",
+          "slot": "C"
+        },
+        {
+          "name": "Quentin Grimes",
+          "slot": "FC"
+        },
+        {
+          "name": "Andrew Nembhard",
+          "slot": "Util"
+        },
+        {
+          "name": "P.J. Washington",
+          "slot": "Util"
+        },
+        {
+          "name": "Khaman Maluach",
+          "slot": "BN"
+        },
+        {
+          "name": "Payton Pritchard",
+          "slot": "BN"
+        },
+        {
+          "name": "Isaiah Joe",
+          "slot": "BN"
+        },
+        {
+          "name": "Donte DiVincenzo",
+          "slot": "IL",
+          "status": "O"
+        }
+      ]
+    },
+    {
+      "team_name": "Kadro Mühendisi",
+      "yahoo_team_id": null,
+      "players": [
+        {
+          "name": "Tyrese Maxey",
+          "slot": "PG"
+        },
+        {
+          "name": "Keyonte George",
+          "slot": "SG"
+        },
+        {
+          "name": "Fred VanVleet",
+          "slot": "G"
+        },
+        {
+          "name": "LeBron James",
+          "slot": "SF"
+        },
+        {
+          "name": "Tari Eason",
+          "slot": "PF"
+        },
+        {
+          "name": "Miles Bridges",
+          "slot": "F"
+        },
+        {
+          "name": "Alperen Şengün",
+          "slot": "C"
+        },
+        {
+          "name": "Myles Turner",
+          "slot": "FC"
+        },
+        {
+          "name": "Toumani Camara",
+          "slot": "Util"
+        },
+        {
+          "name": "Walker Kessler",
+          "slot": "Util"
+        },
+        {
+          "name": "Jerami Grant",
+          "slot": "BN"
+        },
+        {
+          "name": "Andre Drummond",
+          "slot": "BN"
+        },
+        {
+          "name": "Santi Aldama",
+          "slot": "BN",
+          "status": "Q"
+        },
+        {
+          "name": "Brandon Ingram",
+          "slot": "IL",
+          "status": "O"
+        }
+      ]
+    },
+    {
+      "team_name": "FAFO",
+      "yahoo_team_id": null,
+      "players": [
+        {
+          "name": "Darius Garland",
+          "slot": "PG"
+        },
+        {
+          "name": "Dylan Harper",
+          "slot": "SG"
+        },
+        {
+          "name": "Damian Lillard",
+          "slot": "G"
+        },
+        {
+          "name": "Jalen Williams",
+          "slot": "SF"
+        },
+        {
+          "name": "Paolo Banchero",
+          "slot": "PF"
+        },
+        {
+          "name": "Julius Randle",
+          "slot": "F"
+        },
+        {
+          "name": "Zach Edey",
+          "slot": "C"
+        },
+        {
+          "name": "Ivica Zubac",
+          "slot": "FC"
+        },
+        {
+          "name": "Paul George",
+          "slot": "Util"
+        },
+        {
+          "name": "Kel'el Ware",
+          "slot": "Util"
+        },
+        {
+          "name": "Ryan Rollins",
+          "slot": "BN"
+        },
+        {
+          "name": "Immanuel Quickley",
+          "slot": "BN"
+        },
+        {
+          "name": "Yaxel Lendeborg",
+          "slot": "BN"
+        },
+        {
+          "name": "Jusuf Nurkić",
+          "slot": "IL",
+          "status": "O"
+        },
+        {
+          "name": "Max Strus",
+          "slot": "IL",
+          "status": "O"
+        }
+      ]
+    },
+    {
+      "team_name": "San Antonmio",
+      "yahoo_team_id": null,
+      "players": [
+        {
+          "name": "Jared McCain",
+          "slot": "PG"
+        },
+        {
+          "name": "James Harden",
+          "slot": "SG"
+        },
+        {
+          "name": "Davion Mitchell",
+          "slot": "G"
+        },
+        {
+          "name": "Jaden McDaniels",
+          "slot": "SF"
+        },
+        {
+          "name": "Chet Holmgren",
+          "slot": "PF"
+        },
+        {
+          "name": "Jabari Smith Jr.",
+          "slot": "F"
+        },
+        {
+          "name": "Onyeka Okongwu",
+          "slot": "C"
+        },
+        {
+          "name": "Franz Wagner",
+          "slot": "FC"
+        },
+        {
+          "name": "Naz Reid",
+          "slot": "Util"
+        },
+        {
+          "name": "Day'Ron Sharpe",
+          "slot": "Util"
+        },
+        {
+          "name": "Jalen Suggs",
+          "slot": "BN"
+        },
+        {
+          "name": "Desmond Bane",
+          "slot": "BN"
+        },
+        {
+          "name": "Bam Adebayo",
+          "slot": "BN"
+        },
+        {
+          "name": "Nic Claxton",
+          "slot": "IL",
+          "status": "O"
+        }
+      ]
+    },
+    {
+      "team_name": "Larwin",
+      "yahoo_team_id": null,
+      "players": [
+        {
+          "name": "Ajay Mitchell",
+          "slot": "PG"
+        },
+        {
+          "name": "Kawhi Leonard",
+          "slot": "SG"
+        },
+        {
+          "name": "Dyson Daniels",
+          "slot": "G"
+        },
+        {
+          "name": "Jonathan Kuminga",
+          "slot": "SF"
+        },
+        {
+          "name": "Paul Reed",
+          "slot": "PF"
+        },
+        {
+          "name": "Caleb Wilson",
+          "slot": "F"
+        },
+        {
+          "name": "Giannis Antetokounmpo",
+          "slot": "C"
+        },
+        {
+          "name": "Rudy Gobert",
+          "slot": "FC"
+        },
+        {
+          "name": "Peyton Watson",
+          "slot": "Util"
+        },
+        {
+          "name": "Jakob Poeltl",
+          "slot": "Util"
+        },
+        {
+          "name": "Dejounte Murray",
+          "slot": "BN"
+        },
+        {
+          "name": "Josh Hart",
+          "slot": "BN"
+        },
+        {
+          "name": "Jalen Duren",
+          "slot": "BN"
+        }
+      ]
+    },
+    {
+      "team_name": "Şabanoğlu Şaban",
+      "yahoo_team_id": null,
+      "players": [
+        {
+          "name": "Collin Gillespie",
+          "slot": "PG"
+        },
+        {
+          "name": "Norman Powell",
+          "slot": "SG"
+        },
+        {
+          "name": "Trey Murphy III",
+          "slot": "G"
+        },
+        {
+          "name": "Lauri Markkanen",
+          "slot": "SF"
+        },
+        {
+          "name": "Brandon Miller",
+          "slot": "PF"
+        },
+        {
+          "name": "Collin Murray-Boyles",
+          "slot": "F"
+        },
+        {
+          "name": "Joel Embiid",
+          "slot": "C"
+        },
+        {
+          "name": "Jalen Smith",
+          "slot": "FC"
+        },
+        {
+          "name": "Jaime Jaquez Jr.",
+          "slot": "Util"
+        },
+        {
+          "name": "Isaiah Jackson",
+          "slot": "Util"
+        },
+        {
+          "name": "Isaiah Stewart",
+          "slot": "BN",
+          "status": "Q"
+        },
+        {
+          "name": "Cade Cunningham",
+          "slot": "BN"
+        },
+        {
+          "name": "Derrick White",
+          "slot": "BN"
+        },
+        {
+          "name": "Anthony Black",
+          "slot": "IL",
+          "status": "Q"
+        }
+      ]
+    },
+    {
+      "team_name": "Wizard of OZ",
+      "yahoo_team_id": null,
+      "players": [
+        {
+          "name": "Ty Jerome",
+          "slot": "PG"
+        },
+        {
+          "name": "Jeremiah Fears",
+          "slot": "SG"
+        },
+        {
+          "name": "Devin Booker",
+          "slot": "G"
+        },
+        {
+          "name": "Deni Avdija",
+          "slot": "SF"
+        },
+        {
+          "name": "Cameron Boozer",
+          "slot": "PF"
+        },
+        {
+          "name": "Mikal Bridges",
+          "slot": "F"
+        },
+        {
+          "name": "Alex Sarr",
+          "slot": "C"
+        },
+        {
+          "name": "Sandro Mamukelashvili",
+          "slot": "FC"
+        },
+        {
+          "name": "Nickeil Alexander-Walker",
+          "slot": "Util"
+        },
+        {
+          "name": "Cedric Coward",
+          "slot": "Util"
+        },
+        {
+          "name": "Jalen Brunson",
+          "slot": "BN"
+        },
+        {
+          "name": "John Collins",
+          "slot": "BN"
+        },
+        {
+          "name": "Kon Knueppel",
+          "slot": "BN",
+          "status": "Q"
+        }
+      ]
+    }
+  ]
+}
