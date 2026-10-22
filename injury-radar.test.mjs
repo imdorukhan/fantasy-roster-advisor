@@ -1,15 +1,2 @@
-import assert from 'node:assert/strict';
-import {evaluateInjuryRadar} from './injury-radar.mjs';
-const today='2026-10-22';
-const players=[{name:'Sample A',availability:'FA',liveYahooVerified:true,fantasyValue:85,valueMethodVerified:true},{name:'Victor Wembanyama',availability:'FA',liveYahooVerified:true,fantasyValue:100,valueMethodVerified:true},{name:'Sample B',availability:'UNKNOWN'},{name:'Sample C',availability:'FA',liveYahooVerified:true,fantasyValue:90,valueMethodVerified:true}];
-const reports=[{player:'Sample A',source:'official_nba',url:'https://official.nba.com/',observedAt:today,estimatedReturnDate:'2026-10-25',dateType:'estimate',status:'out'},{player:'Victor Wembanyama',source:'official_nba',url:'https://official.nba.com/',observedAt:today,estimatedReturnDate:'2026-10-24'},{player:'Sample B',source:'cbs',url:'https://www.cbssports.com/nba/injuries/',observedAt:today,estimatedReturnDate:'2026-10-25'},{player:'Sample C',source:'cbs',url:'https://www.cbssports.com/nba/injuries/',observedAt:today,estimatedReturnDate:'2026-10-25'},{player:'Sample C',source:'espn',url:'https://www.espn.com/nba/injuries',observedAt:today,estimatedReturnDate:'2026-11-15'}];
-const a=evaluateInjuryRadar({players,reports,today});
-assert.equal(a.length,3);
-assert.equal(a.find(x=>x.player==='Sample A').recommendation,'PICKUP_REVIEW');
-assert(!a.some(x=>x.player==='Victor Wembanyama'));
-assert.equal(a.find(x=>x.player==='Sample B').recommendation,'WATCH_ONLY');
-assert.equal(a.find(x=>x.player==='Sample C').recommendation,'WATCH_ONLY');
-assert.equal(a.find(x=>x.player==='Sample C').conflictingSources,true);
-assert(a.every(x=>x.requiresApproval&&!x.executable));
-assert.throws(()=>evaluateInjuryRadar({players,reports,today:'tomorrow'}));
-console.log('PASS: unowned filtering, multi-source support, conflict guard, return horizon, read-only approvals.');
+// Compatibility entry point for earlier injury-radar test command.
+import './injury-scope.test.mjs';
