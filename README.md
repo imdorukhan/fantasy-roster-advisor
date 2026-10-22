@@ -76,3 +76,9 @@ Windows local persistence is provided by `injury-ledger.mjs`, which writes to `d
 ## Drop Risk / Keep-or-Cut (offline prototype)
 
 `drop-risk.mjs` ranks **our own roster only** by the last three *played* NBA games versus a verified longer-term per-game baseline across the nine league categories. FG% and FT% calculations use makes/attempts (not naive averages), and turnovers are reversed. Injury, minutes restriction, short sample size, Yahoo can't-cut restrictions and star/keeper protection prevent a three-game slump from being treated as an automatic drop. `DROP_REVIEW` requires verified fringe/streamer role and can-cut status, plus a human review and a real replacement comparison before any roster action. Run `node drop-risk.test.mjs` to test. There is **no live Yahoo or NBA box-score ingestion yet**, so no actual players have been scored with this module.
+
+## Injury-aware Keep-or-Cut
+
+`injury-drop-crosscheck.mjs` combines `rankDropRisk` with source-attributed injury reports. It compares reported injury timelines against each player's most recent three **dated** games and outputs `INJURY_REVIEW` instead of `DROP_REVIEW` when evidence suggests a possible link. It distinguishes corroborated reporting from a single secondary source, includes dated URLs, and never asserts medical causation. Run `node injury-drop-crosscheck.test.mjs`.
+
+Inputs must contain actual box scores with game dates and properly attributed injury reports; **the scraper/feed ingestion is not implemented yet**. Missing news is not evidence of health. No roster transaction is executed, and any eventual recommendation requires verification of current ownership, roster restrictions and a real replacement.
