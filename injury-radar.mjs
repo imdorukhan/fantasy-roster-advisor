@@ -1,39 +1,40 @@
-import {findSnapshotOwner} from './ownership.mjs';
-const MS_DAY=86400000;
-const normalize=s=>String(s||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toLowerCase();
-const dateOnly=s=>typeof s==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s)&&!Number.isNaN(Date.parse(s+'T00:00:00Z'));
-const dayDiff=(a,b)=>Math.round((Date.parse(a+'T00:00:00Z')-Date.parse(b+'T00:00:00Z'))/MS_DAY);
-const priority={official_nba:4,team_statement:4,espn:3,rotowire:3,cbs:2,other:1};
-export function evaluateInjuryRadar({players,reports,today,daysAhead=14,minFantasyValue=60}){
- if(!dateOnly(today))throw Error('today must be YYYY-MM-DD');
- if(!Array.isArray(players)||!Array.isArray(reports))throw Error('players/reports arrays required');
+import {getUserSnapshot} from './ownership.mjs';
+import {sourceReliability} from './source-reliability.mjs';
+const norm=s=>String(s||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toLowerCase();
+const day=n=>typeof n==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(n)&&!Number.isNaN(Date.parse(n+'T00:00:00Z'));
+const delta=(a,b)=>Math.round((Date.parse(a+'T00:00:00Z')-Date.parse(b+'T00:00:00Z'))/86400000);
+export function evaluateInjuryRadar({players,reports,today,daysAhead=14,minFantasyValue=60,history=[]}){
+ if(!day(today)||!Array.isArray(players)||!Array.isArray(reports))throw Error('Invalid inputs');
+ const ownSnapshot=new Set(getUserSnapshot().players.map(p=>norm(p.name)));
  const grouped=new Map();
  for(const r of reports){
-  if(!r?.player||!r?.source||!r?.url||!r?.observedAt||!dateOnly(r.observedAt))continue;
-  const k=normalize(r.player);
-  if(!grouped.has(k))grouped.set(k,[]);
-  grouped.get(k).push({...r,sourceWeight:priority[r.source]||1});
+  if(!r?.player||!r.source||!r.url||!day(r.observedAt))continue;
+  const name=norm(r.player);
+  if(!grouped.has(name))grouped.set(name,[]);
+  grouped.get(name).push(r);
  }
- const alerts=[];
- for(const player of players){
-  const ownership=player.availability;
-  if(ownership==='OWNED'||findSnapshotOwner(player.name))continue;
-  const recent=(grouped.get(normalize(player.name))||[]).filter(r=>dayDiff(today,r.observedAt)>=0&&dayDiff(today,r.observedAt)<=3).sort((a,b)=>b.sourceWeight-a.sourceWeight||b.observedAt.localeCompare(a.observedAt));
-  if(!recent.length)continue;
-  const dates=recent.filter(r=>dateOnly(r.estimatedReturnDate)&&!r.seasonEnding);
-  const top=dates.find(r=>dayDiff(r.estimatedReturnDate,today)>=-1&&dayDiff(r.estimatedReturnDate,today)<=daysAhead)||dates[0]||recent[0];
-  const days=top.estimatedReturnDate?dayDiff(top.estimatedReturnDate,today):null;
-  const upcoming=days!==null&&days>=-1&&days<=daysAhead;
-  const signals=recent.some(r=>r.practiceStatus==='full'||r.practiceStatus==='returned'||r.status==='probable'||r.status==='available');
-  if(!upcoming&&!signals)continue;
-  const conflicting=dates.length>1&&dates.some(r=>Math.abs(dayDiff(r.estimatedReturnDate,top.estimatedReturnDate))>3);
-  const confirmedFA=ownership==='FA'&&player.liveYahooVerified===true;
-  const value=Number(player.fantasyValue);
-  const valueVerified=Number.isFinite(value)&&player.valueMethodVerified===true;
-  const strongValue=valueVerified&&value>=minFantasyValue;
-  const sourceGood=recent.some(r=>r.source==='official_nba'||r.source==='team_statement')||new Set(recent.map(r=>r.source)).size>=2;
-  const recommendation=confirmedFA&&strongValue&&sourceGood&&!conflicting?'PICKUP_REVIEW':'WATCH_ONLY';
-  alerts.push({player:player.name,recommendation,returnDate:top.estimatedReturnDate||null,returnDateKind:top.dateType||'estimate',daysUntilEstimate:days,injuryStatus:top.status||'unknown',fantasyValue:valueVerified?value:null,availability:ownership,liveYahooVerified:player.liveYahooVerified===true,conflictingSources:conflicting,sourceCount:new Set(recent.map(r=>r.source)).size,sources:recent.map(r=>({source:r.source,url:r.url,observedAt:r.observedAt,estimate:r.estimatedReturnDate||null})),reason:recommendation==='PICKUP_REVIEW'?'Verified FA, sufficient value and independent injury support; requires manual approval':'Verify live Yahoo availability, player value, return uncertainty and source consensus',requiresApproval:true,executable:false});
+ const trust=sourceReliability(history);
+ const output=[];
+ for(const p of players){
+  const own=p.ownership==='MY_TEAM'||p.availability==='MY_TEAM'||(ownSnapshot.has(norm(p.name))&&p.ownership!=='OTHER_TEAM'&&p.availability!=='OWNED_OTHER');
+  const free=p.availability==='FA'&&p.liveYahooVerified===true&&!own;
+  // Unknown, waiver-only, and everyone else's roster are outside the alert scope.
+  if(!own&&!free)continue;
+  const reportsFor=(grouped.get(norm(p.name))||[]).filter(r=>delta(today,r.observedAt)>=0&&delta(today,r.observedAt)<=3);
+  if(!reportsFor.length)continue;
+  const dated=reportsFor.filter(r=>day(r.estimatedReturnDate)&&!r.seasonEnding);
+  const coming=dated.filter(r=>delta(r.estimatedReturnDate,today)>=-1&&delta(r.estimatedReturnDate,today)<=daysAhead);
+  const improvements=reportsFor.some(r=>['full','returned','limited'].includes(r.practiceStatus)||['probable','available'].includes(r.status));
+  if(!coming.length&&!improvements)continue;
+  const ranked=[...coming,...dated.filter(r=>!coming.includes(r))].sort((a,b)=>(trust[b.source]?.confidence??.5)-(trust[a.source]?.confidence??.5)||b.observedAt.localeCompare(a.observedAt));
+  const top=ranked[0]||reportsFor[0];
+  const conflict=dated.length>1&&dated.some(r=>Math.abs(delta(r.estimatedReturnDate,top.estimatedReturnDate))>3);
+  const sources=[...new Set(reportsFor.map(r=>r.source))];
+  const value=Number(p.fantasyValue);
+  const valueOK=p.valueMethodVerified===true&&Number.isFinite(value)&&value>=minFantasyValue;
+  const corroborated=sources.length>=2||reportsFor.some(r=>['official_nba','team_statement'].includes(r.source));
+  const recommendation=own?'MY_TEAM_RETURN_WATCH':valueOK&&corroborated&&!conflict?'PICKUP_REVIEW':'FA_WATCH';
+  output.push({player:p.name,scope:own?'MY_TEAM':'VERIFIED_FREE_AGENT',recommendation,estimatedReturnDate:day(top.estimatedReturnDate)?top.estimatedReturnDate:null,daysToEstimate:day(top.estimatedReturnDate)?delta(top.estimatedReturnDate,today):null,conflictingReports:conflict,sources:reportsFor.map(r=>({source:r.source,url:r.url,observedAt:r.observedAt,estimatedReturnDate:r.estimatedReturnDate||null,sourceConfidence:trust[r.source]?.confidence??null,sourceSamples:trust[r.source]?.sampleSize??0})),requiresApproval:true,executable:false});
  }
- return alerts.sort((a,b)=>(a.recommendation==='PICKUP_REVIEW'?-1:1)-(b.recommendation==='PICKUP_REVIEW'?-1:1)||(a.daysUntilEstimate??999)-(b.daysUntilEstimate??999));
+ return output.sort((a,b)=>Number(a.daysToEstimate??999)-Number(b.daysToEstimate??999));
 }
