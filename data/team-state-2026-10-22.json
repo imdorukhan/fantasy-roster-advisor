@@ -1,0 +1,24 @@
+{
+  "team": "Salary CAPtain",
+  "leagueId": 85892,
+  "teamId": 5,
+  "asOf": "2026-10-22",
+  "source": "User-provided Yahoo team screenshot",
+  "weeklyAddsUsed": 1,
+  "weeklyAddsLimit": 7,
+  "ilUsed": 1,
+  "ilLimit": 2,
+  "fabBudgetCurrent": 98,
+  "pending": [
+    {
+      "type": "FAB_WAIVER_CLAIM",
+      "player": "Maxime Raynaud",
+      "processingDate": "2026-10-23",
+      "status": "PENDING",
+      "assumeSuccessful": true,
+      "assumeILPlacement": true,
+      "ilEligibilityVerified": false,
+      "bidAmount": null
+    }
+  ]
+}
