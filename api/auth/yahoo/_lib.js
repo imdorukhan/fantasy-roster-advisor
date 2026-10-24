@@ -1,0 +1,10 @@
+import crypto from 'node:crypto';
+export const redirect='https://salarycaptain.vercel.app/api/auth/yahoo/callback';
+export const cookie=(name,value,age=600)=>`${name}=${encodeURIComponent(value)}; Path=/api/auth/yahoo; HttpOnly; Secure; SameSite=Lax; Max-Age=${age}`;
+export function key(){const s=process.env.YAHOO_SESSION_SECRET;if(!s||s.length<32)throw Error('YAHOO_SESSION_SECRET must be at least 32 characters');return crypto.createHash('sha256').update(s).digest()}
+export function seal(data){const iv=crypto.randomBytes(12),c=crypto.createCipheriv('aes-256-gcm',key(),iv),body=Buffer.concat([c.update(JSON.stringify(data)),c.final()]);return Buffer.concat([iv,c.getAuthTag(),body]).toString('base64url')}
+export function unseal(value){const b=Buffer.from(value,'base64url'),d=crypto.createDecipheriv('aes-256-gcm',key(),b.subarray(0,12));d.setAuthTag(b.subarray(12,28));return JSON.parse(Buffer.concat([d.update(b.subarray(28)),d.final()]).toString())}
+export function cookies(req){return Object.fromEntries((req.headers.cookie||'').split(';').map(s=>s.trim().split(/=(.*)/s).slice(0,2)).filter(a=>a.length===2).map(([k,v])=>[k,decodeURIComponent(v)]))}
+export function configured(){return Boolean(process.env.YAHOO_CLIENT_ID&&process.env.YAHOO_CLIENT_SECRET&&process.env.YAHOO_SESSION_SECRET?.length>=32)}
+export async function tokenRequest(params){const id=process.env.YAHOO_CLIENT_ID,secret=process.env.YAHOO_CLIENT_SECRET;if(!id||!secret)throw Error('Yahoo credentials missing');const r=await fetch('https://api.login.yahoo.com/oauth2/get_token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Authorization':'Basic '+Buffer.from(id+':'+secret).toString('base64')},body:new URLSearchParams(params),signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error('Yahoo token exchange failed: HTTP '+r.status);return r.json()}
+export function method(req,res){if(req.method!=='GET'){res.setHeader('Allow','GET');res.status(405).end();return false}res.setHeader('Cache-Control','no-store');return true}
