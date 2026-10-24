@@ -1,0 +1,13 @@
+import crypto from 'node:crypto';
+import {key} from './_lib.js';
+const TABLE='yahoo_oauth_sessions';
+export function tokenEncrypt(data){const iv=crypto.randomBytes(12),c=crypto.createCipheriv('aes-256-gcm',key(),iv);const bytes=Buffer.concat([c.update(JSON.stringify(data)),c.final()]);return Buffer.concat([iv,c.getAuthTag(),bytes]).toString('base64url')}
+export function tokenDecrypt(value){const b=Buffer.from(value,'base64url');if(b.length<29)throw Error('Invalid token ciphertext');const d=crypto.createDecipheriv('aes-256-gcm',key(),b.subarray(0,12));d.setAuthTag(b.subarray(12,28));return JSON.parse(Buffer.concat([d.update(b.subarray(28)),d.final()]).toString())}
+export function sessionId(){return crypto.randomBytes(32).toString('base64url')}
+export function sessionHash(id){return crypto.createHash('sha256').update(id).digest('hex')}
+function settings(){const url=process.env.SALARYCAPTAIN_SUPABASE_URL,secret=process.env.SALARYCAPTAIN_SUPABASE_SECRET_KEY;if(!url||!secret)throw Error('Salary CAPtain private database is not configured');const u=new URL(url);if(u.protocol!=='https:'||!u.hostname.endsWith('.supabase.co'))throw Error('Invalid Supabase URL');return {url:u.origin,secret}}
+async function request(path,{method='GET',body,prefer}={}){const {url,secret}=settings();const r=await fetch(url+'/rest/v1/'+TABLE+path,{method,headers:{apikey:secret,Authorization:'Bearer '+secret,'Content-Type':'application/json',...(prefer?{Prefer:prefer}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error('Session store unavailable (HTTP '+r.status+')');if(r.status===204)return null;return r.json()}
+export async function saveSession(id,tokens){const hash=sessionHash(id);await request('?on_conflict=session_hash',{method:'POST',prefer:'resolution=merge-duplicates,return=minimal',body:{session_hash:hash,token_ciphertext:tokenEncrypt(tokens),expires_at:new Date(Date.now()+30*86400000).toISOString()}})}
+export async function loadSession(id){if(typeof id!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(id))return null;const rows=await request('?session_hash=eq.'+sessionHash(id)+'&expires_at=gt.'+encodeURIComponent(new Date().toISOString())+'&select=token_ciphertext&limit=1');return rows?.[0]?tokenDecrypt(rows[0].token_ciphertext):null}
+export async function deleteSession(id){if(typeof id==='string'&&/^[A-Za-z0-9_-]{43}$/.test(id))await request('?session_hash=eq.'+sessionHash(id),{method:'DELETE',prefer:'return=minimal'})}
+export function storeConfigured(){return Boolean(process.env.SALARYCAPTAIN_SUPABASE_URL&&process.env.SALARYCAPTAIN_SUPABASE_SECRET_KEY)}
