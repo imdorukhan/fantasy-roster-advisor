@@ -8,7 +8,7 @@ import callback from './callback.js';
 import logout from './logout.js';
 import refresh from './refresh.js';
 const original={...process.env};
-function env(){process.env.YAHOO_SESSION_SECRET='a'.repeat(64);process.env.YAHOO_CLIENT_ID='test-id';process.env.YAHOO_CLIENT_SECRET='test-secret';process.env.YAHOO_OWNER_GUID='test-owner-guid'}
+function env(){process.env.YAHOO_SESSION_SECRET='a'.repeat(64);process.env.YAHOO_CLIENT_ID='test-id';process.env.YAHOO_CLIENT_SECRET='test-secret';process.env.YAHOO_OWNER_GUID='test-owner-guid';process.env.SALARYCAPTAIN_SUPABASE_URL='https://example.supabase.co';process.env.SALARYCAPTAIN_SUPABASE_SECRET_KEY='test-only'}
 function response(){return {headers:{},code:200,setHeader(k,v){this.headers[k]=v;return this},status(n){this.code=n;return this},json(x){this.body=x;return this},writeHead(n,h){this.code=n;Object.assign(this.headers,h);return this},end(){return this},redirect(n,url){this.code=n;this.headers.Location=url;return this}}}
 test('encryption and tamper resistance',()=>{env();const s=seal({a:1});assert.deepEqual(unseal(s),{a:1});const encrypted=tokenEncrypt({refresh_token:'secret'});assert.deepEqual(tokenDecrypt(encrypted),{refresh_token:'secret'});const b=Buffer.from(encrypted,'base64url');b[b.length-1]^=1;assert.throws(()=>tokenDecrypt(b.toString('base64url')))});
 test('opaque session identifiers and hashing',()=>{env();const a=sessionId(),b=sessionId();assert.notEqual(a,b);assert.equal(a.length,43);assert.equal(sessionHash(a).length,64);assert.notEqual(sessionHash(a),sessionHash(b))});
