@@ -1,2 +1,3 @@
-import {cookie} from './_lib.js';
-export default function handler(req,res){res.setHeader('Cache-Control','no-store');if(req.method!=='POST'){res.setHeader('Allow','POST');return res.status(405).end()}const origin=req.headers.origin;if(origin!=='https://salarycaptain.vercel.app')return res.status(403).json({error:'Invalid or missing origin'});res.setHeader('Set-Cookie',[cookie('yahoo_session','',0),cookie('yahoo_oauth_pending','',0)]);return res.status(200).json({connected:false})}
+import {cookie,cookies} from './_lib.js';
+import {deleteSession} from './_store.js';
+export default async function handler(req,res){res.setHeader('Cache-Control','no-store');if(req.method!=='POST'){res.setHeader('Allow','POST');return res.status(405).end()}if(req.headers.origin!=='https://salarycaptain.vercel.app')return res.status(403).json({error:'Invalid origin'});try{await deleteSession(cookies(req).yahoo_session)}catch{return res.status(503).json({error:'Unable to revoke session'})}res.setHeader('Set-Cookie',[cookie('yahoo_session','',0),cookie('yahoo_oauth_pending','',0)]);return res.status(200).json({connected:false})}
