@@ -5,7 +5,7 @@ on:
       - 'api/auth/yahoo/**'
       - '.github/workflows/yahoo-oauth-tests.yml'
   push:
-    branches: [feature/yahoo-oauth]
+    branches: [main, feature/yahoo-oauth]
 permissions:
   contents: read
 jobs:
