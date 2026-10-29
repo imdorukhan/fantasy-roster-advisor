@@ -36,6 +36,24 @@ One personal user, one Yahoo Fantasy NBA league (league ID 85892, team ID 5). No
 
 Independent personal project, not endorsed by or affiliated with Yahoo. Access and permitted uses are subject to Yahoo's approval and developer terms.
 
+### Yahoo connection and access checks
+
+Start owner enrollment at `/api/auth/yahoo/setup` with the private setup code. A plain
+`/api/auth/yahoo/login` request redirects there instead of starting an enrollment
+that cannot finish. Setup explicitly requests `fspt-r`, fresh consent and PKCE.
+
+For a read-only access test, open `/api/auth/yahoo/login?diagnostic=1` and complete
+Yahoo authorization. Its callback exchanges the code, checks NBA game metadata
+and the authenticated Fantasy user independently, then returns only HTTP statuses
+and fixed error classifications. It does not bind an owner, save tokens, create a
+session, or return user data. A successful diagnostic is not a completed setup.
+Normal setup still requires the setup code and verifies the enrolled owner.
+
+On a Fantasy identity failure, setup performs the same independent game check.
+Raw upstream bodies, authorization codes, GUIDs and credentials are never included
+in diagnostic responses or logs. Run `node --test api/auth/yahoo/oauth.test.mjs` to
+verify this flow, including successful encrypted session storage and failure cases.
+
 ## Recommendation engine (offline testing)
 
 Run `node engine.test.mjs` to verify the category evaluator without Yahoo API credentials. The `rankMoves({roster, agents, config})` function accepts explicit player stat projections and remaining games. It calculates weighted nine-category deltas (including team-level attempt-weighted FG% and FT%), excludes protected drops and waiver-only additions, and returns read-only, approval-required recommendations.
