@@ -109,7 +109,15 @@ function findPlayers(node,out=[],depth=0,inheritedSlot=null){
    const n=typeof name==='string'?name:name?.full;
    const team=props.find(x=>x.editorial_team_abbr)?.editorial_team_abbr||null;
    const status=props.find(x=>x.status)?.status||null;
-   if(n)out.push({yahooId:String(id),name:n,slot:slot||'UNKNOWN',nbaTeam:team,status});
+   if(n){
+    const rawPositions=props.find(x=>x.eligible_positions)?.eligible_positions;
+    const eligiblePositions=Array.isArray(rawPositions)?rawPositions.flatMap(x=>typeof x==='string'?[x]:x?.position?[x.position]:[]):[];
+    const ownership=props.find(x=>x.percent_owned)?.percent_owned;
+    const started=props.find(x=>x.percent_started)?.percent_started;
+    const rank=props.find(x=>x.rank)?.rank;
+    const percentStarted=typeof started==='number'||typeof started==='string'?started:null;
+    out.push({yahooId:String(id),name:n,slot:slot||'UNKNOWN',nbaTeam:team,status,eligiblePositions,percentOwned:ownership??null,yahooRank:rank??null,forecast:{percentStarted,next7DayRank:null,next14DayRank:null,restOfSeasonRank:null},depthChart:[],dataCoverage:{eligiblePositions:eligiblePositions.length>0,percentStarted:percentStarted!==null,depthChart:false,forecastRanks:false}});
+   }
    return out;
   }
   for(const v of node)findPlayers(v,out,depth+1,slot);
