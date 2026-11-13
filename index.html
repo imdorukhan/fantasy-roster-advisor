@@ -36,7 +36,7 @@ function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 async function loadRoster(){
  let d,source='Yahoo API';
  try{
-  const r=await fetch('/api/live-roster',{credentials:'same-origin',cache:'no-store'});
+  const r=await fetch('/api/auto-data?live=1',{credentials:'same-origin',cache:'no-store'});
   if(!r.ok)throw Error('Yahoo API HTTP '+r.status);
   d=await r.json();
   if(d.mode!=='YAHOO_API_LIVE'||!d.players?.length)throw Error('No verified Yahoo API roster');
