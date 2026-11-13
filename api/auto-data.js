@@ -157,7 +157,7 @@ async function liveHandler(req,res){
    }
    inspect(result);
    const meta=new Map(statuses.map(x=>[x.id,x]));
-   const free=byId.map(p=>({...p,...(meta.get(p.yahooId)||{}),slot:undefined})).filter(p=>p.ownership==='A');
+   const free=byId.map(p=>({...p,...(meta.get(p.yahooId)||{}),slot:undefined,availability:'FREE_AGENT'}));
    return response(res,200,{mode:'YAHOO_FREE_AGENTS',leagueId:85892,observedAt:new Date().toISOString(),start,count:free.length,requested:limit,players:free,notes:['Yahoo status A = free agent. Waiver status W is not included.','No player add/drop action is performed.','Sort AR is Yahoo average rank, not a personalized matchup projection.']});
   }
   const roster=await read(session.access_token,'team/'+encodeURIComponent(unique[0].key)+'/roster?format=json');
