@@ -52,7 +52,39 @@ export async function buildAutoData({start=localDay(),length=7}={}){
  const next=(roster)=>roster?.players.map(p=>({...p,scheduledGames:p.nbaTeam?schedule.filter(g=>g.teams.includes(p.nbaTeam)&&!g.completed).map(g=>({date:g.date,opponent:g.teams.find(t=>t!==p.nbaTeam),eventId:g.espnEventId})):[]}))||[];
  return {mode:'PUBLIC_READ_ONLY',observedAt:new Date().toISOString(),sourceLinks:{yahooOurRoster:YAHOO+'5',yahooOpponentRoster:YAHOO+'13',espn:'https://www.espn.com/nba/schedule'},teams:[{id:5,name:'Salary CAPtain',players:next(rosters[0])},{id:13,name:'Sabanoglu Saban',players:next(rosters[1])}],window:{start,end:dates.at(-1),days:length},schedule,coverage:{yahooOurRoster:!!rosters[0],yahooOpponentRoster:!!rosters[1],espnDatesFetched:datesFetched,espnDatesRequested:length},errors,notes:['Public Yahoo roster may reflect a different selected date or locked lineup; verify current status from source','Upcoming NBA games are schedule opportunities, not guaranteed active fantasy starts','No free agents or add/drop recommendations are inferred without verified ownership']};
 }
+const depthCache=new Map();
+async function espnDepth(abbr){
+ const cached=depthCache.get(abbr);if(cached&&Date.now()-cached.at<3600000)return cached.value;
+ const root='https://site.api.espn.com/apis/site/v2/sports/basketball/nba/';
+ const teamsResponse=await fetch(root+'teams',{signal:AbortSignal.timeout(8000)});
+ if(!teamsResponse.ok)throw Error('ESPN team catalog unavailable');
+ const teamsJson=await teamsResponse.json();
+ const teams=teamsJson.sports?.[0]?.leagues?.[0]?.teams||[];
+ const match=teams.find(t=>t.team?.abbreviation?.toUpperCase()===abbr||t.team?.alternateColor===abbr);
+ if(!match?.team?.id)throw Error('NBA team abbreviation not found');
+ const response=await fetch(root+'teams/'+encodeURIComponent(match.team.id)+'/depthcharts',{signal:AbortSignal.timeout(8000)});
+ if(!response.ok)throw Error('ESPN depth chart HTTP '+response.status);
+ const json=await response.json(),rows=[];
+ function scan(node,position=null,depth=0){
+  if(!node||typeof node!=='object'||depth>18)return;
+  if(Array.isArray(node)){node.forEach((x,i)=>scan(x,position,depth+1));return}
+  const p=typeof node.position==='string'?node.position:typeof node.abbreviation==='string'&&['PG','SG','SF','PF','C'].includes(node.abbreviation)?node.abbreviation:position;
+  const name=node.athlete?.displayName||node.athlete?.fullName||node.displayName||node.fullName;
+  const rank=Number(node.rank??node.depth??node.order);
+  if(name&&p&&['PG','SG','SF','PF','C'].includes(p)&&Number.isInteger(rank)&&rank>0)rows.push({name,position:p,rank,source:'ESPN'});
+  for(const [k,v] of Object.entries(node))if(k!=='athlete')scan(v,['PG','SG','SF','PF','C'].includes(k)?k:p,depth+1);
+ }
+ scan(json);
+ const value={source:'ESPN NBA depth chart',observedAt:new Date().toISOString(),nbaTeam:abbr,rows:[...new Map(rows.map(x=>[x.name.toLowerCase()+'|'+x.position,x])).values()]};
+ depthCache.set(abbr,{at:Date.now(),value});return value;
+}
 export default async function handler(req,res){
+ if(req.query?.depthTeam){
+  const team=String(req.query.depthTeam).toUpperCase();
+  if(!/^[A-Z]{2,3}$/.test(team))return res.status(400).json({error:'Invalid NBA team'});
+  try{const data=await espnDepth(team);res.setHeader('Cache-Control','public, s-maxage=3600');return res.status(200).json(data)}
+  catch(e){return res.status(502).json({error:'ESPN depth chart unavailable',detail:e.message})}
+ }
  if(req.query?.live==='1')return liveHandler(req,res);
  try{const result=await buildAutoData();res.setHeader('Cache-Control','s-maxage=600, stale-while-revalidate=600');res.status(200).json(result)}
  catch(e){res.setHeader('Cache-Control','no-store');res.status(503).json({error:'Automatic public sources unavailable',reason:String(e.message)})}
