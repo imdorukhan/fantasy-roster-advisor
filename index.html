@@ -56,7 +56,19 @@ function showPlayerProfile(id){
  const positions=Array.isArray(p.eligiblePositions)?p.eligiblePositions.map(x=>typeof x==='string'?x:x.position).filter(Boolean):[];
  const rows=depth.length?depth.map(x=>'<tr><td>'+esc(x.position)+'</td><td>'+forecastValue(x.rank)+'</td><td>'+esc(x.source||'Unknown')+'</td></tr>').join(''):(positions.length?positions:['PG','SG','SF','PF','C']).map(pos=>'<tr><td>'+esc(pos)+'</td><td>Not available</td><td>Unverified</td></tr>').join('');
  document.querySelector('#player-profile-content').innerHTML='<h2>'+esc(p.name)+'</h2><p class="muted">'+esc(p.nbaTeam||'NBA team unavailable')+' · Yahoo ID '+esc(p.yahooId)+' · '+esc(p.slot||'')+'</p><h3>Forecast</h3><div class="profile-metrics"><div>Percent Started<strong>'+forecastValue(f.percentStarted)+'</strong></div><div>Next 7 Day Rank<strong>'+forecastValue(f.next7DayRank)+'</strong></div><div>Next 14 Day Rank<strong>'+forecastValue(f.next14DayRank)+'</strong></div><div>Rest of Season Rank<strong>'+forecastValue(f.restOfSeasonRank)+'</strong></div></div><h3>All Positions · Depth Chart</h3><p class="muted">Depth ranks are displayed only when verified by a source. Yahoo eligible positions do not establish depth order.</p><table><thead><tr><th>Position</th><th>Depth rank</th><th>Source</th></tr></thead><tbody>'+rows+'</tbody></table><p class="muted">Forecast fields without a verified feed remain unavailable, not zero.</p>';
- document.querySelector('#player-profile-dialog').showModal();
+ const dialog=document.querySelector('#player-profile-dialog');dialog.showModal();
+ if(p.nbaTeam){
+  const target=document.querySelector('#player-profile-content');
+  const msg=document.createElement('p');msg.className='muted';msg.textContent='Checking ESPN supplemental depth chart…';target.appendChild(msg);
+  fetch('/api/auto-data?depthTeam='+encodeURIComponent(p.nbaTeam),{cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'Unavailable');return d}).then(d=>{
+   if(!dialog.open||!target.isConnected)return;
+   const normalize=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z]/g,'');
+   const matches=d.rows.filter(x=>normalize(x.name)===normalize(p.name));
+   const tbody=target.querySelector('tbody');
+   if(matches.length){tbody.innerHTML=matches.sort((a,b)=>a.position.localeCompare(b.position)).map(x=>'<tr><td>'+esc(x.position)+'</td><td>'+esc(x.rank)+'</td><td>ESPN · '+esc(d.observedAt.slice(0,10))+'</td></tr>').join('');msg.textContent='ESPN depth chart verified for '+matches.length+' position(s). Yahoo remains primary for fantasy eligibility.'}
+   else msg.textContent='No verified ESPN depth-chart ranking matched this player; Yahoo eligible positions shown without inferred ranking.';
+  }).catch(()=>{if(msg.isConnected)msg.textContent='ESPN depth chart unavailable; no ranking inferred.'});
+ }
 }
 document.addEventListener('click',e=>{const el=e.target.closest('[data-player-id]');if(el)showPlayerProfile(el.dataset.playerId)});
 
