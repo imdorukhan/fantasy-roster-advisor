@@ -65,16 +65,16 @@ async function espnDepth(abbr){
  const response=await fetch(root+'teams/'+encodeURIComponent(match.team.id)+'/depthcharts',{signal:AbortSignal.timeout(8000)});
  if(!response.ok)throw Error('ESPN depth chart HTTP '+response.status);
  const json=await response.json(),rows=[];
- function scan(node,position=null,depth=0){
-  if(!node||typeof node!=='object'||depth>18)return;
-  if(Array.isArray(node)){node.forEach((x,i)=>scan(x,position,depth+1));return}
-  const p=typeof node.position==='string'?node.position:typeof node.abbreviation==='string'&&['PG','SG','SF','PF','C'].includes(node.abbreviation)?node.abbreviation:position;
-  const name=node.athlete?.displayName||node.athlete?.fullName||node.displayName||node.fullName;
-  const rank=Number(node.rank??node.depth??node.order);
-  if(name&&p&&['PG','SG','SF','PF','C'].includes(p)&&Number.isInteger(rank)&&rank>0)rows.push({name,position:p,rank,source:'ESPN'});
-  for(const [k,v] of Object.entries(node))if(k!=='athlete')scan(v,['PG','SG','SF','PF','C'].includes(k)?k:p,depth+1);
+ const positions=json.depthchart?.[0]?.positions||{};
+ const supported={pg:'PG',sg:'SG',sf:'SF',pf:'PF',c:'C'};
+ for(const [key,position] of Object.entries(supported)){
+  const athletes=positions[key]?.athletes;
+  if(!Array.isArray(athletes))continue;
+  athletes.forEach((athlete,index)=>{
+   const name=athlete.displayName||athlete.fullName||athlete.athlete?.displayName;
+   if(name)rows.push({name,position,rank:index+1,source:'ESPN',espnAthleteId:athlete.id||null});
+  });
  }
- scan(json);
  const value={source:'ESPN NBA depth chart',observedAt:new Date().toISOString(),nbaTeam:abbr,rows:[...new Map(rows.map(x=>[x.name.toLowerCase()+'|'+x.position,x])).values()]};
  depthCache.set(abbr,{at:Date.now(),value});return value;
 }
