@@ -136,6 +136,27 @@ async function liveHandler(req,res){
   const matches=findTeams(teams).filter(x=>/\.l\.85892\.t\.5$/.test(x.key));
   const unique=[...new Map(matches.map(x=>[x.key,x])).values()];
   if(unique.length!==1)return response(res,409,{mode:'UNAVAILABLE',error:'League 85892 team 5 was not found in the authorized Yahoo account',teamMatches:unique.length});
+  if(req.query?.leagueData==='1'){
+   const leagueKey=unique[0].key.split('.t.')[0];
+   const endpoints={
+    settings:'league/'+leagueKey+'/settings?format=json',
+    teams:'league/'+leagueKey+'/teams?format=json',
+    standings:'league/'+leagueKey+'/standings?format=json',
+    scoreboard:'league/'+leagueKey+'/scoreboard?format=json',
+    roster:'team/'+unique[0].key+'/roster?format=json'
+   };
+   const entries=await Promise.allSettled(Object.entries(endpoints).map(async ([name,path])=>[name,await read(session.access_token,path)]));
+   const sources={},errors=[];
+   for(let i=0;i<entries.length;i++){
+    const name=Object.keys(endpoints)[i],entry=entries[i];
+    if(entry.status==='fulfilled')sources[name]=entry.value[1];
+    else errors.push({section:name,upstreamStatus:entry.reason?.status||null});
+   }
+   // This is a read-only, authenticated source of truth. Raw Yahoo structures
+   // are retained to avoid silently losing scoring/waiver fields in parsing.
+   if(!sources.teams&&!sources.roster)return response(res,502,{mode:'YAHOO_LEAGUE_UNAVAILABLE',errors});
+   return response(res,200,{mode:'YAHOO_LEAGUE_DATA',leagueId:85892,teamId:5,teamKey:unique[0].key,observedAt:new Date().toISOString(),source:'Yahoo Fantasy Sports API',readOnly:true,sections:sources,errors});
+  }
   if(req.query?.matchup==='1'){
    const data=await read(session.access_token,'team/'+encodeURIComponent(unique[0].key)+'/matchups?format=json');
    const matches=[];
