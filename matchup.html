@@ -8,16 +8,16 @@
 <div class="grid"><section class="card"><h2>Bizim oyuncular · NBA toplamları</h2><div class="table-wrap" id="ours">Bekleniyor…</div></section><section class="card"><h2>Rakip oyuncular · NBA toplamları</h2><div class="table-wrap" id="theirs">Bekleniyor…</div></section></div>
 <section class="card"><h2>Bu analizin sonraki aşaması</h2><p class="muted">Yahoo matchup aktif oyuncularını ve kategori skorlarını okuduğumuzda bu ESPN karşılaştırmasıyla birleştirip, <strong>hangi kategoriyi çevirebileceğimizi</strong> ve kalan maçlarda kimin ilk beşte olması gerektiğini hesaplayacağız. Gerçek Yahoo ekranıyla doğrulama olmadan bu sayfa bir add/drop kararını tetiklemez.</p><a href="/optimizer.html">Optimization Lab →</a></section>
 <div class="foot">Bağımsız fantasy analiz prototipi · Hiçbir roster işlemi yapılmaz · Tüm öneriler manuel onay gerektirir.</div></main>
-<script>
+<script type="module">
+import {getLeagueData,leagueHealth} from './league-data.js';
 const $=id=>document.getElementById(id),escapeHtml=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function loadYahoo(){
  try{
-  const r=await fetch('/api/auto-data?live=1&matchup=1',{credentials:'same-origin',cache:'no-store'});const d=await r.json();
-  if(!r.ok||d.mode!=='YAHOO_MATCHUPS_API')throw Error(d.error||'HTTP '+r.status);
-  if(!d.current)throw Error('Current matchup not found');
-  $('yahoo-score').innerHTML='<div class="score">Week '+escapeHtml(d.current.week)+'</div><p class="muted">'+escapeHtml(d.current.weekStart)+' to '+escapeHtml(d.current.weekEnd)+' · '+escapeHtml(d.current.status||'Status unavailable')+'</p>';
-  $('yahoo-categories').textContent='Current matchup identified via Yahoo API. Official 9-CAT totals require validated parsing; no historical scores substituted.';
- }catch(e){$('yahoo-score').innerHTML='<span class="error">Current Yahoo matchup unavailable: '+escapeHtml(e.message)+'</span>';$('yahoo-categories').textContent='No historical score used as current.'}
+  const d=await getLeagueData({refresh:true});
+  const health=leagueHealth(d);
+  $('yahoo-score').innerHTML='<div class="score">League 85892 · Yahoo API</div><p class="muted">'+escapeHtml(new Date(d.observedAt).toLocaleString())+'</p>';
+  $('yahoo-categories').textContent='Official league scoreboard: '+(d.sections.scoreboard?'retrieved':'unavailable')+'. Sections: '+health.map(x=>x.name+' '+(x.available?'OK':'missing')).join(' · ')+'. Category scores are not yet validated for display.';
+ }catch(e){$('yahoo-score').innerHTML='<span class="error">Yahoo league data unavailable: '+escapeHtml(e.message)+'</span>';$('yahoo-categories').textContent='No historical scores substituted.'}
 }
 loadYahoo();
 const f=n=>n===null||n===undefined?'—':Number.isInteger(n)?String(n):Number(n).toFixed(2).replace(/0+$/,'').replace(/\.$/,'');
