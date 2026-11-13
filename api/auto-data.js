@@ -86,7 +86,9 @@ function findPlayers(node,out=[],depth=0){
    const n=typeof name==='string'?name:name.full;
    const team=props.find(x=>x.editorial_team_abbr)?.editorial_team_abbr||null;
    const status=props.find(x=>x.status)?.status||null;
-   const pos=node.find(x=>x?.selected_position)?.selected_position?.[0]?.position||null;
+   const selected=node.find(x=>x&&typeof x==='object'&&!Array.isArray(x)&&x.selected_position)?.selected_position;
+   const positions=Array.isArray(selected)?selected:[selected];
+   const pos=positions?.find(x=>x&&typeof x==='object'&&typeof x.position==='string')?.position||null;
    if(n)out.push({yahooId:String(id),name:n,slot:pos||'UNKNOWN',nbaTeam:team,status});
    return out;
   }
