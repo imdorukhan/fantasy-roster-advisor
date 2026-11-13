@@ -76,24 +76,37 @@ function findTeams(node,out=[],depth=0){
  }else for(const v of Object.values(node))findTeams(v,out,depth+1);
  return out;
 }
-function findPlayers(node,out=[],depth=0){
+function selectedSlot(value){
+ if(!value||typeof value!=='object')return null;
+ if(Array.isArray(value)){
+  for(const item of value){const found=selectedSlot(item);if(found)return found;}
+  return null;
+ }
+ if(typeof value.position==='string'&&value.position)return value.position;
+ if(value.selected_position)return selectedSlot(value.selected_position);
+ return null;
+}
+function findPlayers(node,out=[],depth=0,inheritedSlot=null){
  if(!node||typeof node!=='object'||depth>22)return out;
  if(Array.isArray(node)){
+  // Yahoo represents a player as [metadataArray, {selected_position:[...]}].
+  // Find its lineup slot before descending into the metadata array.
+  const slot=node.map(x=>x&&typeof x==='object'&&!Array.isArray(x)?selectedSlot(x.selected_position):null).find(Boolean)||inheritedSlot;
   const props=node.filter(x=>x&&typeof x==='object'&&!Array.isArray(x));
   const id=props.find(x=>x.player_id)?.player_id;
   const name=props.find(x=>x.name)?.name;
   if(id&&name){
-   const n=typeof name==='string'?name:name.full;
+   const n=typeof name==='string'?name:name?.full;
    const team=props.find(x=>x.editorial_team_abbr)?.editorial_team_abbr||null;
    const status=props.find(x=>x.status)?.status||null;
-   const selected=node.find(x=>x&&typeof x==='object'&&!Array.isArray(x)&&x.selected_position)?.selected_position;
-   const positions=Array.isArray(selected)?selected:[selected];
-   const pos=positions?.find(x=>x&&typeof x==='object'&&typeof x.position==='string')?.position||null;
-   if(n)out.push({yahooId:String(id),name:n,slot:pos||'UNKNOWN',nbaTeam:team,status});
+   if(n)out.push({yahooId:String(id),name:n,slot:slot||'UNKNOWN',nbaTeam:team,status});
    return out;
   }
-  for(const v of node)findPlayers(v,out,depth+1);
- }else for(const v of Object.values(node))findPlayers(v,out,depth+1);
+  for(const v of node)findPlayers(v,out,depth+1,slot);
+ }else{
+  const slot=selectedSlot(node.selected_position)||inheritedSlot;
+  for(const v of Object.values(node))findPlayers(v,out,depth+1,slot);
+ }
  return out;
 }
 async function liveHandler(req,res){
