@@ -136,6 +136,25 @@ async function liveHandler(req,res){
   const matches=findTeams(teams).filter(x=>/\.l\.85892\.t\.5$/.test(x.key));
   const unique=[...new Map(matches.map(x=>[x.key,x])).values()];
   if(unique.length!==1)return response(res,409,{mode:'UNAVAILABLE',error:'League 85892 team 5 was not found in the authorized Yahoo account',teamMatches:unique.length});
+  if(req.query?.matchup==='1'){
+   const data=await read(session.access_token,'team/'+encodeURIComponent(unique[0].key)+'/matchups?format=json');
+   const matches=[];
+   function walk(node,depth=0){
+    if(!node||typeof node!=='object'||depth>24)return;
+    if(Array.isArray(node)){for(const v of node)walk(v,depth+1);return}
+    if(node.matchup&&typeof node.matchup==='object')matches.push(node.matchup);
+    for(const [k,v] of Object.entries(node))if(k!=='matchup')walk(v,depth+1);
+   }
+   walk(data);
+   const weeks=[];
+   for(const m of matches){
+    const obj=Array.isArray(m)?Object.assign({},...m.filter(v=>v&&typeof v==='object'&&!Array.isArray(v))):m;
+    if(!obj.week)continue;
+    weeks.push({week:Number(obj.week),weekStart:obj.week_start||null,weekEnd:obj.week_end||null,status:obj.status||null,teams:obj.teams||null,winnerTeamKey:obj.winner_team_key||null});
+   }
+   const current=weeks.filter(x=>x.weekStart&&x.weekEnd&&new Date(x.weekStart+'T00:00:00Z')<=new Date()&&new Date(x.weekEnd+'T23:59:59Z')>=new Date()).sort((a,b)=>b.week-a.week)[0];
+   return response(res,200,{mode:'YAHOO_MATCHUPS_API',observedAt:new Date().toISOString(),leagueId:85892,teamKey:unique[0].key,current:current||null,availableWeeks:weeks.map(x=>({week:x.week,start:x.weekStart,end:x.weekEnd})),readOnly:true});
+  }
   if(req.query?.freeAgents==='1'){
    const leagueKey=unique[0].key.split('.t.')[0];
    const start=Math.max(0,Math.min(150,Number.parseInt(String(req.query.start||'0'),10)||0));
