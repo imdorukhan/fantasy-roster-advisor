@@ -3,12 +3,12 @@
 </style></head><body><header><div><div class="eyebrow">Game of Trolls · League 85892</div><div class="brand">Salary CAPtain / Decision Intelligence</div></div><a href="/">← Dashboard</a></header>
 <main><div class="eyebrow">Salary CAPtain 2.0 · Fully automatic read-only sources</div><h1>Decision Intelligence</h1><div class="row"><p style="margin:4px 0">Yahoo matchup and roster + ESPN NBA schedule. No files, manual inputs, or fantasy transactions.</p><button class="button" id="refresh" type="button">Refresh sources ↻</button></div>
 <div class="notice">Yahoo official category scores are the source of truth. NBA schedules show potential games, not guaranteed Yahoo starting lineup appearances. When any source is unavailable, this page marks its data unavailable rather than substituting estimates.</div>
-<div class="cards"><section class="panel"><div class="eyebrow">Official matchup · Week 1</div><div id="score" class="stat">Loading…</div><div class="muted">Salary CAPtain – Şabanoğlu Şaban · W–L–T</div></section><section class="panel"><div class="eyebrow">Our current roster</div><div id="our-count" class="stat">—</div><div class="muted">From publicly accessible Yahoo team page</div></section><section class="panel"><div class="eyebrow">Opponent current roster</div><div id="opp-count" class="stat">—</div><div class="muted">From publicly accessible Yahoo team page</div></section></div>
+<div class="cards"><section class="panel"><div class="eyebrow">Official matchup · Current week</div><div id="score" class="stat">Loading…</div><div class="muted">Salary CAPtain – Şabanoğlu Şaban · W–L–T</div></section><section class="panel"><div class="eyebrow">Our current roster</div><div id="our-count" class="stat">—</div><div class="muted">Authenticated Yahoo API required</div></section><section class="panel"><div class="eyebrow">Opponent current roster</div><div id="opp-count" class="stat">—</div><div class="muted">From publicly accessible Yahoo team page</div></section></div>
 <section class="panel"><div class="row"><div><h2>9-category matchup · Yahoo official</h2><div class="muted">Real category totals from the counted Yahoo fantasy lineups</div></div><a href="https://basketball.fantasysports.yahoo.com/nba/85892/matchup?week=1&mid1=5&mid2=13" target="_blank" rel="noopener">Yahoo matchup ↗</a></div><div class="scroll" id="categories" style="margin-top:16px">Loading official categories…</div><div id="targets" class="notice">Category opportunities pending live data.</div></section>
 <div class="split"><section class="panel"><h2>Our NBA game opportunities</h2><p class="muted">Next seven calendar days · includes bench and IL for visibility · no automatic lineup assumption</p><div id="our-opportunities" class="empty">Loading roster and schedule…</div></section><section class="panel"><h2>Opponent NBA game opportunities</h2><p class="muted">Compare how many NBA appearances remain possible for each roster</p><div id="opp-opportunities" class="empty">Loading roster and schedule…</div></section></div>
 <section class="panel"><h2>Source & decision health</h2><div id="health" class="notice">Checking Yahoo and ESPN…</div><div class="small" id="updated"></div></section>
 <section class="panel"><h2>Read-only optimization roadmap</h2><div class="split"><div><strong>Automatically enabled</strong><p>Official Yahoo matchup, category differences, current public rosters, schedule opportunities, data coverage and refresh.</p></div><div><strong>Held until evidence is sufficient</strong><p>Specific add/drop, waiver bid, lineup activation and win probabilities require verified free agent ownership, active lineup locks, injury availability and calibrated player projections. These will not be invented.</p></div></div><div class="row"><a href="/matchup.html">Matchup details ↗</a><a href="https://www.espn.com/nba/schedule" target="_blank" rel="noopener">ESPN NBA schedule ↗</a></div></section>
-<div class="foot">No uploads, no cookies, no saved credentials, no Yahoo write operations · <a href="https://github.com/imdorukhan/fantasy-roster-advisor" target="_blank" rel="noopener">GitHub source</a></div></main>
+<div class="foot">No uploads, authenticated Yahoo session, no write operations · <a href="https://github.com/imdorukhan/fantasy-roster-advisor" target="_blank" rel="noopener">GitHub source</a></div></main>
 <script type="module">
 const q=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -32,18 +32,23 @@ async function json(url){const r=await fetch(url,{cache:'no-store'});if(!r.ok)th
 async function refresh(){
  const token=++refreshed,button=q('refresh');button.disabled=true;
  const status=[];q('health').textContent='Updating Yahoo matchup, Yahoo team rosters and ESPN schedules…';
- const [ym,auto]=await Promise.allSettled([json('/api/yahoo-matchup'),json('/api/auto-data')]);
+
+ const [ym,live,auto]=await Promise.allSettled([json('/api/auto-data?live=1&matchup=1'),json('/api/auto-data?live=1'),json('/api/auto-data')]);
  if(token!==refreshed)return;
- if(ym.status==='fulfilled'){
-  try{renderYahoo(ym.value);status.push('<span class="success">Yahoo matchup verified</span>')}catch(e){status.push('<span class="error">Yahoo matchup: '+esc(e.message)+'</span>')}
- }else{q('score').textContent='Unavailable';q('categories').textContent='Yahoo official matchup unavailable.';q('targets').textContent='No manual input requested; retry when Yahoo is accessible.';status.push('<span class="error">Yahoo matchup could not be retrieved</span>')}
- if(auto.status==='fulfilled'&&auto.value.teams){
-  const d=auto.value;renderTeam(d.teams[0],'our-opportunities');renderTeam(d.teams[1],'opp-opportunities');
-  status.push('<span class="'+(d.coverage.yahooOurRoster&&d.coverage.yahooOpponentRoster?'success':'warning')+'">Yahoo rosters '+(d.coverage.yahooOurRoster&&d.coverage.yahooOpponentRoster?'verified':'partially unavailable')+'</span>');
-  status.push('<span class="'+(d.coverage.espnDatesFetched===d.coverage.espnDatesRequested?'success':'warning')+'">ESPN schedules '+d.coverage.espnDatesFetched+'/'+d.coverage.espnDatesRequested+' days</span>');
-  status.push('<span class="muted">NBA window '+esc(d.window.start)+' through '+esc(d.window.end)+'</span>');
-  if(d.errors.length)status.push('<span class="warning">'+d.errors.length+' source warnings; recommendations withheld for affected data</span>');
- }else{q('our-count').textContent='—';q('opp-count').textContent='—';q('our-opportunities').textContent='Automatic roster unavailable.';q('opp-opportunities').textContent='Automatic roster unavailable.';status.push('<span class="error">Yahoo roster / ESPN schedule not accessible</span>')}
+ if(ym.status==='fulfilled'&&ym.value.mode==='YAHOO_MATCHUPS_API'&&ym.value.current){
+  const m=ym.value.current;
+  q('score').textContent='Week '+m.week;
+  q('categories').textContent='Yahoo API current matchup: '+m.weekStart+' to '+m.weekEnd+'. Official category totals await verified parsing.';
+  q('targets').textContent='No category recommendation without verified current Yahoo category totals.';
+  status.push('<span class="success">Current Yahoo matchup identified</span>');
+ }else{q('score').textContent='Unavailable';q('categories').textContent='Current Yahoo matchup not verified';q('targets').textContent='Historical scores are not substituted.';status.push('<span class="warning">Matchup unavailable</span>')}
+ if(live.status==='fulfilled'&&live.value.mode==='YAHOO_API_LIVE'){
+  const ps=live.value.players;q('our-count').textContent=ps.length;
+  q('our-opportunities').innerHTML='<p class="success">Authenticated Yahoo roster · '+ps.length+' players</p><p class="small">Schedule projection awaits verified live-roster merge.</p>'+ps.map(p=>'<div class="schedule-row"><span><strong>'+esc(p.name)+'</strong> · '+esc(p.nbaTeam||'')+'</span><span class="tag">'+esc(p.slot)+'</span></div>').join('');
+  status.push('<span class="success">Live roster verified</span>');
+ }else{q('our-count').textContent='—';q('our-opportunities').textContent='Authenticated Yahoo roster unavailable';status.push('<span class="warning">Roster unavailable</span>')}
+ q('opp-count').textContent='—';q('opp-opportunities').textContent='Current opponent roster not verified by Yahoo API. Historical roster excluded.';
+ if(auto.status==='fulfilled'&&auto.value.coverage)status.push('<span class="muted">ESPN schedule '+auto.value.coverage.espnDatesFetched+'/'+auto.value.coverage.espnDatesRequested+' days (not fantasy starts)</span>');
  q('health').innerHTML=status.join(' · ');q('updated').textContent='Checked: '+new Date().toLocaleString();button.disabled=false;
 }
 q('refresh').addEventListener('click',refresh);refresh();
