@@ -76,6 +76,16 @@ function findTeams(node,out=[],depth=0){
  }else for(const v of Object.values(node))findTeams(v,out,depth+1);
  return out;
 }
+function rawPlayerSample(node,playerId,depth=0){
+ if(!node||typeof node!=='object'||depth>24)return null;
+ if(Array.isArray(node)){
+  const meta=node.find(x=>Array.isArray(x)&&x.some(y=>y&&typeof y==='object'&&String(y.player_id||'')===playerId));
+  if(meta)return node;
+  if(node.some(x=>x&&typeof x==='object'&&!Array.isArray(x)&&String(x.player_id||'')===playerId))return node;
+  for(const x of node){const found=rawPlayerSample(x,playerId,depth+1);if(found)return found}
+ }else for(const x of Object.values(node)){const found=rawPlayerSample(x,playerId,depth+1);if(found)return found}
+ return null;
+}
 function selectedSlot(value){
  if(!value||typeof value!=='object')return null;
  if(Array.isArray(value)){
@@ -127,6 +137,11 @@ async function liveHandler(req,res){
   const unique=[...new Map(matches.map(x=>[x.key,x])).values()];
   if(unique.length!==1)return response(res,409,{mode:'UNAVAILABLE',error:'League 85892 team 5 was not found in the authorized Yahoo account',teamMatches:unique.length});
   const roster=await read(session.access_token,'team/'+encodeURIComponent(unique[0].key)+'/roster?format=json');
+  if(req.query?.sample==='10094'){
+   const raw=rawPlayerSample(roster,'10094');
+   if(!raw)return response(res,404,{error:'Player 10094 not found in Yahoo roster'});
+   return response(res,200,{source:'Yahoo Fantasy Sports API',leagueId:85892,teamId:5,yahooPlayerId:'10094',rawPlayer:raw});
+  }
   const players=[...new Map(findPlayers(roster).map(x=>[x.yahooId,x])).values()];
   if(players.length<1)return response(res,502,{mode:'UNAVAILABLE',error:'Yahoo roster returned no recognizable players'});
   return response(res,200,{mode:'YAHOO_API_LIVE',observedAt:new Date().toISOString(),leagueId:85892,teamId:5,teamKey:unique[0].key,teamName:unique[0].name,players,source:'Yahoo Fantasy Sports API',readOnly:true});
