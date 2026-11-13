@@ -144,6 +144,19 @@ async function liveHandler(req,res){
   const matches=findTeams(teams).filter(x=>/\.l\.85892\.t\.5$/.test(x.key));
   const unique=[...new Map(matches.map(x=>[x.key,x])).values()];
   if(unique.length!==1)return response(res,409,{mode:'UNAVAILABLE',error:'League 85892 team 5 was not found in the authorized Yahoo account',teamMatches:unique.length});
+  if(req.query?.allRosters==='1'){
+   const leagueKey=unique[0].key.split('.t.')[0];
+   const teamsRaw=await read(session.access_token,'league/'+leagueKey+'/teams?format=json');
+   const leagueTeams=[...new Map(findTeams(teamsRaw).filter(t=>t.key.startsWith(leagueKey+'.t.')).map(t=>[t.key,t])).values()];
+   if(!leagueTeams.length)return response(res,502,{mode:'YAHOO_ALL_ROSTERS_UNAVAILABLE',error:'No league teams parsed'});
+   const results=await Promise.allSettled(leagueTeams.map(async team=>{
+    const raw=await read(session.access_token,'team/'+team.key+'/roster?format=json');
+    return {...team,players:[...new Map(findPlayers(raw).map(p=>[p.yahooId,p])).values()]};
+   }));
+   const teamsOut=[],errors=[];
+   results.forEach((result,i)=>result.status==='fulfilled'?teamsOut.push(result.value):errors.push({teamKey:leagueTeams[i].key,upstreamStatus:result.reason?.status||null}));
+   return response(res,200,{mode:'YAHOO_ALL_ROSTERS',leagueId:85892,observedAt:new Date().toISOString(),teams:teamsOut,teamCount:teamsOut.length,playerCount:teamsOut.reduce((n,t)=>n+t.players.length,0),errors,readOnly:true});
+  }
   if(req.query?.leagueData==='1'){
    const leagueKey=unique[0].key.split('.t.')[0];
    const endpoints={
