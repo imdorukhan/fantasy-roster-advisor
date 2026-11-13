@@ -155,7 +155,7 @@ async function liveHandler(req,res){
    // This is a read-only, authenticated source of truth. Raw Yahoo structures
    // are retained to avoid silently losing scoring/waiver fields in parsing.
    if(!sources.teams&&!sources.roster)return response(res,502,{mode:'YAHOO_LEAGUE_UNAVAILABLE',errors});
-   return response(res,200,{mode:'YAHOO_LEAGUE_DATA',leagueId:85892,teamId:5,teamKey:unique[0].key,observedAt:new Date().toISOString(),source:'Yahoo Fantasy Sports API',readOnly:true,sections:sources,errors});
+   return response(res,200,{mode:'YAHOO_LEAGUE_DATA',leagueId:85892,teamId:5,teamKey:unique[0].key,observedAt:new Date().toISOString(),source:'Yahoo Fantasy Sports API',readOnly:true,sections:sources,rosterPlayers:sources.roster?[...new Map(findPlayers(sources.roster).map(p=>[p.yahooId,p])).values()]:[],leagueTeams:sources.teams?[...new Map(findTeams(sources.teams).map(t=>[t.key,t])).values()]:[],errors});
   }
   if(req.query?.matchup==='1'){
    const data=await read(session.access_token,'team/'+encodeURIComponent(unique[0].key)+'/matchups?format=json');
