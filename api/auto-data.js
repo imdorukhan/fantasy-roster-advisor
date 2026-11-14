@@ -1,5 +1,5 @@
 import {cookies,configured,tokenRequest} from './auth/yahoo/_lib.js';
-import {loadSession,saveSession,storeConfigured} from './auth/yahoo/_store.js';
+import {loadSession,saveSession,storeConfigured,loadLeagueSnapshots,saveLeagueSnapshots} from './auth/yahoo/_store.js';
 // Automated, public-source-only roster and NBA schedule reader.
 // No Yahoo OAuth, cookies, credentials, side effects or fantasy transactions.
 const YAHOO='https://basketball.fantasysports.yahoo.com/nba/85892/';
@@ -198,17 +198,29 @@ async function liveHandler(req,res){
     scoreboard:'league/'+leagueKey+'/scoreboard?format=json',
     roster:'team/'+unique[0].key+'/roster?format=json'
    };
-   const entries=await Promise.allSettled(Object.entries(endpoints).map(async ([name,path])=>[name,await read(session.access_token,path)]));
-   const sources={},errors=[];
-   for(let i=0;i<entries.length;i++){
-    const name=Object.keys(endpoints)[i],entry=entries[i];
-    if(entry.status==='fulfilled')sources[name]=entry.value[1];
-    else errors.push({section:name,upstreamStatus:entry.reason?.status||null});
+   const errors=[],sources={},timestamps={};
+   let stored={};
+   try{stored=await loadLeagueSnapshots(85892)}catch(e){errors.push({section:'database-read',message:e.message})}
+   const now=Date.now(),maxAge=5*60*1000;
+   const refresh=req.query?.refresh==='1';
+   const fresh=Object.keys(endpoints).every(k=>stored[k]?.payload&&now-Date.parse(stored[k].observed_at)<maxAge);
+   if(fresh&&!refresh){
+    for(const [k,v] of Object.entries(stored)){sources[k]=v.payload;timestamps[k]=v.observed_at}
+   }else{
+    const entries=await Promise.allSettled(Object.entries(endpoints).map(async ([name,path])=>[name,await read(session.access_token,path)]));
+    const updated={};
+    entries.forEach((entry,i)=>{
+     const name=Object.keys(endpoints)[i];
+     if(entry.status==='fulfilled'){updated[name]=entry.value[1];sources[name]=entry.value[1];timestamps[name]=new Date().toISOString()}
+     else{errors.push({section:name,upstreamStatus:entry.reason?.status||null});if(stored[name]?.payload){sources[name]=stored[name].payload;timestamps[name]=stored[name].observed_at}}
+    });
+    if(Object.keys(updated).length){
+     try{await saveLeagueSnapshots(85892,updated)}catch(e){errors.push({section:'database-write',message:e.message})}
+    }
    }
-   // This is a read-only, authenticated source of truth. Raw Yahoo structures
-   // are retained to avoid silently losing scoring/waiver fields in parsing.
    if(!sources.teams&&!sources.roster)return response(res,502,{mode:'YAHOO_LEAGUE_UNAVAILABLE',errors});
-   return response(res,200,{mode:'YAHOO_LEAGUE_DATA',leagueId:85892,teamId:5,teamKey:unique[0].key,observedAt:new Date().toISOString(),source:'Yahoo Fantasy Sports API',readOnly:true,sections:sources,rosterPlayers:sources.roster?[...new Map(findPlayers(sources.roster).map(p=>[p.yahooId,p])).values()]:[],leagueTeams:sources.teams?[...new Map(findTeams(sources.teams).map(t=>[t.key,t])).values()]:[],errors});
+   const staleSections=Object.keys(sources).filter(k=>now-Date.parse(timestamps[k])>=maxAge);
+   return response(res,200,{mode:'YAHOO_LEAGUE_DATA',leagueId:85892,teamId:5,teamKey:unique[0].key,observedAt:new Date().toISOString(),source:'Yahoo Fantasy Sports API via Supabase',readOnly:true,sections:sources,sectionTimestamps:timestamps,staleSections,dbBacked:Object.keys(stored).length>0,rosterPlayers:sources.roster?[...new Map(findPlayers(sources.roster).map(p=>[p.yahooId,p])).values()]:[],leagueTeams:sources.teams?[...new Map(findTeams(sources.teams).map(t=>[t.key,t])).values()]:[],errors});
   }
   if(req.query?.matchup==='1'){
    const data=await read(session.access_token,'team/'+encodeURIComponent(unique[0].key)+'/matchups?format=json');
