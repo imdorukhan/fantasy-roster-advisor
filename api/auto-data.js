@@ -1,5 +1,6 @@
+import crypto from 'node:crypto';
 import {cookies,configured,tokenRequest} from './auth/yahoo/_lib.js';
-import {loadSession,saveSession,storeConfigured,loadLeagueSnapshots,saveLeagueSnapshots} from './auth/yahoo/_store.js';
+import {loadSession,saveSession,storeConfigured,loadLeagueSnapshots,saveLeagueSnapshots,loadBackgroundYahooSession,updateBackgroundYahooSession} from './auth/yahoo/_store.js';
 // Automated, public-source-only roster and NBA schedule reader.
 // No Yahoo OAuth, cookies, credentials, side effects or fantasy transactions.
 const YAHOO='https://basketball.fantasysports.yahoo.com/nba/85892/';
@@ -79,6 +80,7 @@ async function espnDepth(abbr){
  depthCache.set(abbr,{at:Date.now(),value});return value;
 }
 export default async function handler(req,res){
+ if(req.query?.cron==='1')return backgroundLeagueSync(req,res);
  if(req.query?.depthTeam){
   const team=String(req.query.depthTeam).toUpperCase();
   if(!/^[A-Z]{2,3}$/.test(team))return res.status(400).json({error:'Invalid NBA team'});
@@ -91,6 +93,41 @@ export default async function handler(req,res){
 }
 
 
+
+
+async function backgroundLeagueSync(req,res){
+ res.setHeader('Cache-Control','no-store');
+ if(req.method!=='GET')return res.status(405).json({error:'Method not allowed'});
+ const expected=process.env.CRON_SECRET||'';
+ const supplied=(req.headers.authorization||'').replace(/^Bearer /,'');
+ const valid=expected.length>=32&&supplied.length===expected.length&&crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(supplied));
+ if(!valid)return res.status(401).json({error:'Unauthorized'});
+ try{
+  const owner=await loadBackgroundYahooSession();
+  if(!owner?.tokens?.refresh_token)return res.status(503).json({error:'Owner Yahoo authorization unavailable'});
+  let session=owner.tokens;
+  if(!session.access_token||Date.now()+120000>=session.expires_at){
+   const t=await tokenRequest({grant_type:'refresh_token',refresh_token:session.refresh_token});
+   if(!t.access_token)throw Error('Yahoo token refresh unavailable');
+   session={access_token:t.access_token,refresh_token:t.refresh_token||session.refresh_token,expires_at:Date.now()+(Number(t.expires_in)||3600)*1000};
+   await updateBackgroundYahooSession(owner.hash,session);
+  }
+  const leagueKey='478.l.85892';
+  const endpoints={
+   settings:'league/'+leagueKey+'/settings?format=json',
+   teams:'league/'+leagueKey+'/teams?format=json',
+   standings:'league/'+leagueKey+'/standings?format=json',
+   scoreboard:'league/'+leagueKey+'/scoreboard?format=json',
+   roster:'team/'+leagueKey+'.t.5/roster?format=json'
+  };
+  const settled=await Promise.allSettled(Object.entries(endpoints).map(async ([name,path])=>[name,await read(session.access_token,path)]));
+  const sections={},failed=[];
+  settled.forEach((item,i)=>{if(item.status==='fulfilled')sections[item.value[0]]=item.value[1];else failed.push(Object.keys(endpoints)[i])});
+  if(!Object.keys(sections).length)return res.status(502).json({status:'failed',failed});
+  const written=await saveLeagueSnapshots(85892,sections);
+  return res.status(failed.length?207:200).json({status:failed.length?'partial':'ok',savedSections:written,failed,observedAt:new Date().toISOString()});
+ }catch(e){console.error('Background Yahoo sync failed:',e.message);return res.status(503).json({error:'Background sync unavailable'})}
+}
 
 const BASE='https://fantasysports.yahooapis.com/fantasy/v2/';
 const response=(res,status,body)=>{res.setHeader('Cache-Control','private, no-store');return res.status(status).json(body)};
