@@ -11,5 +11,5 @@ export function getLeagueData({refresh=false}={}){
 }
 export function leagueHealth(d){
  const sections=['settings','teams','standings','scoreboard','roster'];
- return sections.map(k=>({name:k,available:!!d.sections?.[k]}));
+ return sections.map(k=>({name:k,available:!!d.sections?.[k],stale:(d.staleSections||[]).includes(k),updatedAt:d.sectionTimestamps?.[k]||null}));
 }
