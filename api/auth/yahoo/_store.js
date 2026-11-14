@@ -36,3 +36,14 @@ export async function saveLeagueSnapshots(leagueId,sections){
  try{await leagueRequest('yahoo_league_snapshot_history','',{method:'POST',prefer:'return=minimal',body:rows.map(({league_id,section,payload,observed_at})=>({league_id,section,payload,observed_at}))})}catch(e){console.error('League history write failed:',e.message)}
  return rows.length;
 }
+
+export async function loadBackgroundYahooSession(){
+ // Owner-bound application: never return the ciphertext or tokens to clients.
+ const rows=await request('?expires_at=gt.'+encodeURIComponent(new Date().toISOString())+'&select=session_hash,token_ciphertext&order=expires_at.desc&limit=1');
+ if(!rows?.[0])return null;
+ return {hash:rows[0].session_hash,tokens:tokenDecrypt(rows[0].token_ciphertext)};
+}
+export async function updateBackgroundYahooSession(hash,tokens){
+ if(!/^[a-f0-9]{64}$/.test(hash))throw Error('Invalid session reference');
+ await request('?session_hash=eq.'+hash,{method:'PATCH',prefer:'return=minimal',body:{token_ciphertext:tokenEncrypt(tokens),expires_at:new Date(Date.now()+30*86400000).toISOString()}});
+}
