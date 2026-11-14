@@ -32,7 +32,7 @@ const names={overview:['Fantasy Command Center','Your team intelligence, all in 
 function go(v){if(!names[v])return;document.querySelectorAll('.view').forEach(e=>e.classList.toggle('hidden',e.id!==v));document.querySelectorAll('.nav button').forEach(e=>e.classList.toggle('active',e.dataset.view===v));document.querySelector('#page-title').textContent=names[v][0];document.querySelector('#page-desc').textContent=names[v][1];if(v==='freeagents')loadFreeAgents();location.hash=v;window.scrollTo({top:0,behavior:'smooth'})}
 document.querySelectorAll('[data-view]').forEach(el=>el.addEventListener('click',()=>go(el.dataset.view)));document.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>go(el.dataset.go)));
 let freeAgentsLoading=false,freeAgentPlayers=[],faDepthCache=new Map(),faDepthErrors=[];
-const faNormalize=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z]/g,'');
+const faNormalize=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z]/g,'');
 function faDepthFor(p){const team=faDepthCache.get(p.nbaTeam);return (team?.rows||[]).filter(x=>faNormalize(x.name)===faNormalize(p.name)&&['PG','SG','SF','PF','C'].includes(x.position)&&Number.isInteger(x.rank)&&x.rank>0).sort((a,b)=>a.rank-b.rank)}
 function faRank(p){const pos=document.querySelector('#fa-position').value;const rows=faDepthFor(p).filter(x=>pos==='ANY'||x.position===pos);return rows.length?Math.min(...rows.map(x=>x.rank)):null}
 function renderFreeAgents(){
