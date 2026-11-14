@@ -10,7 +10,7 @@ export default async function handler(req,res){
  let pending;
  try{pending=unseal(cookies(req).yahoo_oauth_pending||'')}catch{return res.status(400).json({error:'Invalid or expired OAuth state'})}
  if(!pending.state||pending.state!==req.query.state||!Number.isFinite(pending.at)||Date.now()-pending.at>600000||pending.at>Date.now()||!pending.verifier||typeof req.query.code!=='string')return res.status(400).json({error:'Invalid or expired OAuth state'});
- if(pending.bootstrap!==true&&pending.diagnostic!==true)return res.status(403).json({error:'Setup authorization expired or missing; restart setup',help:'Open /api/auth/yahoo/setup'});
+ if(pending.bootstrap!==true&&pending.diagnostic!==true&&pending.ownerLogin!==true)return res.status(403).json({error:'Setup authorization expired or missing; restart setup',help:'Open /api/auth/yahoo/setup'});
  let stage='token_exchange';
  try{
   const token=await tokenRequest({grant_type:'authorization_code',code:req.query.code,redirect_uri:redirect,code_verifier:pending.verifier});
@@ -23,7 +23,7 @@ export default async function handler(req,res){
   }
   const guid=await yahooAccountGuid(token);
   stage='owner_binding';
-  if(!await bindOwner(guid,true))return res.status(403).json({error:'Yahoo account is not the enrolled owner'});
+  if(!await bindOwner(guid,pending.bootstrap===true))return res.status(403).json({error:'Yahoo account is not the enrolled owner'});
   stage='session_save';
   const sid=sessionId();
   await saveSession(sid,{access_token:token.access_token,refresh_token:token.refresh_token,expires_at:Date.now()+(Number(token.expires_in)||3600)*1000});
