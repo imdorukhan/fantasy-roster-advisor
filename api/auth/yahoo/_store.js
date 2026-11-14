@@ -14,3 +14,25 @@ export function storeConfigured(){return Boolean(process.env.SALARYCAPTAIN_SUPAB
 
 export async function bindOwner(guid,allowInitialBind=false){if(typeof guid!=='string'||!guid)return false;const hash=crypto.createHash('sha256').update(guid).digest('hex');if(allowInitialBind){await requestOwner('?on_conflict=singleton',{method:'POST',prefer:'resolution=ignore-duplicates,return=minimal',body:{singleton:true,guid_hash:hash}})}const rows=await requestOwner('?singleton=eq.true&select=guid_hash&limit=1');return rows?.[0]?.guid_hash===hash}
 async function requestOwner(path,opts={}){const {url,secret}=settings();const r=await fetch(url+'/rest/v1/yahoo_oauth_owner'+path,{method:opts.method||'GET',headers:{apikey:secret,Authorization:'Bearer '+secret,'Content-Type':'application/json',...(opts.prefer?{Prefer:opts.prefer}:{})},body:opts.body?JSON.stringify(opts.body):undefined,signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error('Owner store unavailable');if(r.status===204||opts.prefer?.includes('return=minimal'))return null;return r.json()}
+
+const ALLOWED_SECTIONS=new Set(['settings','teams','standings','scoreboard','roster']);
+async function leagueRequest(table,query='',{method='GET',body,prefer}={}){
+ const {url,secret}=settings();
+ const response=await fetch(url+'/rest/v1/'+table+query,{method,headers:{apikey:secret,Authorization:'Bearer '+secret,'Content-Type':'application/json',...(prefer?{Prefer:prefer}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(10000)});
+ if(!response.ok)throw Error('League database HTTP '+response.status);
+ if(response.status===204||prefer?.includes('return=minimal'))return null;
+ return response.json();
+}
+export async function loadLeagueSnapshots(leagueId=85892){
+ const rows=await leagueRequest('yahoo_league_snapshots','?league_id=eq.'+Number(leagueId)+'&select=section,payload,observed_at,source');
+ return Object.fromEntries(rows.filter(r=>ALLOWED_SECTIONS.has(r.section)).map(r=>[r.section,r]));
+}
+export async function saveLeagueSnapshots(leagueId,sections){
+ const observed_at=new Date().toISOString();
+ const rows=Object.entries(sections).filter(([k,v])=>ALLOWED_SECTIONS.has(k)&&v&&typeof v==='object').map(([section,payload])=>({league_id:leagueId,section,payload,observed_at,source:'Yahoo Fantasy Sports API'}));
+ if(!rows.length)return 0;
+ await leagueRequest('yahoo_league_snapshots','?on_conflict=league_id,section',{method:'POST',prefer:'resolution=merge-duplicates,return=minimal',body:rows});
+ // History is best-effort: a successful current snapshot must not be lost to a history insert failure.
+ try{await leagueRequest('yahoo_league_snapshot_history','',{method:'POST',prefer:'return=minimal',body:rows.map(({league_id,section,payload,observed_at})=>({league_id,section,payload,observed_at}))})}catch(e){console.error('League history write failed:',e.message)}
+ return rows.length;
+}
