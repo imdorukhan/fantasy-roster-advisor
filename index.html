@@ -35,7 +35,7 @@ async function loadSystemHealth(){
  const panel=document.getElementById('system-health-panel');if(!panel)return;
  panel.textContent='Checking authenticated Yahoo snapshot freshness…';
  try{
-  const r=await fetch('/api/system-health',{credentials:'same-origin',cache:'no-store'});
+  const r=await fetch('/api/auto-data?live=1&health=1',{credentials:'same-origin',cache:'no-store'});
   if(r.status===401){panel.textContent='Yahoo sign-in required to view private data health.';return;}
   if(!r.ok)throw Error('Data health endpoint unavailable (HTTP '+r.status+')');
   const d=await r.json();
