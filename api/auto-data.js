@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import {parseMatchup} from '../matchup-data.mjs';
+import {statCategoryId,averageMinutesByPlayer} from '../yahoo-player-stats.mjs';
 import {cookies,configured,tokenRequest} from './auth/yahoo/_lib.js';
 import {loadSession,saveSession,storeConfigured,loadLeagueSnapshots,saveLeagueSnapshots,loadBackgroundYahooSession,updateBackgroundYahooSession} from './auth/yahoo/_store.js';
 // Automated, public-source-only roster and NBA schedule reader.
@@ -315,41 +316,15 @@ async function liveHandler(req,res){
    // Resolve the minute stat id from Yahoo game stat categories; never guess.
    let mpgCoverage='unavailable';
    try{
-    const categoriesRaw=await read(session.access_token,'game/478/stat_categories?format=json');
-    const categories=[];
-    function collectCategories(n,d=0){
-     if(!n||typeof n!=='object'||d>24)return;
-     if(Array.isArray(n)){for(const x of n)collectCategories(x,d+1);return}
-     if(n.stat_id!==undefined&&(n.name||n.display_name||n.abbr))categories.push(n);
-     for(const v of Object.values(n))collectCategories(v,d+1);
-    }
-    collectCategories(categoriesRaw);
-    const minutesId=categories.find(c=>/^(minutes played|minutes|mins|MIN)$/i.test([c.name,c.display_name,c.abbr].filter(Boolean).join(' ')))?.stat_id
-     ??categories.find(c=>[c.name,c.display_name,c.abbr].some(label=>/^(minutes played|minutes|MIN)$/i.test(String(label||''))))?.stat_id;
-    if(minutesId!==undefined){
-     const stats=await read(session.access_token,'league/'+leagueKey+'/players;status=A;sort=AR;start='+start+';count='+limit+'/stats;type=average_season?format=json');
-     const byPlayer=new Map();
-     function findPlayerStats(n,d=0){
-      if(!n||typeof n!=='object'||d>25)return;
-      if(Array.isArray(n)){
-       const playerId=n.find(x=>x&&typeof x==='object'&&!Array.isArray(x)&&x.player_id!==undefined)?.player_id;
-       if(playerId){
-        const found=[];
-        function statsWalk(v,k=0){if(!v||typeof v!=='object'||k>15)return;if(Array.isArray(v)){for(const x of v)statsWalk(x,k+1)}else{if(v.stat_id!==undefined&&v.value!==undefined)found.push(v);else for(const x of Object.values(v))statsWalk(x,k+1)}}
-        statsWalk(n);
-        byPlayer.set(String(playerId),found);
-       }
-       for(const x of n)findPlayerStats(x,d+1);
-      }else for(const v of Object.values(n))findPlayerStats(v,d+1);
-     }
-     findPlayerStats(stats);
-     for(const player of free){
-      const raw=(byPlayer.get(player.yahooId)||[]).find(v=>String(v.stat_id)===String(minutesId))?.value;
-      const value=typeof raw==='string'&&/^\d{1,2}:\d{2}$/.test(raw)?(()=>{const [minutes,seconds]=raw.split(':').map(Number);return minutes+seconds/60})():typeof raw==='number'||typeof raw==='string'&&raw.trim()!==''?Number(raw):NaN;
-      if(Number.isFinite(value)&&value>=0&&value<=60)player.mpg=Math.round(value*10)/10;
-     }
+    const categories=await read(session.access_token,'game/478/stat_categories?format=json');
+    const id=statCategoryId(categories,['Minutes Played','Minutes','MIN']);
+    if(id===null){mpgCoverage='minutes-stat-not-listed'}
+    else {
+     const raw=await read(session.access_token,'league/'+leagueKey+'/players;status=A;sort=AR;start='+start+';count='+limit+'/stats;type=average_season?format=json');
+     const map=averageMinutesByPlayer(raw,id);
+     for(const p of free){if(map.has(p.yahooId))p.mpg=map.get(p.yahooId)}
      mpgCoverage=free.some(p=>p.mpg!==null)?'partial-or-complete':'not-returned';
-    }else mpgCoverage='minutes-stat-not-listed';
+    }
    }catch(e){mpgCoverage='Yahoo average_season unavailable';}
    return response(res,200,{mode:'YAHOO_FREE_AGENTS',leagueId:85892,observedAt:new Date().toISOString(),start,count:free.length,requested:limit,mpgCoverage,players:free,notes:['Yahoo status A = free agent. Waiver status W is not included.','No player add/drop action is performed.','Sort AR is Yahoo average rank, not a personalized matchup projection.']});
   }
