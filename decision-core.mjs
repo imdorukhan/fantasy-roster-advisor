@@ -39,9 +39,9 @@ export function categorySwing(comparison,{scaleByCategory={}}={}){
 }
 export function streamingCalendar(candidates,{startDate,endDate,remainingAdds,occupiedSlots={}}={}){
  if(!Number.isInteger(remainingAdds)||remainingAdds<0)return {available:false,reason:'Verified remaining Yahoo acquisitions required',candidates:[]};
- if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(startDate||'')||!/^\\d{4}-\\d{2}-\\d{2}$/.test(endDate||'')||startDate>endDate)return {available:false,reason:'Valid calendar interval required',candidates:[]};
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(startDate||'')||!/^\d{4}-\d{2}-\d{2}$/.test(endDate||'')||startDate>endDate)return {available:false,reason:'Valid calendar interval required',candidates:[]};
  if(!Array.isArray(candidates))return {available:false,reason:'Candidate list missing',candidates:[]};
- const valid=candidates.filter(c=>c&&c.ownership==='FREE_AGENT'&&c.ownershipVerified===true&&Array.isArray(c.scheduledGames)&&c.scheduledGames.every(d=>/^\\d{4}-\\d{2}-\\d{2}$/.test(d)));
+ const valid=candidates.filter(c=>c&&c.ownership==='FREE_AGENT'&&c.ownershipVerified===true&&Array.isArray(c.scheduledGames)&&c.scheduledGames.every(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)));
  const ranked=valid.map(c=>{
   const dates=[...new Set(c.scheduledGames)].filter(d=>d>=startDate&&d<=endDate);
   const openDates=dates.filter(d=>!occupiedSlots[d]||occupiedSlots[d].includes?.(c.position));
