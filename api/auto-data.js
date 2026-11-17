@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import {parseMatchup} from '../matchup-data.mjs';
 import {statCategoryId,averageMinutesByPlayer} from '../yahoo-player-stats.mjs';
+import {dataHealth} from '../decision-core.mjs';
 import {cookies,configured,tokenRequest} from './auth/yahoo/_lib.js';
 import {loadSession,saveSession,storeConfigured,loadLeagueSnapshots,saveLeagueSnapshots,loadBackgroundYahooSession,updateBackgroundYahooSession} from './auth/yahoo/_store.js';
 // Automated, public-source-only roster and NBA schedule reader.
@@ -219,6 +220,13 @@ async function liveHandler(req,res){
    if(!t.access_token)throw Error('Yahoo token refresh failed');
    session={access_token:t.access_token,refresh_token:t.refresh_token||session.refresh_token,expires_at:Date.now()+(Number(t.expires_in)||3600)*1000};
    await saveSession(sid,session);
+  }
+  if(req.query?.health==='1'){
+   const cached=await loadLeagueSnapshots(85892);
+   const sections=['settings','teams','standings','scoreboard','roster'];
+   const checkedAt=new Date().toISOString();
+   const report=dataHealth(sections.map(name=>({name,observedAt:cached[name]?.observed_at||null,maxAgeMs:30*60*60*1000})));
+   return response(res,200,{mode:'YAHOO_SYSTEM_HEALTH',leagueId:85892,checkedAt,status:report.healthy?'healthy':'degraded',sections:report.checks.map(x=>({section:x.source,status:x.status,observedAt:cached[x.source]?.observed_at||null,ageMs:x.ageMs})),readOnly:true});
   }
   const teams=await read(session.access_token,'users;use_login=1/games;game_keys=nba/teams?format=json');
   const matches=findTeams(teams).filter(x=>/\.l\.85892\.t\.5$/.test(x.key));
