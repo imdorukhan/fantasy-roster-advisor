@@ -43,7 +43,12 @@ export async function buildMatchup({start=firstDay,end=lastDay}={}){
  const comparison=categories.map(c=>{const a=ours[c],b=theirs[c],who=a===null||b===null?'UNKNOWN':a===b?'TIE':c==='TO'?(a<b?'OURS':'OPPONENT'):(a>b?'OURS':'OPPONENT');return {category:c,ours:a,opponent:b,leader:who}});
  return {mode:'UNOFFICIAL_ALL_ROSTER_BOX_SCORES',observedAt:new Date().toISOString(),week:{start,end},source:'ESPN NBA public scoreboard and individual game boxscores',sourceUrl:'https://www.espn.com/nba/scoreboard',rosterSnapshotDate:'2026-10-22',opponentName:opp.name,ourTeamName:our.name,gamesAnalyzed,completedGamesFound:unique.length,fetchErrors,comparison,ourPlayers:our.players,opponentPlayers:opp.players,warning:'Not Yahoo matchup scoring. All players from dated roster snapshot counted when they appeared in NBA games, regardless of Yahoo starting/bench/IL or any roster changes. NBA stats may be corrected. Use Yahoo for official category score.'};
 }
+// Historical buildMatchup remains available for explicit, offline regression tests.
+// Never serve the October 22 sample as a current matchup.
 export default async function handler(req,res){
- try{const result=await buildMatchup();res.setHeader('Cache-Control','s-maxage=300, stale-while-revalidate=300');res.status(200).json(result)}
- catch(e){res.status(503).json({error:'ESPN comparison unavailable',detail:String(e.message)})}
+ res.setHeader('Cache-Control','no-store');
+ if(req.method!=='GET')return res.status(405).json({error:'Method not allowed'});
+ if(req.query?.historical!=='1')return res.status(410).json({mode:'ARCHIVED_HISTORICAL_MATCHUP',error:'Historical October 2026 roster comparison is not a current matchup',currentEndpoint:'/api/yahoo-matchup',readOnly:true});
+ try{const result=await buildMatchup();return res.status(200).json({...result,historical:true,actionable:false})}
+ catch(e){return res.status(503).json({error:'Historical ESPN comparison unavailable'});}
 }
