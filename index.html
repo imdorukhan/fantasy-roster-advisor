@@ -43,7 +43,7 @@ async function loadSystemHealth(){
  }catch(e){panel.textContent='Data health unavailable: '+e.message;}
 }
 document.getElementById('health-refresh').addEventListener('click',loadSystemHealth);
-let freeAgentsLoading=false,freeAgentPlayers=[],faDepthCache=new Map(),faDepthErrors=[];
+let freeAgentsLoading=false,freeAgentPlayers=[],faDepthCache=new Map(),faDepthErrors=[],faDataComplete=false,faLoadError=null;
 const faNormalize=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z]/g,'');
 function faDepthFor(p){const team=faDepthCache.get(p.nbaTeam);return (team?.rows||[]).filter(x=>faNormalize(x.name)===faNormalize(p.name)&&['PG','SG','SF','PF','C'].includes(x.position)&&Number.isInteger(x.rank)&&x.rank>0).sort((a,b)=>a.rank-b.rank)}
 function faRank(p){const pos=document.querySelector('#fa-position').value;const rows=faDepthFor(p).filter(x=>pos==='ANY'||x.position===pos);return rows.length?Math.min(...rows.map(x=>x.rank)):null}
@@ -60,25 +60,44 @@ function renderFreeAgents(){
  body.innerHTML=filtered.map(p=>{const depth=faDepthFor(p),rank=faRank(p);return '<tr><td><button type="button" class="player-profile-link" data-player-id="'+esc(p.yahooId)+'">'+esc(p.name)+'</button></td><td>'+esc(p.nbaTeam||'—')+'</td><td>'+(depth.length?depth.map(x=>'<span class="pill violet" style="display:inline-block;margin:2px">'+esc(x.position)+' #'+esc(x.rank)+'</span>').join(''):'<span class="muted">Not verified</span>')+'</td><td>'+(rank===null?'—':'#'+rank)+'</td><td>'+faPositionCount(p)+'</td><td>'+(Number.isFinite(p.mpg)?p.mpg.toFixed(1):'—')+'</td><td>Free agent</td></tr>'}).join('')||'<tr><td colspan="7">No verified players match these filters.</td></tr>';
  const ranks=filtered.map(faRank).filter(x=>x!==null);
  const best=ranks.length?Math.min(...ranks):null;
- document.querySelector('#fa-status').textContent=filtered.length+' shown / '+freeAgentPlayers.length+' Yahoo free agents loaded · Best available rank: '+(best===null?'not verified':'#'+best)+' · '+faDepthCache.size+' NBA teams checked'+(faDepthErrors.length?' · '+faDepthErrors.length+' depth feeds unavailable':'')+' · Depth source: ESPN';
+ document.querySelector('#fa-status').textContent=filtered.length+' shown / '+freeAgentPlayers.length+' Yahoo free agents loaded ('+(faDataComplete?'complete':'incomplete')+') · '+(faLoadError?'Paging: '+faLoadError+' · ':'')+'MPG available: '+freeAgentPlayers.filter(p=>Number.isFinite(p.mpg)).length+' · Best available rank: '+(best===null?'not verified':'#'+best)+' · '+faDepthCache.size+' NBA teams checked'+(faDepthErrors.length?' · '+faDepthErrors.length+' depth feeds unavailable':'')+' · Depth source: ESPN';
 }
 async function loadFreeAgents(){
  if(freeAgentsLoading)return;
- freeAgentsLoading=true;
+ freeAgentsLoading=true;faDataComplete=false;faLoadError=null;
  const status=document.querySelector('#fa-status');
- status.textContent='Checking Yahoo league availability…';
+ const pageSize=25,maxPages=40,batchSize=3;
+ status.textContent='Checking Yahoo league free agents and MPG…';
+ freeAgentPlayers=[];faDepthErrors=[];
  try{
-  const r=await fetch('/api/auto-data?live=1&freeAgents=1',{credentials:'same-origin',cache:'no-store'});
-  const data=await r.json();if(!r.ok||data.mode!=='YAHOO_FREE_AGENTS')throw Error(data.error||'Yahoo API HTTP '+r.status);
-  freeAgentPlayers=data.players||[];faDepthErrors=[];
-  status.textContent='Yahoo free agents loaded. Checking NBA depth charts…';
+  let finished=false;
+  for(let page=0;page<maxPages&&!finished;page+=batchSize){
+   const requests=Array.from({length:Math.min(batchSize,maxPages-page)},(_,i)=>page+i);
+   const results=await Promise.allSettled(requests.map(async i=>{
+    const r=await fetch('/api/auto-data?live=1&freeAgents=1&start='+(i*pageSize),{credentials:'same-origin',cache:'no-store'});
+    const d=await r.json();
+    if(!r.ok||d.mode!=='YAHOO_FREE_AGENTS'||!Array.isArray(d.players))throw Error(d.error||'Yahoo API HTTP '+r.status);
+    return {page:i,players:d.players};
+   }));
+   for(let i=0;i<results.length;i++){
+    const result=results[i];
+    if(result.status!=='fulfilled'){faLoadError=String(result.reason?.message||'Yahoo paging error');finished=true;break}
+    freeAgentPlayers.push(...result.value.players);
+    if(result.value.players.length<pageSize){faDataComplete=true;finished=true;break}
+   }
+   freeAgentPlayers=[...new Map(freeAgentPlayers.map(p=>[String(p.yahooId),p])).values()];
+   status.textContent=freeAgentPlayers.length+' Yahoo free agents loaded…'+(faLoadError?' Pagination incomplete: '+faLoadError:'');
+  }
+  if(!faDataComplete&&!faLoadError)faLoadError='Reached pagination safety limit (1000 entries)';
+  if(!freeAgentPlayers.length)throw Error(faLoadError||'Yahoo returned no available players');
+  status.textContent='Loaded '+freeAgentPlayers.length+' free agents. Checking NBA depth charts…';
   const teams=[...new Set(freeAgentPlayers.map(p=>p.nbaTeam).filter(Boolean))];
   await Promise.all(teams.map(async team=>{
    try{const response=await fetch('/api/auto-data?depthTeam='+encodeURIComponent(team),{cache:'no-store'});const d=await response.json();if(!response.ok||!Array.isArray(d.rows))throw Error('Depth unavailable');faDepthCache.set(team,d)}
    catch{faDepthErrors.push(team);faDepthCache.delete(team)}
   }));
   renderFreeAgents();
- }catch(e){status.textContent='Yahoo free-agent verification failed: '+e.message;document.querySelector('#fa-body').innerHTML='';}
+ }catch(e){faLoadError=e.message;status.textContent='Yahoo free-agent verification failed: '+e.message;document.querySelector('#fa-body').innerHTML='';}
  finally{freeAgentsLoading=false}
 }
 for(const id of ['fa-position','fa-rank','fa-sort'])document.getElementById(id).addEventListener('change',renderFreeAgents);
