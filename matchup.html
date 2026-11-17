@@ -37,14 +37,16 @@ function roster(el,players){$(el).innerHTML=Array.isArray(players)&&players.leng
 async function refresh(){
  const button=$('refresh');button.disabled=true;
  try{
-  const results=await Promise.allSettled([get('/api/yahoo-matchup'),get('/api/public-matchup')]);
-  const matchup=results[0].status==='fulfilled'?results[0].value:null;
-  const observed=results[1].status==='fulfilled'?results[1].value:null;
+  const results=await Promise.allSettled([get('/api/auto-data?live=1&officialMatchup=1'),get('/api/yahoo-matchup'),get('/api/public-matchup')]);
+  const official=results[0].status==='fulfilled'&&results[0].value.weekVerified?results[0].value:null;
+  const matchup=official||(results[1].status==='fulfilled'?results[1].value:null);
+  const observed=results[2].status==='fulfilled'?results[2].value:null;
   const live=freshness(matchup?.observedAt,{maxAgeMs:300000});
   if(matchup&&live.valid&&matchup.ourTeam?.id===5&&matchup.categories?.length===9){
    const normalized=categoryComparison(matchup.ourTeam.stats,matchup.opponent.stats);
    if(!normalized.verified)throw Error('Invalid categories');
    $('opponent-name').textContent=matchup.opponent.name;
+   $('matchup-week-label').textContent=official?'Week '+official.week+' · '+official.weekStart+' to '+official.weekEnd:'Week unverified';
    $('observed-time').textContent='Observed '+new Date(matchup.observedAt).toLocaleString();
    $('score-summary').textContent=matchup.score.ours+' – '+matchup.score.opponent+' – '+matchup.score.ties;
    $('categories').innerHTML=matchup.categories.map(c=>'<tr><td><strong>'+esc(c.category)+'</strong></td><td class="'+(c.leader==='OURS'?'ours':'')+'">'+fmt(c.ours,c.category)+'</td><td class="'+(c.leader==='OPPONENT'?'opp':'')+'">'+fmt(c.opponent,c.category)+'</td><td class="'+(c.leader==='OURS'?'ours':c.leader==='OPPONENT'?'opp':'tie')+'">'+esc(c.leader)+'</td></tr>').join('');
@@ -58,7 +60,7 @@ async function refresh(){
   roster('ours',observed?.rosters?.ours);
   roster('theirs',observed?.rosters?.opponent);
   const sourceResults=(observed?.sources||[]).map(s=>esc(s.source)+': '+esc(s.status)).join(' · ');
-  $('health').innerHTML='<p>Yahoo observation: '+(live.valid?'FRESH':'UNAVAILABLE / STALE')+'</p><p class="sub">'+(sourceResults||'Sources unavailable')+'</p><p class="sub">Yahoo week number not independently verified.</p>';
+  $('health').innerHTML='<p>'+(official?'Yahoo official API':'Yahoo public observation')+': '+(live.valid?'FRESH':'UNAVAILABLE / STALE')+'</p><p class="sub">'+(sourceResults||'Sources unavailable')+'</p><p class="sub">Yahoo week number not independently verified.</p>';
  }catch(e){$('categories').innerHTML='<tr><td colspan="4">Verification failed. No historical results substituted.</td></tr>';$('swing').textContent='Analysis unavailable';$('health').textContent=String(e.message);}
  finally{button.disabled=false;}
 }
