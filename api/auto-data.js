@@ -280,7 +280,7 @@ async function liveHandler(req,res){
   }
   if(req.query?.freeAgents==='1'){
    const leagueKey=unique[0].key.split('.t.')[0];
-   const start=Math.max(0,Math.min(150,Number.parseInt(String(req.query.start||'0'),10)||0));
+   const start=Math.max(0,Math.min(2000,Number.parseInt(String(req.query.start||'0'),10)||0));
    const limit=25;
    const url='league/'+leagueKey+'/players;status=A;sort=AR;start='+start+';count='+limit+'?format=json';
    const result=await read(session.access_token,url);
@@ -300,39 +300,48 @@ async function liveHandler(req,res){
    inspect(result);
    const meta=new Map(statuses.map(x=>[x.id,x]));
    const free=byId.map(p=>({...p,...(meta.get(p.yahooId)||{}),slot:undefined,availability:'FREE_AGENT',mpg:null}));
-   // Yahoo's player stats endpoint can expose minutes, but stat IDs vary by game.
-   // Resolve IDs from league settings rather than hardcoding a possibly wrong stat.
+   // MPG is a per-game number: use Yahoo average_season statistics, not
+   // league scoring settings (many 9-CAT leagues do not score minutes).
+   // Resolve the minute stat id from Yahoo game stat categories; never guess.
+   let mpgCoverage='unavailable';
    try{
-    const settings=await read(session.access_token,'league/'+leagueKey+'/settings?format=json');
+    const categoriesRaw=await read(session.access_token,'game/478/stat_categories?format=json');
     const categories=[];
-    function collectCategories(n,d=0){if(!n||typeof n!=='object'||d>24)return;if(Array.isArray(n)){for(const v of n)collectCategories(v,d+1);return}
+    function collectCategories(n,d=0){
+     if(!n||typeof n!=='object'||d>24)return;
+     if(Array.isArray(n)){for(const x of n)collectCategories(x,d+1);return}
      if(n.stat_id!==undefined&&(n.name||n.display_name||n.abbr))categories.push(n);
      for(const v of Object.values(n))collectCategories(v,d+1);
     }
-    collectCategories(settings);
-    const findCategory=rx=>categories.find(c=>rx.test([c.name,c.display_name,c.abbr].filter(Boolean).join(' ')));
-    const minutesId=findCategory(/^(?:minutes played|minutes|mins|MIN)$/i)?.stat_id;
-    const gamesId=findCategory(/^(?:games played|games|GP)$/i)?.stat_id;
-    if(minutesId!==undefined&&gamesId!==undefined){
-     const statRaw=await read(session.access_token,'league/'+leagueKey+'/players;status=A;sort=AR;start='+start+';count='+limit+'/stats;type=season?format=json');
-     const statMap=new Map();
-     function collectStats(n,d=0){if(!n||typeof n!=='object'||d>28)return;
+    collectCategories(categoriesRaw);
+    const minutesId=categories.find(c=>/^(minutes played|minutes|mins|MIN)$/i.test([c.name,c.display_name,c.abbr].filter(Boolean).join(' ')))?.stat_id
+     ??categories.find(c=>[c.name,c.display_name,c.abbr].some(label=>/^(minutes played|minutes|MIN)$/i.test(String(label||''))))?.stat_id;
+    if(minutesId!==undefined){
+     const stats=await read(session.access_token,'league/'+leagueKey+'/players;status=A;sort=AR;start='+start+';count='+limit+'/stats;type=average_season?format=json');
+     const byPlayer=new Map();
+     function findPlayerStats(n,d=0){
+      if(!n||typeof n!=='object'||d>25)return;
       if(Array.isArray(n)){
-       const id=n.find(x=>x&&typeof x==='object'&&!Array.isArray(x)&&x.player_id!==undefined)?.player_id;
-       if(id){const values=[];function walk(v,k=0){if(!v||typeof v!=='object'||k>12)return;if(Array.isArray(v)){for(const x of v)walk(x,k+1)}else{if(v.stat_id!==undefined&&v.value!==undefined)values.push(v);else for(const x of Object.values(v))walk(x,k+1)}}walk(n);statMap.set(String(id),values)}
-       for(const v of n)collectStats(v,d+1);
-      }else for(const v of Object.values(n))collectStats(v,d+1);
+       const playerId=n.find(x=>x&&typeof x==='object'&&!Array.isArray(x)&&x.player_id!==undefined)?.player_id;
+       if(playerId){
+        const found=[];
+        function statsWalk(v,k=0){if(!v||typeof v!=='object'||k>15)return;if(Array.isArray(v)){for(const x of v)statsWalk(x,k+1)}else{if(v.stat_id!==undefined&&v.value!==undefined)found.push(v);else for(const x of Object.values(v))statsWalk(x,k+1)}}
+        statsWalk(n);
+        byPlayer.set(String(playerId),found);
+       }
+       for(const x of n)findPlayerStats(x,d+1);
+      }else for(const v of Object.values(n))findPlayerStats(v,d+1);
      }
-     collectStats(statRaw);
-     for(const p of free){const values=statMap.get(p.yahooId)||[];const getValue=id=>values.find(v=>String(v.stat_id)===String(id))?.value;
-      const gp=Number(getValue(gamesId));const minRaw=getValue(minutesId);
-      // Total minutes may be numeric or H:MM; do not turn per-game values into totals.
-      const total=typeof minRaw==='string'&&/^\\d+:\\d{1,2}$/.test(minRaw)?(()=>{const [m,sec]=minRaw.split(':').map(Number);return m+sec/60})():Number(minRaw);
-      if(gp>0&&Number.isFinite(total)&&total>=0&&total/gp<=60)p.mpg=Math.round(total/gp*10)/10;
+     findPlayerStats(stats);
+     for(const player of free){
+      const raw=(byPlayer.get(player.yahooId)||[]).find(v=>String(v.stat_id)===String(minutesId))?.value;
+      const value=typeof raw==='string'&&/^\\d{1,2}:\\d{2}$/.test(raw)?(()=>{const [minutes,seconds]=raw.split(':').map(Number);return minutes+seconds/60})():typeof raw==='number'||typeof raw==='string'&&raw.trim()!==''?Number(raw):NaN;
+      if(Number.isFinite(value)&&value>=0&&value<=60)player.mpg=Math.round(value*10)/10;
      }
-    }
-   }catch{/* MPG remains unavailable rather than displaying an invented value. */}
-   return response(res,200,{mode:'YAHOO_FREE_AGENTS',leagueId:85892,observedAt:new Date().toISOString(),start,count:free.length,requested:limit,players:free,notes:['Yahoo status A = free agent. Waiver status W is not included.','No player add/drop action is performed.','Sort AR is Yahoo average rank, not a personalized matchup projection.']});
+     mpgCoverage=free.some(p=>p.mpg!==null)?'partial-or-complete':'not-returned';
+    }else mpgCoverage='minutes-stat-not-listed';
+   }catch(e){mpgCoverage='Yahoo average_season unavailable';}
+   return response(res,200,{mode:'YAHOO_FREE_AGENTS',leagueId:85892,observedAt:new Date().toISOString(),start,count:free.length,requested:limit,mpgCoverage,players:free,notes:['Yahoo status A = free agent. Waiver status W is not included.','No player add/drop action is performed.','Sort AR is Yahoo average rank, not a personalized matchup projection.']});
   }
   const roster=await read(session.access_token,'team/'+encodeURIComponent(unique[0].key)+'/roster?format=json');
   if(req.query?.sample==='10094'){
