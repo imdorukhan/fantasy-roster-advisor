@@ -34,29 +34,31 @@ async function refresh(){
  const token=++refreshed,button=q('refresh');button.disabled=true;
  const status=[];q('health').textContent='Checking Yahoo category observations, authenticated league data, and NBA schedule…';
  try{
-  const [league,auto,observed]=await Promise.allSettled([
-   getLeagueData({refresh:true}),json('/api/auto-data'),json('/api/yahoo-matchup')
+  const [league,auto,observed,official]=await Promise.allSettled([
+   getLeagueData({refresh:true}),json('/api/auto-data'),json('/api/yahoo-matchup'),json('/api/auto-data?live=1&officialMatchup=1')
   ]);
   if(token!==refreshed)return;
-  if(observed.status==='fulfilled'){
-   const d=observed.value;
+  const verified=official.status==='fulfilled'&&official.value?.weekVerified===true;
+  const candidate=verified?official.value:observed.status==='fulfilled'?observed.value:null;
+  if(candidate){
+   const d=candidate;
    const age=Date.now()-Date.parse(d.observedAt);
    const fresh=Number.isFinite(age)&&age>=-60000&&age<=5*60*1000;
    if(fresh&&d.ourTeam?.id===5&&d.categories?.length===9){
     renderYahoo(d);
-    status.push('<span class="success">Yahoo public matchup: observed '+esc(d.observedAt)+' · opponent '+esc(d.opponent.name)+' · week unverified</span>');
-    q('targets').insertAdjacentHTML('beforeend','<p class="small">Current category margins only. Win probabilities and transactions are disabled until current week, roster locks and projections are verified.</p>');
+    status.push('<span class="'+(verified?'success':'warning')+'">'+(verified?'Yahoo official API week #'+esc(d.week)+' ('+esc(d.weekStart)+' to '+esc(d.weekEnd)+')':'Yahoo public observation · week not verified')+' · opponent '+esc(d.opponent.name)+' · '+esc(d.observedAt)+'</span>');
+    q('targets').insertAdjacentHTML('beforeend','<p class="small">Current category margins only. Win probabilities, active lineup eligibility and transactions require independently verified projections and locks.</p>');
    }else{
     q('score').textContent='Current categories unverified';
-    q('categories').textContent='Yahoo matchup observation is stale or incomplete.';
+    q('categories').textContent='Yahoo category snapshot stale or incomplete.';
     q('targets').textContent='No decisions from stale or incomplete observations.';
-    status.push('<span class="warning">Yahoo matchup observation stale or incomplete</span>');
+    status.push('<span class="warning">Yahoo category snapshot stale or incomplete</span>');
    }
   }else{
    q('score').textContent='Current matchup unavailable';
-   q('categories').textContent='No current verified Yahoo category comparison. Do not reuse October data.';
+   q('categories').textContent='No current Yahoo 9-CAT scores. Historical October results excluded.';
    q('targets').textContent='No recommendation without observed current categories.';
-   status.push('<span class="warning">Yahoo matchup observation unavailable</span>');
+   status.push('<span class="warning">Yahoo current matchup unavailable</span>');
   }
   let ours=[];
   if(league.status==='fulfilled'&&Array.isArray(league.value.rosterPlayers)&&league.value.rosterPlayers.length){
