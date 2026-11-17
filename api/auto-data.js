@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import {parseMatchup} from '../matchup-data.mjs';
 import {statCategoryId,averageMinutesByPlayer} from '../yahoo-player-stats.mjs';
 import {dataHealth} from '../decision-core.mjs';
+import {officialMatchupFromScoreboard} from '../yahoo-scoreboard.mjs';
 import {cookies,configured,tokenRequest} from './auth/yahoo/_lib.js';
 import {loadSession,saveSession,storeConfigured,loadLeagueSnapshots,saveLeagueSnapshots,loadBackgroundYahooSession,updateBackgroundYahooSession} from './auth/yahoo/_store.js';
 // Automated, public-source-only roster and NBA schedule reader.
@@ -244,6 +245,22 @@ async function liveHandler(req,res){
    const teamsOut=[],errors=[];
    results.forEach((result,i)=>result.status==='fulfilled'?teamsOut.push(result.value):errors.push({teamKey:leagueTeams[i].key,upstreamStatus:result.reason?.status||null}));
    return response(res,200,{mode:'YAHOO_ALL_ROSTERS',leagueId:85892,observedAt:new Date().toISOString(),teams:teamsOut,teamCount:teamsOut.length,playerCount:teamsOut.reduce((n,t)=>n+t.players.length,0),errors,readOnly:true});
+  }
+  if(req.query?.officialMatchup==='1'){
+   const leagueKey=unique[0].key.split('.t.')[0];
+   const saved=await loadLeagueSnapshots(85892).catch(()=>({}));
+   let raw=saved?.scoreboard?.payload||null;
+   let observedAt=saved?.scoreboard?.observed_at||null;
+   const age=observedAt?Date.now()-Date.parse(observedAt):Infinity;
+   if(!raw||!Number.isFinite(age)||age<0||age>2*60*1000){
+    raw=await read(session.access_token,'league/'+leagueKey+'/scoreboard?format=json');
+    observedAt=new Date().toISOString();
+    try{await saveLeagueSnapshots(85892,{scoreboard:raw})}catch{/* Return real-time data even when snapshot storage fails. */}
+   }
+   let current;
+   try{current=officialMatchupFromScoreboard(raw,{observedAt,teamKey:unique[0].key});}
+   catch(e){return response(res,422,{mode:'YAHOO_OFFICIAL_MATCHUP_UNAVAILABLE',error:e.message,readOnly:true})}
+   return response(res,200,current);
   }
   if(req.query?.leagueData==='1'){
    const leagueKey=unique[0].key.split('.t.')[0];
