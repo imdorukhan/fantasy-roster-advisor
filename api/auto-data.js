@@ -335,7 +335,7 @@ async function liveHandler(req,res){
      findPlayerStats(stats);
      for(const player of free){
       const raw=(byPlayer.get(player.yahooId)||[]).find(v=>String(v.stat_id)===String(minutesId))?.value;
-      const value=typeof raw==='string'&&/^\\d{1,2}:\\d{2}$/.test(raw)?(()=>{const [minutes,seconds]=raw.split(':').map(Number);return minutes+seconds/60})():typeof raw==='number'||typeof raw==='string'&&raw.trim()!==''?Number(raw):NaN;
+      const value=typeof raw==='string'&&/^\d{1,2}:\d{2}$/.test(raw)?(()=>{const [minutes,seconds]=raw.split(':').map(Number);return minutes+seconds/60})():typeof raw==='number'||typeof raw==='string'&&raw.trim()!==''?Number(raw):NaN;
       if(Number.isFinite(value)&&value>=0&&value<=60)player.mpg=Math.round(value*10)/10;
      }
      mpgCoverage=free.some(p=>p.mpg!==null)?'partial-or-complete':'not-returned';
