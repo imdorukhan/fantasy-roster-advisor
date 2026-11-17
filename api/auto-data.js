@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import {parseMatchup} from '../matchup-data.mjs';
 import {cookies,configured,tokenRequest} from './auth/yahoo/_lib.js';
 import {loadSession,saveSession,storeConfigured,loadLeagueSnapshots,saveLeagueSnapshots,loadBackgroundYahooSession,updateBackgroundYahooSession} from './auth/yahoo/_store.js';
 // Automated, public-source-only roster and NBA schedule reader.
@@ -31,12 +32,21 @@ export function parseYahooRoster(html,expectedTeamId){
 async function get(url){const c=new AbortController(),t=setTimeout(()=>c.abort(),9000);try{const r=await fetch(url,{signal:c.signal,headers:{Accept:'text/html,application/json','User-Agent':'Mozilla/5.0'}});if(!r.ok)throw Error('HTTP '+r.status);return r}finally{clearTimeout(t)}}
 export async function buildAutoData({start=localDay(),length=7}={}){
  if(!safeDay(start)||length<1||length>10)throw Error('Invalid schedule range');
- const results=await Promise.allSettled([get(YAHOO+'5').then(r=>r.text()),get(YAHOO+'13').then(r=>r.text())]);
- const errors=[];const rosters=[];
- for(let i=0;i<2;i++){
-  try{if(results[i].status!=='fulfilled')throw Error('Yahoo fetch failed');rosters.push(parseYahooRoster(results[i].value,i===0?5:13))}
-  catch(e){rosters.push(null);errors.push({section:i===0?'our roster':'opponent roster',reason:e.message})}
- }
+ // Read Yahoo's current selected matchup to determine the opponent. Never
+ // assume the October 2026 opponent is still the current opponent.
+ const results=await Promise.allSettled([get(YAHOO+'5').then(r=>r.text()),get(YAHOO+'matchup?mid1=5').then(r=>r.text())]);
+ const errors=[];let ourRoster=null,opponentRoster=null,opponentId=null;
+ try{if(results[0].status!=='fulfilled')throw Error('Yahoo team page unavailable');ourRoster=parseYahooRoster(results[0].value,5)}
+ catch(e){errors.push({section:'our roster',reason:e.message})}
+ try{
+  if(results[1].status!=='fulfilled')throw Error('Yahoo matchup page unavailable');
+  const parsed=parseMatchup(results[1].value);
+  if(!Number.isInteger(parsed.opponent.id)||parsed.opponent.id===5||parsed.opponent.id<1||parsed.opponent.id>100)throw Error('Opponent ID invalid');
+  opponentId=parsed.opponent.id;
+  const reply=await get(YAHOO+opponentId).then(r=>r.text());
+  opponentRoster=parseYahooRoster(reply,opponentId);
+ }catch(e){errors.push({section:'current opponent roster',reason:e.message})}
+ const rosters=[ourRoster,opponentRoster];
  const dates=days(start,length);
  const fetched=await Promise.allSettled(dates.map(d=>get(ESPN+d.replaceAll('-','')).then(r=>r.json())));
  const schedule=[];let datesFetched=0;
@@ -51,7 +61,7 @@ export async function buildAutoData({start=localDay(),length=7}={}){
   }
  });
  const next=(roster)=>roster?.players.map(p=>({...p,scheduledGames:p.nbaTeam?schedule.filter(g=>g.teams.includes(p.nbaTeam)&&!g.completed).map(g=>({date:g.date,opponent:g.teams.find(t=>t!==p.nbaTeam),eventId:g.espnEventId})):[]}))||[];
- return {mode:'PUBLIC_READ_ONLY',observedAt:new Date().toISOString(),sourceLinks:{yahooOurRoster:YAHOO+'5',yahooOpponentRoster:YAHOO+'13',espn:'https://www.espn.com/nba/schedule'},teams:[{id:5,name:'Salary CAPtain',players:next(rosters[0])},{id:13,name:'Sabanoglu Saban',players:next(rosters[1])}],window:{start,end:dates.at(-1),days:length},schedule,coverage:{yahooOurRoster:!!rosters[0],yahooOpponentRoster:!!rosters[1],espnDatesFetched:datesFetched,espnDatesRequested:length},errors,notes:['Public Yahoo roster may reflect a different selected date or locked lineup; verify current status from source','Upcoming NBA games are schedule opportunities, not guaranteed active fantasy starts','No free agents or add/drop recommendations are inferred without verified ownership']};
+ return {mode:'PUBLIC_READ_ONLY',observedAt:new Date().toISOString(),sourceLinks:{yahooOurRoster:YAHOO+'5',yahooOpponentRoster:YAHOO+'13',espn:'https://www.espn.com/nba/schedule'},teams:[{id:5,name:'Salary CAPtain',players:next(rosters[0])},{id:opponentId,name:opponentRoster?'Current Yahoo opponent':'Opponent not verified',players:next(rosters[1])}],window:{start,end:dates.at(-1),days:length},schedule,coverage:{yahooOurRoster:!!rosters[0],yahooOpponentRoster:!!rosters[1],espnDatesFetched:datesFetched,espnDatesRequested:length},errors,opponentIdVerified:opponentId!==null,notes:['Public Yahoo roster may reflect a different selected date or locked lineup; verify current status from source','Upcoming NBA games are schedule opportunities, not guaranteed active fantasy starts','No free agents or add/drop recommendations are inferred without verified ownership']};
 }
 const depthCache=new Map();
 async function espnDepth(abbr){
