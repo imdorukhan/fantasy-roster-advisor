@@ -17,9 +17,9 @@
 
 | Phase | Implementation | Acceptance gate | Status |
 | --- | --- | --- | --- |
-| 1. Source architecture | Dynamic public opponent, current matchup adapter, historical endpoint isolated, fresh category normalization | Authenticated week/opponent/category validation and account refresh integration | **In progress** |
-| 2. Player statistics | Yahoo MPG parser using game stat categories and average_season; backend paging parameter | Live Yahoo MPG verified for owned and FA players; full pagination; 3/7/14 logs and all nine categories | **In progress** |
-| 3. Matchup / daily lineup | Current public category table, Category Swing foundation | Correct Yahoo start/bench/IL and lineup locks; calibrated probabilities | **In progress** |
+| 1. Source architecture | Dynamic public opponent, authenticated official scoreboard week/opponent + stat winner cross-check, public fallback, historical endpoint isolated | Authenticated end-to-end Yahoo session test plus owner token-refresh integration | **In progress** |
+| 2. Player statistics | Yahoo MPG parser using game stat categories and average_season; automatic Free Agents paging up to explicit safety limit | Live Yahoo MPG verified for owned and FA players; all roster MPG; 3/7/14 logs and all nine categories | **In progress** |
+| 3. Matchup / daily lineup | Current public and official Yahoo 9-CAT category tables, Category Swing foundation | Correct Yahoo start/bench/IL and lineup locks; calibrated probabilities | **In progress** |
 | 4. Streaming and Keep/Cut | Pure streaming calendar with ownership guard; existing keep/cut core | Full FA coverage, games and add limits, 3/7/14 trends, verified injury feed | **Partial** |
 | 5. Strategy | Pure trade-impact projection engine; existing FAB, punt, playoff and replacement-value algorithms | Real projections, matchup calibration and FAB/playoff boundaries | **Partial** |
 | 6. Monitoring and UX | Data Health Monitor, authenticated snapshot inspection, read-only gating | Repeated job tests, deduplicated alerts, UI end-to-end tests | **In progress** |
@@ -34,12 +34,19 @@
 
 ## Unresolved blockers
 
-- Authenticated Yahoo current week and official scoreboard parsing must be validated against live session; anonymous 401 is expected.
+- Official Yahoo scoreboard parser was matched to Supabase snapshot structure (week 5, Nov 16–22, opponent team 8) and synthetic fixtures; still requires authenticated end-to-end browser test. Anonymous 401 is expected.
 - `/api/yahoo-matchup` uses Yahoo public matchup observation and labels the week unverified.
 - Yahoo MPG API availability and exact response format need authenticated integration testing, despite synthetic parser tests.
-- All-player FA pagination, roster MPG, 3/7/14 game log ingestion and automatic replacement/category projection feeds are not yet complete.
+- Automatic FA pagination is implemented but still requires authenticated full-pool verification; roster MPG, 3/7/14 game log ingestion and automatic replacement/category projection feeds are not yet complete.
 - Injury return prediction ledger, FAB waiver transactions, lineup optimizer execution and fantasy win-probability calibration are not complete.
-- Preview deployments are protected by Vercel Authentication; synthetic/local browser checks do not replace authenticated staging end-to-end tests.
+- Preview deployments are protected by Vercel Authentication. Local browser smoke tests passed without runtime JS errors, but protected preview and authenticated Yahoo workflows require separate end-to-end tests.
+
+## Latest validation (Nov 17, 2026)
+
+- 51/51 Node regression tests pass in isolated development checkout.
+- Headless Chrome local mock-API smoke test: dashboard, optimizer and matchup load without JS errors; official-category fallback displays nine rows.
+- Latest branch Vercel preview build READY; Hobby 12-Function limit respected after consolidating health into existing API.
+- **No production release was made.**
 
 ## Quality gates
 
