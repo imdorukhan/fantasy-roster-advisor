@@ -2,7 +2,7 @@ import {gameWindows,performanceTrend} from './nba-game-logs.mjs';
 import {zScores} from './fantasy-zscore.mjs';
 import {matchPlayers} from './player-identity.mjs';
 export function buildPerformance(logs,{asOf,historyComplete=false}={}){
- if(!historyComplete||!asOf||!Number.isFinite(Date.parse(asOf)))return {available:false,reason:'Complete dated history required'};
+ if(!historyComplete||!Array.isArray(logs)||!logs.length||!asOf||!Number.isFinite(Date.parse(asOf)))return {available:false,reason:'Complete dated history required'};
  const groups=new Map();
  for(const row of logs){if(!row.espnId||!row.eventId||!Number.isFinite(Date.parse(row.date))||Date.parse(row.date)>Date.parse(asOf))continue;if(!groups.has(row.espnId))groups.set(row.espnId,[]);groups.get(row.espnId).push(row)}
  const players=[];
@@ -21,7 +21,7 @@ export function buildPerformance(logs,{asOf,historyComplete=false}={}){
  players.push({id:String(id),name:unique[0].name,team:unique[0].team,season,windows:recent,trends:performanceTrend(recent,season.values),signal:{type:signal,minutesDelta:delta,improved,declined,baselineGames:prior.length,actionable:false},chart:unique.slice(0,14).reverse().map(r=>({date:r.date,stats:r.stats}))});
  }
  const ranked=zScores(players.map(p=>({id:p.id,values:p.season.values})),{expectedPoolSize:players.length});
- const ranks=new Map((ranked.rows||[]).map((r,i)=>[r.id,{rank:i+1,total:r.total,categories:r.categories,pool:ranked.eligible}]));
+ const ranks=new Map((ranked.rows||[]).map((r,i)=>[r.id,{rank:Number.isFinite(r.total)?i+1:null,total:r.total,categories:r.categories,pool:ranked.eligible}]));
  return {available:true,asOf,source:'ESPN completed regular-season box scores',pool:players.length,rankingAvailable:ranked.available,players:players.map(p=>({...p,z:ranks.get(p.id)||null})),actionable:false};
 }
 export function attachPerformance(yahoo,espnIdentities,report){
