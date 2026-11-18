@@ -37,6 +37,30 @@ export function categorySwing(comparison,{scaleByCategory={}}={}){
  targets.sort((a,b)=>a.priorityVerified&&b.priorityVerified?a.normalizedGap-b.normalizedGap:a.priorityVerified?-1:b.priorityVerified?1:a.category.localeCompare(b.category));
  return {available:true,targets,probabilities:null,actionable:false,method:'Observed category margins; cross-category priority requires calibrated scales'};
 }
+export function officialMatchupView(snapshot,{now=Date.now()}={}){
+ const date=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(now));
+ if(snapshot?.mode!=='YAHOO_OFFICIAL_MATCHUP'||snapshot.leagueId!==85892||snapshot.weekVerified!==true||
+    !Number.isInteger(snapshot.week)||!/^\d{4}-\d{2}-\d{2}$/.test(snapshot.weekStart)||
+    !/^\d{4}-\d{2}-\d{2}$/.test(snapshot.weekEnd)||date<snapshot.weekStart||date>snapshot.weekEnd||
+    !Number.isInteger(snapshot.opponent?.id)||snapshot.opponent.id<1||snapshot.opponent.id>14){
+  return {usable:false,reason:'Verified current Yahoo matchup required'};
+ }
+ const comparison=evaluateMatchup(snapshot,{now,maxAgeMs:30*60*60*1000});
+ if(!comparison.usable)return comparison;
+ if(['ours','opponent','ties'].some(key=>comparison.score[key]!==snapshot.score?.[key])){
+  return {usable:false,reason:'Yahoo category score does not match verified totals'};
+ }
+ const remaining=team=>{
+  const raw=team.remainingGames;
+  if(!['number','string'].includes(typeof raw)||!/^\d+$/.test(String(raw)))return null;
+  const n=Number(raw);
+  return Number.isSafeInteger(n)?n:null;
+ };
+ return {...comparison,week:snapshot.week,weekStart:snapshot.weekStart,weekEnd:snapshot.weekEnd,
+  ourName:snapshot.ourTeam.name,opponentName:snapshot.opponent.name,observedAt:snapshot.observedAt,
+  remainingGames:{ours:remaining(snapshot.ourTeam),opponent:remaining(snapshot.opponent)},
+  targets:categorySwing(comparison).targets};
+}
 export function streamingCalendar(candidates,{startDate,endDate,remainingAdds,occupiedSlots={}}={}){
  if(!Number.isInteger(remainingAdds)||remainingAdds<0)return {available:false,reason:'Verified remaining Yahoo acquisitions required',candidates:[]};
  if(!/^\d{4}-\d{2}-\d{2}$/.test(startDate||'')||!/^\d{4}-\d{2}-\d{2}$/.test(endDate||'')||startDate>endDate)return {available:false,reason:'Valid calendar interval required',candidates:[]};
