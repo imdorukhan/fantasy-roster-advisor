@@ -38,21 +38,38 @@ function yahooWindow(rows, now) {
   };
 }
 
-export function openYahooSlots(html, day, starters) {
+export function datedYahooRows(html, day, teamId) {
+  if (!Number.isInteger(teamId) || teamId < 1 || teamId > 14) throw Error('Unexpected Yahoo team');
   const options = [...html.matchAll(/<option\b[^>]*\bvalue=['"]([^'"]+)['"][^>]*\bselected(?:\s*=\s*['"][^'"]*['"])?\s*>/gi)];
   const dateVerified = options.some(([, href]) => {
     const url = new URL(href.replaceAll('&amp;', '&'), rosterUrl);
-    return url.origin === new URL(rosterUrl).origin && url.pathname === '/nba/85892/5/team' && url.searchParams.get('date') === day;
+    return url.origin === new URL(rosterUrl).origin && url.pathname === '/nba/85892/'+teamId+'/team' && url.searchParams.get('date') === day;
   });
-  if (!dateVerified) throw Error('Yahoo lineup date could not be verified');
+  if (!dateVerified) throw Error('Yahoo lineup date and team could not be verified');
   const table = html.match(/<table\b[^>]*\bid=["']statTable0["'][^>]*>[\s\S]*?<\/table>/i)?.[0];
   const body = table?.match(/<tbody\b[^>]*>([\s\S]*?)<\/tbody>/i)?.[1];
   if (!body) throw Error('Yahoo lineup table missing');
-  const rows = [...body.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map(([, row]) => ({
-    slot: row.match(/\bdata-pos=["']([^"']+)["']/i)?.[1],
-    occupied: /\bdata-ys-playerid=["']\d+["']/i.test(row),
-    empty: />\s*(?:\(Empty\)|Empty)\s*</i.test(row)
-  }));
+  function plain(value) {
+    const entities = {amp:'&', apos:"'", quot:'"', lt:'<', gt:'>', nbsp:' '};
+    return value?.replace(/<[^>]+>/g,'').replace(/&(#x[0-9a-f]+|#\d+|amp|apos|quot|lt|gt|nbsp);/gi,(_,entity)=>{
+      if(entity.startsWith('#'))return String.fromCodePoint(entity[1].toLowerCase()==='x'?parseInt(entity.slice(2),16):Number(entity.slice(1)));
+      return entities[entity.toLowerCase()];
+    }).trim();
+  }
+  return [...body.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map(([, row]) => {
+    const player = row.match(/<a\b[^>]*\bclass=["'][^"']*\bname\b[^"']*["'][^>]*\bdata-ys-playerid=["'](\d+)["'][^>]*>([\s\S]*?)<\/a>/i);
+    const team = row.match(/<span\s+class=["']Fz-xxs["']>\s*([A-Z]{2,3})\s*-\s*[^<]+<\/span>/i);
+    return {
+      slot: row.match(/\bdata-pos=["']([^"']+)["']/i)?.[1],
+      occupied: /\bdata-ys-playerid=["']\d+["']/i.test(row),
+      empty: />\s*(?:\(Empty\)|Empty)\s*</i.test(row),
+      yahooId:player?.[1], name:plain(player?.[2]), nbaTeam:team ? nbaTeam(team[1]) : null
+    };
+  });
+}
+
+export function openYahooSlots(html, day, starters) {
+  const rows = datedYahooRows(html, day, 5);
   const open = [];
   for (const {position, count} of starters) {
     const matches = rows.filter(row => row.slot === position);

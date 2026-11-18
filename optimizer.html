@@ -19,6 +19,12 @@
  <p class="small">Yahoo remaining-game totals can change with lineup moves. Category margins use observed totals. Forecasts need verified player projections and lineup availability.</p>
  <a href="/matchup.html">Matchup details and rosters ↗</a>
 </section>
+<section class="panel">
+ <h2>Player-by-player remaining games</h2>
+ <p class="small">Yahoo’s currently displayed slot is matched to upcoming ESPN games. Starting slots, bench and IL are shown separately. A listed starter can still sit or have a lineup change.</p>
+ <p id="lineup-status" role="status">Checking Yahoo lineups and ESPN schedule…</p>
+ <div id="lineup-teams" class="split"></div>
+</section>
 </main>
 <script type="module">
 import {officialMatchupView} from './decision-core.mjs';
@@ -44,9 +50,36 @@ function render(d) {
  q('targets').innerHTML=d.targets.length?'<ul>'+d.targets.map(t=>'<li>'+esc(t.category)+' · '+(t.status==='TIED'?'Tied':'Trailing by '+gap(t.gap,t.category))+'</li>').join('')+'</ul>':'<p>Leading all categories in this snapshot.</p>';
 }
 
+async function refreshLineups(){
+ const status=q('lineup-status');
+ const list=q('lineup-teams');
+ status.textContent='Checking Yahoo lineups and ESPN schedule…';
+ list.textContent='';
+ try{
+  const response=await fetch('/api/auto-data?sc3MatchupLineups=1',{credentials:'same-origin',cache:'no-store'});
+  if(!response.ok)throw Error('Lineup details unavailable (HTTP '+response.status+')');
+  const report=await response.json();
+  if(report.mode!=='SC3_MATCHUP_LINEUPS')throw Error('Verified lineup details unavailable');
+  const completeDays=report.days.filter(day=>day.scheduleVerified&&day.lineups.every(team=>team.verified)).length;
+  status.textContent='Week '+report.week+' · '+completeDays+'/'+report.days.length+' days verified for both teams · Checked '+new Date(report.observedAt).toLocaleString()+'.';
+  if(!report.complete){
+   const partial=report.days.filter(day=>!day.scheduleVerified||day.lineups.some(team=>!team.verified));
+   status.append(' Partial coverage: '+partial.map(day=>day.date).join(', ')+'.');
+  }
+  list.innerHTML=report.teams.map(team=>{
+   const rows=team.players.map(player=>{
+    const upcoming=assignment=>player.games.filter(game=>game.assignment===assignment).map(game=>esc(game.date.slice(5))+' '+esc(game.slot)).join(', ')||'—';
+    return '<tr><td>'+esc(player.name)+(player.unknownDates.length?' <span class="small">Schedule unknown on '+esc(player.unknownDates.map(date=>date.slice(5)).join(', '))+'</span>':'')+'</td><td>'+upcoming('STARTER')+'</td><td>'+upcoming('BENCH')+'</td><td>'+upcoming('IL')+'</td></tr>';
+   }).join('');
+   return '<section><h3>'+esc(team.name)+'</h3>'+(rows?'<div class="scroll"><table style="min-width:400px"><thead><tr><th>Player</th><th>Starter</th><th>Bench</th><th>IL</th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<p>No verified lineup rows.</p>')+'</section>';
+  }).join('');
+ }catch(error){status.textContent=error.message;}
+}
+
 async function refresh(){
  const button=q('refresh');
  button.disabled=true;
+ const lineups=refreshLineups();
  try{
   const response=await fetch('/api/auto-data?live=1&officialMatchup=1',{credentials:'same-origin',cache:'no-store'});
   if(!response.ok)throw Error('Yahoo snapshot unavailable (HTTP '+response.status+')');
@@ -57,7 +90,7 @@ async function refresh(){
   for(const id of ['score','our-count','opp-count'])q(id).textContent='—';
   for(const id of ['matchup-teams','our-name','opp-name','categories','targets'])q(id).textContent='';
   q('matchup-source').textContent=error.message;
- }finally{button.disabled=false;}
+ }finally{await lineups;button.disabled=false;}
 }
 q('refresh').addEventListener('click',refresh);
 refresh();

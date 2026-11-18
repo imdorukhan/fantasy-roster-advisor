@@ -127,6 +127,15 @@ async function sc3CloudHealth(req,res){
 }
 
 export default async function handler(req,res){
+ if(req.query?.sc3MatchupLineups==='1'){
+  if(req.method!=='GET')return response(res,405,{error:'Method not allowed'});
+  const {bridgeEnabled}=await import('../sc3-yahoo-bridge.mjs');
+  if(!bridgeEnabled())return response(res,404,{error:'Not found'});
+  try{
+   const {readMatchupLineups}=await import('../sc3-matchup-lineups.mjs');
+   return response(res,200,await readMatchupLineups());
+  }catch{return response(res,503,{error:'Verified Yahoo and ESPN matchup lineups unavailable'});}
+ }
  if(req.query?.sc3Streaming==='1'){
   if(req.method!=='GET')return response(res,405,{error:'Method not allowed'});
   const {bridgeEnabled}=await import('../sc3-yahoo-bridge.mjs');
