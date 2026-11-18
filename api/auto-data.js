@@ -260,7 +260,42 @@ function findPlayers(node,out=[],depth=0,inheritedSlot=null){
  }
  return out;
 }
+async function bridgeHandler(req,res){
+ if(req.method!=='GET')return response(res,405,{error:'Method not allowed'});
+ try{
+  const {bridgeSnapshots}=await import('../sc3-yahoo-bridge.mjs');
+  const saved=await bridgeSnapshots();
+  const sections=Object.fromEntries(Object.entries(saved).map(([k,v])=>[k,v.payload]));
+  const timestamps=Object.fromEntries(Object.entries(saved).map(([k,v])=>[k,v.observed_at]));
+  const roster=[...new Map(findPlayers(sections.roster).map(p=>[p.yahooId,p])).values()];
+  const leagueTeams=[...new Map(findTeams(sections.teams).map(t=>[t.key,t])).values()];
+  const teamKey='478.l.85892.t.5';
+  if(!roster.length||!leagueTeams.some(t=>t.key===teamKey))return response(res,503,{mode:'UNAVAILABLE',error:'Verified league snapshots unavailable'});
+  const observedAt=timestamps.roster;
+  const staleSections=Object.keys(sections).filter(k=>!Number.isFinite(Date.parse(timestamps[k]))||Date.now()-Date.parse(timestamps[k])>30*3600000);
+  const common={leagueId:85892,teamId:5,teamKey,readOnly:true,bridge:true,source:'Yahoo Fantasy Sports API via existing connection snapshots'};
+  if(req.query?.health==='1')return response(res,200,{...common,mode:'YAHOO_SYSTEM_HEALTH',status:staleSections.length?'degraded':'healthy',checkedAt:new Date().toISOString(),sections:['settings','teams','standings','scoreboard','roster'].map(section=>({section,status:!saved[section]?'missing':staleSections.includes(section)?'stale':'fresh',observedAt:timestamps[section]||null}))});
+  if(req.query?.performance==='1'||req.query?.playerStats==='1'){
+   const ids=[...new Set(String(req.query.ids||'').split(',').filter(x=>/^\d+$/.test(x)))];
+   if(!ids.length||ids.length>25)return response(res,400,{error:'Supply 1–25 Yahoo player IDs'});
+   const {readPerformance}=await import('../performance-store.mjs');
+   const {report,links,historyEnd}=await readPerformance({scoped:true,start:process.env.SC3_SEASON_START});
+   const byId=new Map(report.players.map(p=>[p.id,p]));
+   const get=id=>links.has(id)?byId.get(links.get(id))||null:null;
+   if(req.query.performance==='1')return response(res,200,{...common,mode:'YAHOO_LINKED_PERFORMANCE',historyEnd,source:report.source,pool:report.pool,players:ids.map(yahooId=>({yahooId,performance:get(yahooId)}))});
+   return response(res,200,{...common,mode:'YAHOO_PLAYER_STATS',source:'ESPN verified performance, not Yahoo live stats',players:ids.map(yahooId=>({yahooId,stats:null,mpg:null})),coverage:{requested:ids.length,returned:0,errors:[{section:'Yahoo live player stats unavailable in snapshot bridge'}]}});
+  }
+  if(req.query?.officialMatchup==='1'){
+   try{return response(res,200,{...officialMatchupFromScoreboard(sections.scoreboard,{observedAt:timestamps.scoreboard,teamKey}),bridge:true})}
+   catch(e){return response(res,422,{...common,mode:'YAHOO_OFFICIAL_MATCHUP_UNAVAILABLE',error:e.message})}
+  }
+  if(req.query?.allRosters==='1'||req.query?.freeAgents==='1'||req.query?.playerPool==='1'||req.query?.matchup==='1'||req.query?.sample)return response(res,503,{...common,mode:'UNAVAILABLE',error:'This data is not included in existing Yahoo snapshots; no inferred ownership or live stats'});
+  if(req.query?.leagueData==='1')return response(res,200,{...common,mode:'YAHOO_LEAGUE_DATA',observedAt,sections,sectionTimestamps:timestamps,staleSections,dbBacked:true,rosterPlayers:roster,leagueTeams,errors:[]});
+  return response(res,200,{...common,mode:'YAHOO_API_LIVE',observedAt,teamName:leagueTeams.find(t=>t.key===teamKey)?.name,players:roster,staleSections});
+ }catch{return response(res,503,{mode:'UNAVAILABLE',error:'Verified Yahoo snapshot bridge unavailable',readOnly:true})}
+}
 async function liveHandler(req,res){
+ if((await import('../sc3-yahoo-bridge.mjs')).bridgeEnabled())return bridgeHandler(req,res);
  if(req.method!=='GET')return response(res,405,{error:'Method not allowed'});
  if(!configured()||!storeConfigured())return response(res,503,{mode:'UNAVAILABLE',error:'OAuth not configured'});
  const sid=cookies(req).yahoo_session;
