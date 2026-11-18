@@ -7,3 +7,13 @@ function fixture(legacy=false){const queries=[];const c={query:async(sql,args)=>
 test('role guard prevents any legacy access and rolls back',async()=>{const f=fixture(true);let ran=false;await assert.rejects(withScopedTransaction(async()=>{ran=true},{pool:f.pool}));assert.equal(ran,false);assert.ok(f.queries.includes('ROLLBACK'));assert.ok(f.queries.includes('RELEASE'))});
 test('read transaction commits only after scoped role validation',async()=>{const f=fixture();assert.equal(await withScopedTransaction(async()=>42,{pool:f.pool}),42);assert.match(f.queries[0],/READ ONLY/);assert.ok(f.queries.includes('COMMIT'))});
 test('sync transaction atomically replaces only the requested day',async()=>{const f=fixture();const n=await scopedSyncStore({pool:f.pool}).save({p_day:'2026-11-16',p_observed:'2026-11-17T12:00:00Z',p_events:1,p_rows:[{game_day:'2026-11-16',event_id:'1'}]});assert.equal(n,1);assert.ok(f.queries.includes('COMMIT'));assert.ok(f.queries.some(q=>q.startsWith('delete from sc3.sc3_nba_game_logs where game_day=$1')));assert.ok(!f.queries.some(q=>/^(insert into|delete from|update) public\./.test(q)))});
+
+test('session pooler accepts scoped encoded and raw password characters without host substitution',()=>{
+ const prefix='postgresql://sc3_app.bmsfbcuausbfzheufjtc:',suffix='@aws-0-us-west-1.pooler.supabase.com:5432/postgres';
+ const password='example#/?@%&';
+ const encoded=pgConfig({...env,SC3_DATABASE_URL:prefix+encodeURIComponent(password)+suffix});
+ const raw=pgConfig({...env,SC3_DATABASE_URL:prefix+password+suffix});
+ assert.equal(encoded.password,password);assert.equal(raw.password,password);
+ assert.equal(raw.host,'aws-0-us-west-1.pooler.supabase.com');assert.equal(raw.ssl.rejectUnauthorized,true);
+ for(const url of [prefix+'sample@evil.example:5432/postgres',prefix+'sample'+suffix+'?sslmode=disable',prefix+'sample'+suffix.replace(':5432',':6543'),prefix.replace('sc3_app.','postgres.')+'sample'+suffix])assert.throws(()=>pgConfig({...env,SC3_DATABASE_URL:url}));
+});
