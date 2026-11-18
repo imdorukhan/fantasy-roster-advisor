@@ -1,10 +1,12 @@
 import {buildPerformance} from './player-performance.mjs';
 import {dateRange,coverage} from './nba-sync.mjs';
+import {readScopedRows} from './sc3-postgres.mjs';
 // Read only from an explicitly isolated Supabase project. Never use production env.
-export async function readPerformance({url,secret,expectedRef,start,end,fetcher=fetch}={}){
+export async function readPerformance({url,secret,expectedRef,start,end,fetcher=fetch,scoped=false,pool}={}){
+ const days=dateRange(start,end);
+ if(scoped){const data=await readScopedRows({start,end,pool});return summarize(data.days,data.raw,data.identities,start,end,days);}
  const u=new URL(url);
  if(!expectedRef||expectedRef==='bmsfbcuausbfzheufjtc'||u.hostname!==expectedRef+'.supabase.co'||u.protocol!=='https:'||u.pathname!=='/'||u.search||u.hash||!secret)throw Error('Isolated performance database not configured');
- const days=dateRange(start,end);
  async function read(table,params){
  const rows=[];for(let offset=0;offset<100000;offset+=500){
  const q=new URLSearchParams({...params,limit:'500',offset:String(offset)});
@@ -15,8 +17,12 @@ export async function readPerformance({url,secret,expectedRef,start,end,fetcher=
  }throw Error('Performance store pagination exceeded');
  }
  const dayRows=await read('sc3_nba_sync_days',{select:'game_day,status,player_rows,completed_events',and:'(game_day.gte.'+start+',game_day.lte.'+end+')',order:'game_day.asc'});
- if(!coverage(days,dayRows).ready)throw Error('Incomplete NBA history');
  const raw=await read('sc3_nba_game_logs',{select:'event_id,espn_id,game_day,tipoff,player_name,nba_team,stats',and:'(game_day.gte.'+start+',game_day.lte.'+end+')',order:'event_id.asc,espn_id.asc'});
+ const identities=await read('sc3_player_identity',{select:'yahoo_id,espn_id,status,evidence',status:'eq.verified',order:'yahoo_id.asc'});
+ return summarize(dayRows,raw,identities,start,end,days);
+}
+function summarize(dayRows,raw,identities,start,end,days){
+ if(!coverage(days,dayRows).ready)throw Error('Incomplete NBA history');
  const counts=new Map();
  for(const r of raw){if(!counts.has(r.game_day))counts.set(r.game_day,{rows:0,events:new Set()});const c=counts.get(r.game_day);c.rows++;c.events.add(r.event_id)}
  if(dayRows.some(d=>Number(d.player_rows)!==(counts.get(d.game_day)?.rows||0)||Number(d.completed_events)!==(counts.get(d.game_day)?.events.size||0)))throw Error('Stored game-log coverage mismatch');
@@ -24,7 +30,6 @@ export async function readPerformance({url,secret,expectedRef,start,end,fetcher=
  const asOf=new Date(Date.parse(end+'T12:00:00Z')+36*3600000).toISOString();
  const report=buildPerformance(logs,{asOf,historyComplete:true});
  if(!report.available)throw Error('Performance report unavailable');
- const identities=await read('sc3_player_identity',{select:'yahoo_id,espn_id,status,evidence',status:'eq.verified',order:'yahoo_id.asc'});
  const links=new Map(identities.filter(i=>i.status==='verified'&&i.yahoo_id&&i.espn_id).map(i=>[String(i.yahoo_id),String(i.espn_id)]));
  return {report,links,historyEnd:end};
 }
