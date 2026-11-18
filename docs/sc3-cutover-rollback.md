@@ -31,3 +31,13 @@ Preflight on 2026-11-18 Pacific.
 If canonical-domain authentication, data privacy or a core SC3 read fails, point production back to `dpl_DHB7w5tEkGrmpNCU6aikffckGRhP` with `vercel rollback dpl_DHB7w5tEkGrmpNCU6aikffckGRhP` or the Vercel rollback action for this project. Verify the public domain serves 2.0, the home page returns HTTP 200 and the existing Yahoo session works. Preserve SC3 database data. Check production auto-assignment status after rollback before any subsequent release.
 
 During preflight, production environment settings and domain assignment were left unchanged. There was no staged production build, promotion or rollback execution.
+
+## Production-target build staged
+
+The three Production environment settings are configured. The existing sensitive SC3 database variable is scoped to Preview and Production, with the branch-specific Preview variable preserved. No secret value was retrieved for inspection.
+
+Automatic custom-domain assignment is disabled at the project level. Vercel built the tested application commit `1f5d9d934a69b073a64a3e51227d1c26a53759a9` as production-target deployment `dpl_7wR6tGgzebLGhKEAJxvGNQaPutsG`. Its isolated URL is https://salarycaptain-dda7jnjzg-dorukkosar-4371.vercel.app/optimizer.html. It reached READY. The live domain still resolves to 2.0 deployment `dpl_DHB7w5tEkGrmpNCU6aikffckGRhP`.
+
+The staged optimizer page returned HTTP 200. Without a Yahoo owner session, the three private reads returned HTTP 401, and Windows Chrome displayed the app's owner sign-in rejection for each. The staged host does not receive the canonical domain's owner cookie. Positive owner and scoped-data checks are still required on the canonical domain immediately after an explicitly authorized promotion.
+
+Promote the specified staged ID rather than triggering another build. Restore or explicitly retain the project auto-assignment setting as part of the release decision.
