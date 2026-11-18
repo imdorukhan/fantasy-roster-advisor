@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import {parseMatchup} from '../matchup-data.mjs';
-import {statCategoryId,averageMinutesByPlayer} from '../yahoo-player-stats.mjs';
+import {loadPlayerStats} from '../yahoo-player-stats.mjs';
 import {dataHealth} from '../decision-core.mjs';
 import {officialMatchupFromScoreboard} from '../yahoo-scoreboard.mjs';
 import {cookies,configured,tokenRequest} from './auth/yahoo/_lib.js';
@@ -149,6 +149,13 @@ async function read(token,path){
  if(!r.ok)throw Object.assign(Error('Yahoo Fantasy API rejected request'),{status:r.status});
  const j=await r.json();if(!j.fantasy_content)throw Error('Invalid Yahoo Fantasy response');return j.fantasy_content;
 }
+async function enrichPlayerStats(token,gameKey,players,coverage='average_season'){
+ const uniqueIds=[...new Set(players.map(p=>String(p.yahooId)).filter(x=>/^\d+$/.test(x)))];
+ try{
+  const result=await loadPlayerStats({read:path=>read(token,path),gameKey,playerIds:uniqueIds,coverage});
+  return {players:players.map(p=>{const record=result.records.get(String(p.yahooId));return {...p,stats:record||null,mpg:record?.values?.MPG??null}}),coverage:{requested:result.requested,returned:result.returned,errors:result.errors,window:coverage}};
+ }catch(e){return {players:players.map(p=>({...p,stats:null,mpg:null})),coverage:{requested:uniqueIds.length,returned:0,errors:[{status:e.status||null}],window:coverage}}}
+}
 function findTeams(node,out=[],depth=0){
  if(!node||typeof node!=='object'||depth>18)return out;
  if(Array.isArray(node)){
@@ -233,6 +240,14 @@ async function liveHandler(req,res){
   const matches=findTeams(teams).filter(x=>/\.l\.85892\.t\.5$/.test(x.key));
   const unique=[...new Map(matches.map(x=>[x.key,x])).values()];
   if(unique.length!==1)return response(res,409,{mode:'UNAVAILABLE',error:'League 85892 team 5 was not found in the authorized Yahoo account',teamMatches:unique.length});
+  if(req.query?.playerStats==='1'){
+   const ids=String(req.query.ids||'').split(',').filter(x=>/^\d+$/.test(x));
+   if(!ids.length||ids.length>25)return response(res,400,{error:'Supply 1–25 Yahoo player IDs'});
+   const window=String(req.query.window||'average_season');
+   if(!['average_season','season','lastweek','lastmonth'].includes(window))return response(res,400,{error:'Unsupported stats window'});
+   const result=await enrichPlayerStats(session.access_token,unique[0].key.split('.')[0],ids.map(yahooId=>({yahooId})),window);
+   return response(res,200,{mode:'YAHOO_PLAYER_STATS',...result,readOnly:true});
+  }
   if(req.query?.allRosters==='1'){
    const leagueKey=unique[0].key.split('.t.')[0];
    const teamsRaw=await read(session.access_token,'league/'+leagueKey+'/teams?format=json');
@@ -339,19 +354,8 @@ async function liveHandler(req,res){
    // MPG is a per-game number: use Yahoo average_season statistics, not
    // league scoring settings (many 9-CAT leagues do not score minutes).
    // Resolve the minute stat id from Yahoo game stat categories; never guess.
-   let mpgCoverage='unavailable';
-   try{
-    const categories=await read(session.access_token,'game/478/stat_categories?format=json');
-    const id=statCategoryId(categories,['Minutes Played','Minutes','MIN']);
-    if(id===null){mpgCoverage='minutes-stat-not-listed'}
-    else {
-     const raw=await read(session.access_token,'league/'+leagueKey+'/players;status=A;sort=AR;start='+start+';count='+limit+'/stats;type=average_season?format=json');
-     const map=averageMinutesByPlayer(raw,id);
-     for(const p of free){if(map.has(p.yahooId))p.mpg=map.get(p.yahooId)}
-     mpgCoverage=free.some(p=>p.mpg!==null)?'partial-or-complete':'not-returned';
-    }
-   }catch(e){mpgCoverage='Yahoo average_season unavailable';}
-   return response(res,200,{mode:'YAHOO_FREE_AGENTS',leagueId:85892,observedAt:new Date().toISOString(),start,count:free.length,requested:limit,mpgCoverage,players:free,notes:['Yahoo status A = free agent. Waiver status W is not included.','No player add/drop action is performed.','Sort AR is Yahoo average rank, not a personalized matchup projection.']});
+   const enriched=await enrichPlayerStats(session.access_token,leagueKey.split('.')[0],free);
+   return response(res,200,{mode:'YAHOO_FREE_AGENTS',leagueId:85892,observedAt:new Date().toISOString(),start,count:free.length,requested:limit,statsCoverage:enriched.coverage,players:enriched.players,notes:['Yahoo status A = free agent. Waiver status W is not included.','No player add/drop action is performed.','Sort AR is Yahoo average rank, not a personalized matchup projection.']});
   }
   const roster=await read(session.access_token,'team/'+encodeURIComponent(unique[0].key)+'/roster?format=json');
   if(req.query?.sample==='10094'){
