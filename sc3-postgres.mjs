@@ -2,12 +2,34 @@
 const ref='bmsfbcuausbfzheufjtc';
 export function pgConfig(env=process.env){
  if(env.SC3_SHARED_DB!=='1')throw Error('Shared SC3 database is not enabled');
- const u=new URL(env.SC3_DATABASE_URL||'invalid:');
- const user=decodeURIComponent(u.username);
- const direct=u.hostname==='db.'+ref+'.supabase.co'&&user==='sc3_app';
- const pooled=u.hostname==='aws-0-us-west-1.pooler.supabase.com'&&user==='sc3_app.'+ref;
- if(!['postgres:','postgresql:'].includes(u.protocol)||!(direct||pooled)||!u.password||u.pathname!=='/postgres'||u.search||u.hash||!(u.port===''||u.port==='5432'))throw Error('Invalid scoped PostgreSQL connection');
- return {host:u.hostname,port:5432,database:'postgres',user,password:decodeURIComponent(u.password),ssl:{rejectUnauthorized:true},connectionTimeoutMillis:10000,statement_timeout:20000,max:2};
+ const raw=String(env.SC3_DATABASE_URL||'').trim();
+ if(!raw)throw Error('SC3 database URL missing');
+ const approved=[
+  {host:'db.'+ref+'.supabase.co',user:'sc3_app'},
+  {host:'aws-0-us-west-1.pooler.supabase.com',user:'sc3_app.'+ref}
+ ];
+ // Conventional percent-encoded URI. Also accept a raw password only when
+ // the entire fixed username/host/database envelope matches exactly.
+ // No parsed host, options, query string or TLS override can be injected.
+ for(const {host,user} of approved)for(const scheme of ['postgresql','postgres'])for(const port of [':5432','']){
+  const prefix=scheme+'://'+user+':',suffix='@'+host+port+'/postgres';
+  if(!raw.startsWith(prefix)||!raw.endsWith(suffix))continue;
+  const segment=raw.slice(prefix.length,-suffix.length);
+  if(!segment||/[\r\n\u0000]/.test(segment))throw Error('SC3 database password segment invalid');
+  let password=segment;
+  try{
+   const u=new URL(raw);
+   if(u.protocol===scheme+':'&&u.hostname===host&&decodeURIComponent(u.username)===user&&u.pathname==='/postgres'&&!u.search&&!u.hash&&(u.port===''||u.port==='5432')){
+    password=decodeURIComponent(u.password);
+   }
+  }catch{ /* Raw password in an exact fixed envelope; never log it. */ }
+  if(!password)throw Error('SC3 database password segment invalid');
+  return {host,port:5432,database:'postgres',user,password,ssl:{rejectUnauthorized:true},connectionTimeoutMillis:10000,statement_timeout:20000,max:2};
+ }
+ // These error labels describe only the public connection envelope.
+ if(!/^postgres(?:ql)?:\/\//.test(raw))throw Error('SC3 database URL scheme missing');
+ if(!approved.some(({user})=>raw.startsWith('postgresql://'+user+':')||raw.startsWith('postgres://'+user+':')))throw Error('SC3 database URL role mismatch');
+ throw Error('SC3 database URL endpoint mismatch');
 }
 let pool;
 export async function scopedPool(){if(!pool){const config=pgConfig();const {Pool}=await import('pg');pool=new Pool(config)}return pool}
