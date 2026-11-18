@@ -129,6 +129,14 @@ async function sc3CloudHealth(req,res){
 }
 
 export default async function handler(req,res){
+ if(req.query?.yahooCloudCheck==='1'){
+  const {yahooCloudCheck}=await import('../yahoo-cloud-check.mjs');
+  return yahooCloudCheck(req,res,{
+   loadSession:loadBackgroundYahooSession,
+   read:(token,path)=>read(token,path,{require200:true}),
+   findTeams,findPlayers
+  });
+ }
  if(req.query?.sc3Player==='1'){
   if(!await requireSc3Read(req,res))return;
   const id=req.query?.id, dropId=req.query?.dropId;
@@ -227,9 +235,9 @@ async function backgroundLeagueSync(req,res){
 
 const BASE='https://fantasysports.yahooapis.com/fantasy/v2/';
 const response=(res,status,body)=>{res.setHeader('Cache-Control','private, no-store');return res.status(status).json(body)};
-async function read(token,path){
+async function read(token,path,{require200=false}={}){
  const r=await fetch(BASE+path,{headers:{Authorization:'Bearer '+token,Accept:'application/json'},signal:AbortSignal.timeout(12000)});
- if(!r.ok)throw Object.assign(Error('Yahoo Fantasy API rejected request'),{status:r.status});
+ if(!r.ok||(require200&&r.status!==200))throw Object.assign(Error('Yahoo Fantasy API rejected request'),{status:r.status});
  const j=await r.json();if(!j.fantasy_content)throw Error('Invalid Yahoo Fantasy response');return j.fantasy_content;
 }
 async function enrichPlayerStats(token,gameKey,players,coverage='average_season'){
