@@ -3,8 +3,11 @@ const ref='bmsfbcuausbfzheufjtc';
 export function pgConfig(env=process.env){
  if(env.SC3_SHARED_DB!=='1')throw Error('Shared SC3 database is not enabled');
  const u=new URL(env.SC3_DATABASE_URL||'invalid:');
- if(!['postgres:','postgresql:'].includes(u.protocol)||u.hostname!=='db.'+ref+'.supabase.co'||decodeURIComponent(u.username)!=='sc3_app'||!u.password||u.pathname!=='/postgres'||u.search||u.hash||!(u.port===''||u.port==='5432'))throw Error('Invalid scoped PostgreSQL connection');
- return {host:u.hostname,port:5432,database:'postgres',user:'sc3_app',password:decodeURIComponent(u.password),ssl:{rejectUnauthorized:true},connectionTimeoutMillis:10000,statement_timeout:20000,max:2};
+ const user=decodeURIComponent(u.username);
+ const direct=u.hostname==='db.'+ref+'.supabase.co'&&user==='sc3_app';
+ const pooled=u.hostname==='aws-0-us-west-1.pooler.supabase.com'&&user==='sc3_app.'+ref;
+ if(!['postgres:','postgresql:'].includes(u.protocol)||!(direct||pooled)||!u.password||u.pathname!=='/postgres'||u.search||u.hash||!(u.port===''||u.port==='5432'))throw Error('Invalid scoped PostgreSQL connection');
+ return {host:u.hostname,port:5432,database:'postgres',user,password:decodeURIComponent(u.password),ssl:{rejectUnauthorized:true},connectionTimeoutMillis:10000,statement_timeout:20000,max:2};
 }
 let pool;
 export async function scopedPool(){if(!pool){const config=pgConfig();const {Pool}=await import('pg');pool=new Pool(config)}return pool}
