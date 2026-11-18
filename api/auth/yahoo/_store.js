@@ -12,6 +12,10 @@ function settings(){const {url,secret}=authConfig();if(!url||!secret)throw Error
 async function request(path,{method='GET',body,prefer}={}){const {url,secret}=settings();const r=await fetch(url+'/rest/v1/'+TABLE+path,{method,headers:{apikey:secret,Authorization:'Bearer '+secret,'Content-Type':'application/json',...(prefer?{Prefer:prefer}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error('Session store unavailable (HTTP '+r.status+')');if(r.status===204||prefer?.includes('return=minimal'))return null;return r.json()}
 export async function saveSession(id,tokens){const hash=sessionHash(id);if(scoped())return tx(c=>c.query('insert into sc3.yahoo_oauth_sessions(session_hash,token_ciphertext,expires_at) values($1,$2,$3) on conflict(session_hash) do update set token_ciphertext=excluded.token_ciphertext,expires_at=excluded.expires_at',[hash,tokenEncrypt(tokens),new Date(Date.now()+30*86400000)]),false);await request('?on_conflict=session_hash',{method:'POST',prefer:'resolution=merge-duplicates,return=minimal',body:{session_hash:hash,token_ciphertext:tokenEncrypt(tokens),expires_at:new Date(Date.now()+30*86400000).toISOString()}})}
 export async function loadSession(id){if(typeof id!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(id))return null;if(scoped()){const rows=await tx(async c=>(await c.query('select token_ciphertext from sc3.yahoo_oauth_sessions where session_hash=$1 and expires_at>now()',[sessionHash(id)])).rows);return rows[0]?tokenDecrypt(rows[0].token_ciphertext):null}const rows=await request('?session_hash=eq.'+sessionHash(id)+'&expires_at=gt.'+encodeURIComponent(new Date().toISOString())+'&select=token_ciphertext&limit=1');return rows?.[0]?tokenDecrypt(rows[0].token_ciphertext):null}
+export async function loadSessionRecord(id) {
+ const tokens=await loadSession(id);
+ return tokens?{hash:sessionHash(id),tokens}:null;
+}
 // The OAuth callback issues sessions only after the account matches the enrolled owner.
 export async function hasProductionOwnerSession(id,{now=new Date(),readSession=request,readOwner=requestOwner}={}){
  if(typeof id!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(id))return false;
@@ -55,8 +59,37 @@ export async function loadBackgroundYahooSession(){
  if(!rows?.[0])return null;
  return {hash:rows[0].session_hash,tokens:tokenDecrypt(rows[0].token_ciphertext)};
 }
-export async function updateBackgroundYahooSession(hash,tokens){
+async function refreshRpc(operation,params) {
+ if(scoped())return tx(async c=>{
+  const names={claim:'sc3.yahoo_refresh_claim',finish:'sc3.yahoo_refresh_finish',uncertain:'sc3.yahoo_refresh_uncertain'};
+  const args=['sc3',...Object.values(params)];
+  const placeholders=args.map((_,index)=>'$'+(index+1)).join(',');
+  return (await c.query('select '+names[operation]+'('+placeholders+') as result',args)).rows[0].result;
+ },false);
+ const {url,secret}=settings();
+ const r=await fetch(url+'/rest/v1/rpc/yahoo_refresh_'+operation,{
+  method:'POST',headers:{apikey:secret,Authorization:'Bearer '+secret,'Content-Type':'application/json'},
+  body:JSON.stringify(params),signal:AbortSignal.timeout(10000)
+ });
+ if(!r.ok)throw Error('Refresh coordination unavailable');
+ return r.json();
+}
+export async function refreshClaim(hash) {
  if(!/^[a-f0-9]{64}$/.test(hash))throw Error('Invalid session reference');
- if(scoped())return tx(c=>c.query('update sc3.yahoo_oauth_sessions set token_ciphertext=$2,expires_at=$3 where session_hash=$1',[hash,tokenEncrypt(tokens),new Date(Date.now()+30*86400000)]),false);
- await request('?session_hash=eq.'+hash,{method:'PATCH',prefer:'return=minimal',body:{token_ciphertext:tokenEncrypt(tokens),expires_at:new Date(Date.now()+30*86400000).toISOString()}});
+ const claimId=crypto.randomUUID();
+ let result;
+ for(let attempt=0;attempt<3;attempt++){
+  try{result=await refreshRpc('claim',{p_hash:hash,p_claim:claimId});break}
+  catch{if(attempt===2)throw Error('Refresh coordination unavailable')}
+ }
+ if(result.state!=='acquired')return {state:result.state};
+ return {state:'acquired',hash,claimId,ciphertext:result.ciphertext,tokens:tokenDecrypt(result.ciphertext)};
+}
+export async function finishRefresh(claim,tokens) {
+ // Keep exactly the same encrypted result for all persistence retries.
+ if(tokens&&!claim.replacementCiphertext)claim.replacementCiphertext=tokenEncrypt(tokens);
+ return refreshRpc('finish',{p_hash:claim.hash,p_claim:claim.claimId,p_expected:claim.ciphertext,p_replacement:tokens?claim.replacementCiphertext:null});
+}
+export async function markRefreshUncertain(claim) {
+ return refreshRpc('uncertain',{p_hash:claim.hash,p_claim:claim.claimId});
 }

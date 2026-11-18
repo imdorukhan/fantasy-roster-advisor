@@ -1,7 +1,7 @@
 name: Salary CAPtain 3.0 Tests
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feature/salarycaptain-3-expanded]
   push:
     branches: [feature/salarycaptain-3-expanded]
 permissions:
@@ -9,6 +9,22 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: fixture-ci-only
+          POSTGRES_DB: sc3_refresh_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      YAHOO_REFRESH_TEST_DATABASE_URL: postgresql://postgres:fixture-ci-only@127.0.0.1:5432/sc3_refresh_test
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -16,7 +32,9 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
-      - name: Unit and regression tests
+      - name: Install pinned dependencies
+        run: npm ci --ignore-scripts
+      - name: Unit, regression and refresh coordination tests
         run: node --test
       - name: JavaScript parser checks
         run: |

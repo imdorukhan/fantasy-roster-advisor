@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 
 const leagueKey = '478.l.85892';
 const expectedKeys = Array.from({length: 14}, (_, i) => `${leagueKey}.t.${i + 1}`);
+const refreshCategories = new Set(['owner_authorization_unavailable','refresh_store_unavailable','refresh_busy','refresh_outcome_uncertain','invalid_refresh_response','refresh_save_failed','session_changed_during_refresh']);
 
 function authorized(req, secret) {
   const header = req.headers?.authorization;
@@ -35,8 +36,9 @@ function validPlayers(players, count, seen) {
 }
 
 // Dependencies use the application's existing session loader and Yahoo parsers.
-// This check never refreshes OAuth, saves snapshots, or returns player/token data.
-export async function yahooCloudCheck(req, res, {loadSession, read, findTeams, findPlayers, env = process.env, now = Date.now, log = console.info} = {}) {
+// The shared session client persists OAuth renewal before issuing roster reads.
+// This check does not save snapshots or return player/token data.
+export async function yahooCloudCheck(req, res, {loadSession, createClient, findTeams, findPlayers, env = process.env, now = Date.now, log = console.info} = {}) {
   res.setHeader('Cache-Control', 'private, no-store');
   res.setHeader('Referrer-Policy', 'no-referrer');
   if (req.method !== 'GET') {
@@ -48,11 +50,14 @@ export async function yahooCloudCheck(req, res, {loadSession, read, findTeams, f
   const result = {
     mode: 'YAHOO_CLOUD_ACCESS_CHECK', leagueId: 85892,
     startedAt: new Date(now()).toISOString(), readOnly: true,
-    snapshotWrites: 0, oauthRefreshAttempted: false, checks: []
+    snapshotReadOnly: true, snapshotWrites: 0, oauthRefreshAttempted: false, checks: []
   };
+  let client;
   const finish = (status, category, outcome) => {
     const summary = {
       ...result, status: outcome ?? (status === 200 ? 'PASS' : status >= 500 || status === 422 ? 'FAILED' : 'UNVERIFIED'),
+      readOnly: !(client?.refreshAttempted || client?.coordinationAttempted),
+      oauthRefreshAttempted: Boolean(client?.refreshAttempted), oauthRefreshed: Boolean(client?.refreshed),
       category, completedAt: new Date(now()).toISOString()
     };
     log('YAHOO_CLOUD_ACCESS_CHECK ' + JSON.stringify(summary));
@@ -67,18 +72,20 @@ export async function yahooCloudCheck(req, res, {loadSession, read, findTeams, f
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(cutoff) || !Number.isFinite(until) || new Date(until).toISOString() !== canonical) return finish(503, 'invalid_test_window');
   if (now() >= until) return finish(200, 'test_window_expired', 'SKIPPED');
   result.testWindowUntil = new Date(until).toISOString();
-  let session;
+  let owner;
   try {
-    session = (await loadSession())?.tokens;
+    owner = await loadSession();
   } catch {
     return finish(503, 'session_store_unavailable');
   }
-  if (typeof session?.access_token !== 'string' || !session.access_token) return finish(503, 'owner_authorization_unavailable');
-  if (!Number.isFinite(session.expires_at) || session.expires_at < now() + 60000) return finish(409, 'access_token_refresh_required');
+  if (!owner?.tokens) return finish(503, 'owner_authorization_unavailable');
 
-  let stage = 'teams';
+  let stage = 'session';
   try {
-    const raw = await read(session.access_token, `league/${leagueKey}/teams?format=json`);
+    client = createClient(owner);
+    await client.ready();
+    stage = 'teams';
+    const raw = await client.read(`league/${leagueKey}/teams?format=json`);
     const teams = findTeams(raw);
     if (collectionCount(raw, 'teams') !== 14 || teams.length !== 14 ||
         new Set(teams.map(team => team.key)).size !== 14 ||
@@ -90,10 +97,11 @@ export async function yahooCloudCheck(req, res, {loadSession, read, findTeams, f
     for (let start = 0; start < teams.length; start += 4) {
       stage = 'rosters';
       const batch = teams.slice(start, start + 4);
-      const responses = await Promise.allSettled(batch.map(team => read(session.access_token, `team/${team.key}/roster?format=json`)));
+      const responses = await Promise.allSettled(batch.map(team => client.read(`team/${team.key}/roster?format=json`)));
       for (const [index, response] of responses.entries()) {
         const teamKey = batch[index].key;
         if (response.status === 'rejected') {
+          if (refreshCategories.has(response.reason?.code)) throw response.reason;
           const http = response.reason?.status;
           result.checks.push({section: 'roster', teamKey, http: Number.isInteger(http) && http >= 400 && http <= 599 ? http : null, ok: false});
           return finish(502, 'roster_request_failed');
@@ -108,7 +116,7 @@ export async function yahooCloudCheck(req, res, {loadSession, read, findTeams, f
 
     for (const filter of ['FA', 'W']) {
       stage = filter;
-      const data = await read(session.access_token, `league/${leagueKey}/players;status=${filter};start=0;count=25?format=json`);
+      const data = await client.read(`league/${leagueKey}/players;status=${filter};start=0;count=25?format=json`);
       const players = findPlayers(data);
       if (players.length > 25 || !validPlayers(players, collectionCount(data, 'players'), seen)) return finish(422, 'invalid_ownership_sample');
       result.checks.push({section: filter, http: 200, playerCount: players.length, coverage: 'first_page_only', offset: 0});
@@ -118,6 +126,7 @@ export async function yahooCloudCheck(req, res, {loadSession, read, findTeams, f
   } catch (error) {
     const status = error?.status;
     result.checks.push({section: stage, http: Number.isInteger(status) && status >= 400 && status <= 599 ? status : null, ok: false});
-    return finish(502, 'yahoo_request_failed');
+    const category = refreshCategories.has(error?.code) ? error.code : 'yahoo_request_failed';
+    return finish(502, category);
   }
 }

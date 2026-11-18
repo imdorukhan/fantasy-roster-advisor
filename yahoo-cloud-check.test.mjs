@@ -36,6 +36,10 @@ function fixture() {
       throw Error('Unexpected Yahoo path');
     }
   };
+  dependencies.createClient = owner => ({
+    ready: async () => {},
+    read: path => dependencies.read(owner.tokens.access_token, path)
+  });
   return {dependencies, requests, teams, logs, loads: () => loads};
 }
 const request = () => ({method: 'GET', headers: {authorization: `Bearer ${secret}`}});
@@ -81,14 +85,16 @@ test('valid session checks 14 unique rosters and both filter samples without ret
   assert.doesNotMatch(fixtureData.logs[0], /fixture-access-token|Fixture player|Fixture waiver/);
 });
 
-test('missing and expired authorization stops before Yahoo access or refresh', async () => {
-  for (const tokens of [null, {access_token: 'fixture-access-token', expires_at: instant - 1}]) {
+test('missing or uncertain authorization stops before Yahoo roster reads', async () => {
+  for (const uncertain of [false, true]) {
     const fixtureData = fixture(), res = response();
-    fixtureData.dependencies.loadSession = async () => tokens ? {tokens} : null;
+    if(uncertain)fixtureData.dependencies.createClient = () => ({ready:async()=>{throw Object.assign(Error('private fixture detail'),{code:'refresh_outcome_uncertain'})}});
+    else fixtureData.dependencies.loadSession = async () => null;
     await yahooCloudCheck(request(), res, fixtureData.dependencies);
-    assert.equal(res.code, tokens ? 409 : 503);
+    assert.equal(res.code, uncertain ? 502 : 503);
     assert.equal(fixtureData.requests.length, 0);
     assert.equal(res.body.oauthRefreshAttempted, false);
+    assert.doesNotMatch(JSON.stringify(res.body),/private fixture detail/);
   }
 });
 
