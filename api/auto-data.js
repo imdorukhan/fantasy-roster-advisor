@@ -131,11 +131,13 @@ async function sc3CloudHealth(req,res){
 export default async function handler(req,res){
  if(req.query?.sc3Player==='1'){
   if(!await requireSc3Read(req,res))return;
-  const id=req.query?.id;
+  const id=req.query?.id, dropId=req.query?.dropId;
+  if(dropId!==undefined&&(typeof dropId!=='string'||!/^\d{1,10}$/.test(dropId)))return response(res,400,{error:'Valid Yahoo drop player ID required'});
   if(typeof id!=='string'||!/^\d{1,10}$/.test(id))return response(res,400,{error:'Valid Yahoo player ID required'});
   try{
    const {readPlayerEvaluation}=await import('../sc3-player-evaluation.mjs');
-   const player=await readPlayerEvaluation(id);
+   const player=await readPlayerEvaluation(id,{dropId:dropId??null});
+   if(player?.invalidDrop)return response(res,422,{error:'Select a player on your verified Yahoo roster'});
    return player?response(res,200,player):response(res,404,{error:'Player unavailable in verified Yahoo league data'});
   }catch{return response(res,503,{error:'Verified player evaluation unavailable'});}
  }

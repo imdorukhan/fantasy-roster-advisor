@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {matchupWithPlayer,projectedProduction,scheduledSeasonGames} from './sc3-player-evaluation.mjs';
+import {matchupWithPlayer,projectedProduction,scheduledSeasonGames,netProduction,rosterChangeDate} from './sc3-player-evaluation.mjs';
 
 const average={'3PM':2,PTS:12,REB:3,AST:2,STL:1,BLK:0,TO:1,FGM:4,FGA:8,FTM:2,FTA:2};
 const own={'3PM':3,PTS:20,REB:9,AST:7,STL:4,BLK:2,TO:2,'FG%':0.45,'FT%':0.8};
@@ -21,4 +21,14 @@ test('season schedule uses published games through the Yahoo league deadline',()
  const data={team:{abbreviation:'GS'},season:{year:2027,type:2},events};
  assert.deepEqual(scheduledSeasonGames(data,'GSW',2027,new Date('2026-11-18'),'2027-03-28'),['2027-03-28']);
  assert.throws(()=>scheduledSeasonGames({...data,events:events.slice(0,10)},'GSW',2027,new Date('2026-11-18'),'2027-03-28'),/coverage/);
+});
+
+test('net add/drop subtracts outgoing counting stats and shooting attempts',()=>{
+ const incoming=projectedProduction(average,2), outgoing=projectedProduction({...average,PTS:14,FGA:10},1);
+ const net=netProduction(incoming,outgoing);
+ assert.equal(net.PTS,10);
+ assert.equal(net.FGA,6);
+ assert.equal(matchupWithPlayer(baseline,net).changes.find(row=>row.category==='FG%').withPlayer,13/26);
+ assert.equal(rosterChangeDate('2026-11-18','W (Nov 19)'),'2026-11-20');
+ assert.equal(rosterChangeDate('2026-11-18','W (Nov 15)'),null);
 });

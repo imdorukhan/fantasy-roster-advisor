@@ -20,11 +20,11 @@ export function maxStarts(players,slots){
 }
 const dateLabel=date=>new Intl.DateTimeFormat('en-US',{timeZone:'UTC',month:'short',day:'numeric'}).format(new Date(date+'T12:00:00Z'));
 
-export function rankWaiverOpportunities(candidates,days,starters){
+export function rankWaiverOpportunities(candidates,days,starters,{dropId=null}={}){
  const slots=starters.flatMap(slot=>Array(slot.count).fill(slot.position));
  const windows=days.map(({date,schedule,lineup})=>{
   if(!schedule||!lineup)return {date,verified:false,active:[]};
-  const eligible=lineup.filter(p=>p.occupied&&!/^(IL|IR)/.test(p.slot));
+  const eligible=lineup.filter(p=>p.occupied&&p.yahooId!==dropId&&!/^(IL|IR)/.test(p.slot));
   const verified=eligible.every(p=>p.nbaTeam&&p.eligiblePositions?.length);
   const active=eligible.filter(p=>schedule.teams.has(club(p.nbaTeam)));
   return {date,verified,teams:schedule.teams,active,baseline:verified?maxStarts(active,slots):null};

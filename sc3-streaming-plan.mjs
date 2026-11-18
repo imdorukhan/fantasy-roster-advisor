@@ -114,7 +114,7 @@ export function rankStreamingFits(players, dates, acquisitions) {
   return streamingCalendar(candidates,{startDate:dates[0].date,endDate:dates.at(-1).date,remainingAdds:acquisitions.remaining});
 }
 
-export async function buildStreamingPlan(availability, yahooRows, {now=new Date(), fetcher=fetch, includeWaiverImpact=false,skipWaiverPlan=false,evaluationPlayer=null}={}) {
+export async function buildStreamingPlan(availability, yahooRows, {now=new Date(), fetcher=fetch, includeWaiverImpact=false,skipWaiverPlan=false,evaluationPlayer=null,dropId=null}={}) {
   let window;
   try {window = yahooWindow(yahooRows, now);}
   catch (error) {return {available:false, reason:error.message};}
@@ -158,7 +158,7 @@ export async function buildStreamingPlan(availability, yahooRows, {now=new Date(
       }
     }
     if(skipWaiverPlan)return {available:true,week,acquisitions,days:coverage,
-      playerScenario:evaluationPlayer&&rankWaiverOpportunities([evaluationPlayer],daily,starters)[0]};
+      playerScenario:evaluationPlayer&&rankWaiverOpportunities([evaluationPlayer],daily,starters,{dropId})[0]};
     const result = rankStreamingFits(metadata,daily.map(({date,openSlots,schedule})=>({date,openSlots,teams:schedule.teams})),acquisitions);
     let waiverPlan=await readWaiverOpportunities(availability.waivers,daily,starters,acquisitions,fetcher,{rankAll:includeWaiverImpact})
       .catch(()=>({error:'Current Yahoo waiver candidates unavailable'}));

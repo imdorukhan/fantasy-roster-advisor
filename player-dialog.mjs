@@ -29,6 +29,7 @@ function profileBody(data){
   ]))+'</details>');
  }else sections.push('<p>Verified ESPN player history unavailable.</p>');
  if(p.depth.length)sections.push('<details><summary>ESPN depth chart</summary>'+table(['Position','Rank','NBA team','Injury marker','Observed'],p.depth.map(row=>[row.position,row.rank,row.nba_team,row.injury_marker,sourceTime(row.observed_at)]))+'</details>');
+ sections.push(dropSelector(data));
  sections.push('<h3>Current matchup impact</h3><p>'+esc(week.reason||'Gross addition scenario. A corresponding drop or claim is separate.')+'</p>');
  if(Number.isInteger(week.rosteredStarts))sections.push('<p>Upcoming starts on your lineup: '+esc(week.rosteredStarts)+(week.dates?.length?' · '+esc(week.dates.join(', ')):'')+'</p>');
  else if(Number.isInteger(week.extraStarts))sections.push('<p>Estimated extra starts: '+esc(week.extraStarts)+(week.dates?.length?' · '+esc(week.dates.join(', ')):'')+'</p>');
@@ -46,11 +47,72 @@ function profileBody(data){
  sections.push('<p><a href="https://basketball.fantasysports.yahoo.com/nba/85892/player/'+encodeURIComponent(p.yahooId)+'" target="_blank" rel="noopener noreferrer">View on Yahoo Fantasy ↗</a></p>');
  return sections.join('');
 }
+function dropSelector(data){
+ if(!data.dropOptions?.length)return '<h3>Add / drop comparison</h3><p>Verified Salary CAPtain roster unavailable.</p>';
+ const options=data.dropOptions.map(player=>'<option value="'+esc(player.id)+'">'+esc(player.name+(player.slot?' · '+player.slot:''))+'</option>').join('');
+ return '<h3>Add / drop comparison</h3><p>'+esc(data.profile.own?'Compare dropping a player while keeping the rest of your roster.':'Choose the player you would drop to add '+data.profile.name+'.')+'</p>'+
+  '<label for="sc3-drop-player">Drop from Salary CAPtain</label> <select id="sc3-drop-player" class="player-card-select"><option value="">Select a player</option>'+options+'</select>'+
+  '<div id="sc3-drop-comparison" role="status" aria-live="polite"></div>';
+}
+
+function netTable(report){
+ const shotKeys=['FGM','FGA','FTM','FTA'];
+ const scoreChanges=new Map((report.score?.changes??[]).map(row=>[row.category,row]));
+ return table(['Category','Incoming','Outgoing','Net change'],[...cats,...shotKeys].map(key=>{
+  const change=scoreChanges.get(key);
+  const percentage=key.endsWith('%');
+  const value=percentage&&change?(change.withPlayer-change.baseline)*100:report.net[key];
+  const formatted=Number.isFinite(value)?(value>0?'+':'')+Number(value.toFixed(2))+(percentage?' pp':''):'—';
+  return [key,fmt(report.incoming[key],key),fmt(report.outgoing[key],key),formatted];
+ }));
+}
+
+function comparisonBody(data){
+ const c=data.comparison;
+ if(!c)return '<p>Comparison unavailable.</p>';
+ const title=c.dropOnly?'Drop '+c.drop.name:'Add '+data.profile.name+' · Drop '+c.drop.name;
+ const sections=['<h4>'+esc(title)+'</h4>'];
+ if(c.effectiveOn)sections.push('<p>Model starts '+esc(c.effectiveOn)+'. No Yahoo transaction is submitted.</p>');
+ if(c.reason)sections.push('<p>'+esc(c.reason)+'</p>');
+ if(c.week){
+  const {week}=c;
+  sections.push('<h4>Net matchup impact</h4><p>'+esc(week.addedDates.length)+' projected incoming starts · '+esc(week.removedDates.length)+' currently assigned outgoing starts lost</p>');
+  if(week.score)sections.push('<p><strong>Baseline '+esc(score(week.score.before))+' → With change '+esc(score(week.score.after))+'</strong></p>');
+  sections.push(netTable(week));
+ }
+ if(c.season){
+  const {season}=c;
+  sections.push('<h4>Net rest-of-season impact</h4><p>'+esc(season.addedGames)+' scheduled incoming games · '+esc(season.removedGames)+' scheduled outgoing games · Through '+esc(season.through)+'. These are schedule opportunities. Future lineup conflicts and team shooting percentages are unavailable.</p>'+netTable(season));
+ }else sections.push('<p>Verified rest-of-season net comparison unavailable.</p>');
+ return sections.join('');
+}
+
+let comparisonRequest;
+function attachDropSelector(content,id){
+ const select=content.querySelector('#sc3-drop-player');
+ if(!select)return;
+ const output=content.querySelector('#sc3-drop-comparison');
+ select.addEventListener('change',async()=>{
+  comparisonRequest?.abort();
+  const dropId=select.value;
+  if(!dropId){output.textContent='';return;}
+  const request=new AbortController();
+  comparisonRequest=request;
+  output.textContent='Calculating verified net add/drop impact…';
+  try{
+   const params=new URLSearchParams({sc3Player:'1',id,dropId});
+   const response=await fetch('/api/auto-data?'+params,{credentials:'same-origin',cache:'no-store',signal:request.signal});
+   const data=await response.json();
+   if(!response.ok||data.mode!=='SC3_PLAYER_EVALUATION')throw Error(data.error||'Comparison unavailable');
+   if(!request.signal.aborted)output.innerHTML=comparisonBody(data);
+  }catch(error){if(!request.signal.aborted)output.textContent=error.message;}
+ });
+}
 let dialog,controller;
 function init(){
  if(dialog)return;
  const style=document.createElement('style');
- style.textContent='.player-profile-link{background:none;border:0;padding:0;color:inherit;font:inherit;font-weight:700;text-align:left;text-decoration:underline;text-underline-offset:3px;cursor:pointer}.player-profile-link:focus-visible{outline:2px solid #b5a9ff;outline-offset:3px}#sc3-player-dialog{box-sizing:border-box;width:min(760px,94vw);max-height:88dvh;overflow:auto;color:#edf1ff;background:#151d32;border:1px solid #485370;border-radius:16px;padding:16px}#sc3-player-dialog::backdrop{background:#0b1020bb}.player-card-header{display:flex;justify-content:space-between;align-items:center;gap:12px;position:sticky;top:0;background:#151d32;padding:8px 0;z-index:1}.player-card-header h2{margin:0}.player-card-close{padding:7px 12px;border:1px solid #7c70b5;border-radius:8px;background:#3d3268;color:white;cursor:pointer}.player-card-scroll{overflow:auto;margin:10px 0}.player-card-scroll table{width:100%;min-width:unset!important;border-collapse:collapse}.player-card-scroll th,.player-card-scroll td{font-size:13px;text-align:left!important;padding:7px;border-bottom:1px solid #34405b;white-space:nowrap}#sc3-player-dialog details{margin:12px 0}#sc3-player-dialog summary{cursor:pointer;font-weight:650}';
+ style.textContent='.player-profile-link{background:none;border:0;padding:0;color:inherit;font:inherit;font-weight:700;text-align:left;text-decoration:underline;text-underline-offset:3px;cursor:pointer}.player-profile-link:focus-visible{outline:2px solid #b5a9ff;outline-offset:3px}#sc3-player-dialog{box-sizing:border-box;width:min(760px,94vw);max-height:88dvh;overflow:auto;color:#edf1ff;background:#151d32;border:1px solid #485370;border-radius:16px;padding:16px}#sc3-player-dialog::backdrop{background:#0b1020bb}.player-card-header{display:flex;justify-content:space-between;align-items:center;gap:12px;position:sticky;top:0;background:#151d32;padding:8px 0;z-index:1}.player-card-header h2{margin:0}.player-card-close{padding:7px 12px;border:1px solid #7c70b5;border-radius:8px;background:#3d3268;color:white;cursor:pointer}.player-card-scroll{overflow:auto;margin:10px 0}.player-card-scroll table{width:100%;min-width:unset!important;border-collapse:collapse}.player-card-scroll th,.player-card-scroll td{font-size:13px;text-align:left!important;padding:7px;border-bottom:1px solid #34405b;white-space:nowrap}#sc3-player-dialog details{margin:12px 0}#sc3-player-dialog summary{cursor:pointer;font-weight:650}.player-card-select{max-width:100%;color:#edf1ff;background:#25304a;border:1px solid #687395;border-radius:6px;padding:6px 9px}.player-card-select:focus-visible{outline:2px solid #b5a9ff}';
  document.head.append(style);
  dialog=document.createElement('dialog');
  dialog.id='sc3-player-dialog';
@@ -58,13 +120,14 @@ function init(){
  dialog.innerHTML='<div class="player-card-header"><h2 id="sc3-player-name"></h2><button type="button" class="player-card-close">Close</button></div><div id="sc3-player-content" role="status"></div>';
  document.body.append(dialog);
  dialog.querySelector('button').addEventListener('click',()=>dialog.close());
- dialog.addEventListener('close',()=>controller?.abort());
+ dialog.addEventListener('close',()=>{controller?.abort();comparisonRequest?.abort();});
 }
 document.addEventListener('click',async event=>{
  const button=event.target.closest?.('[data-player-id]');
  if(!button)return;
  init();
  controller?.abort();
+ comparisonRequest?.abort();
  const current=new AbortController();
  controller=current;
  dialog.querySelector('h2').textContent=button.textContent.trim();
@@ -80,5 +143,6 @@ document.addEventListener('click',async event=>{
   if(current.signal.aborted)return;
   dialog.querySelector('h2').textContent=data.profile.name;
   content.innerHTML=profileBody(data);
+  attachDropSelector(content,id);
  }catch(error){if(!current.signal.aborted)content.textContent=error.message;}
 });
