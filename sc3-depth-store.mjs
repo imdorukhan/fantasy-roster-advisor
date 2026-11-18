@@ -18,10 +18,10 @@ export function validateDepth(rows){
 export async function readDepth(abbr,{pool,now=new Date()}={}){
  const team=teamCode(abbr);if(!teams.includes(team))throw Error('Unknown NBA team');
  return withScopedTransaction(async c=>{
- const {rows}=await c.query("select player_name as name,position,rank,observed_at::text,source from sc3.nba_depth_chart where nba_team=$1 order by position,rank",[team]);
+ const {rows}=await c.query("select coalesce(i.name,d.player_name) as name,d.player_name as display_name,d.espn_id as espn_id,d.injury_marker,d.position,d.rank,d.observed_at::text,d.source from sc3.nba_depth_chart d left join sc3.espn_player_identity i on i.espn_id=d.espn_id where d.nba_team=$1 order by d.position,d.rank",[team]);
  if(new Set(rows.map(r=>r.position)).size!==5||new Set(rows.map(r=>r.observed_at)).size!==1)throw Error('Verified full depth chart unavailable');
  const observedAt=rows[0].observed_at,age=+now-Date.parse(observedAt);
  if(!Number.isFinite(age)||age<0||age>48*3600000)throw Error('Depth chart stale');
- return {source:depthSource,observedAt,nbaTeam:abbr,fresh:age<=26*3600000,rows:rows.map(({name,position,rank,source})=>({name,position,rank,source}))};
+ return {source:depthSource,observedAt,nbaTeam:abbr,fresh:age<=26*3600000,rows:rows.map(({name,display_name,espn_id,injury_marker,position,rank,source})=>({name,displayName:display_name,espnAthleteId:espn_id,injuryMarker:injury_marker,position,rank,source}))};
  },{pool});
 }
