@@ -1,5 +1,5 @@
 import {enrichWaiverImpact} from './sc3-waiver-impact.mjs';
-import {readWaiverOpportunities} from './sc3-waiver-plan.mjs';
+import {readWaiverOpportunities,rankWaiverOpportunities} from './sc3-waiver-plan.mjs';
 import {streamingCalendar} from './decision-core.mjs';
 import {leagueToday, officialMatchupFromScoreboard} from './yahoo-scoreboard.mjs';
 import {collect} from './scripts/collect-yahoo-ownership.mjs';
@@ -114,7 +114,7 @@ export function rankStreamingFits(players, dates, acquisitions) {
   return streamingCalendar(candidates,{startDate:dates[0].date,endDate:dates.at(-1).date,remainingAdds:acquisitions.remaining});
 }
 
-export async function buildStreamingPlan(availability, yahooRows, {now=new Date(), fetcher=fetch, includeWaiverImpact=false}={}) {
+export async function buildStreamingPlan(availability, yahooRows, {now=new Date(), fetcher=fetch, includeWaiverImpact=false,skipWaiverPlan=false,evaluationPlayer=null}={}) {
   let window;
   try {window = yahooWindow(yahooRows, now);}
   catch (error) {return {available:false, reason:error.message};}
@@ -157,6 +157,8 @@ export async function buildStreamingPlan(availability, yahooRows, {now=new Date(
         return {available:false,reason:'Current Yahoo free-agent team and position coverage unavailable',week,acquisitions,days:coverage};
       }
     }
+    if(skipWaiverPlan)return {available:true,week,acquisitions,days:coverage,
+      playerScenario:evaluationPlayer&&rankWaiverOpportunities([evaluationPlayer],daily,starters)[0]};
     const result = rankStreamingFits(metadata,daily.map(({date,openSlots,schedule})=>({date,openSlots,teams:schedule.teams})),acquisitions);
     let waiverPlan=await readWaiverOpportunities(availability.waivers,daily,starters,acquisitions,fetcher,{rankAll:includeWaiverImpact})
       .catch(()=>({error:'Current Yahoo waiver candidates unavailable'}));

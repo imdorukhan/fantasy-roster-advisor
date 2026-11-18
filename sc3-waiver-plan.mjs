@@ -30,7 +30,8 @@ export function rankWaiverOpportunities(candidates,days,starters){
   return {date,verified,teams:schedule.teams,active,baseline:verified?maxStarts(active,slots):null};
  });
  return candidates.map(candidate=>{
-  const clears=days.find(day=>'W ('+dateLabel(day.date)+')'===candidate.yahooRosterStatus)?.date??null;
+  const clears=candidate.yahooRosterStatus===null?days[0]?.date??null:
+   days.find(day=>'W ('+dateLabel(day.date)+')'===candidate.yahooRosterStatus)?.date??null;
   const dates=clears?windows.filter(day=>day.date>clears&&day.verified&&day.teams.has(club(candidate.nbaTeam))&&
    maxStarts([...day.active,candidate],slots)>day.baseline).map(day=>day.date):[];
   return {yahooId:candidate.yahooId,name:candidate.name,nbaTeam:candidate.nbaTeam,waiverStatus:candidate.yahooRosterStatus,clears,dates,

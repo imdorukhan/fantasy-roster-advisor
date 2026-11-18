@@ -21,7 +21,8 @@ function combine(team, future){
  if (!shots || !['FGM','FGA','FTM','FTA'].every(key=>Number.isSafeInteger(shots[key]))) return null;
  if ([['FG%','FGM','FGA'],['FT%','FTM','FTA']].some(([category,made,attempted])=>
    Math.abs((rate(shots[made],shots[attempted])??0)-team.stats[category])>0.00051)) return null;
- return totals(Object.fromEntries(keys.map(key=>[key,(shots[key]??team.stats[key])+future[key]])));
+ const combined=Object.fromEntries(keys.map(key=>[key,(shots[key]??team.stats[key])+future[key]]));
+ return {stats:totals(combined),shooting:Object.fromEntries(['FGM','FGA','FTM','FTA'].map(key=>[key,combined[key]]))};
 }
 
 export function matchupProjection(report, official, logs, historyThrough, {now=new Date(),baselineAligned=false}={}){
@@ -62,8 +63,8 @@ export function matchupProjection(report, official, logs, historyThrough, {now=n
  if (!reasons.length){
    const ours=combine(official.ourTeam,results[0].summed);
    const opponent=combine(official.opponent,results[1].summed);
-   const comparison=ours&&opponent?categoryComparison(ours,opponent):null;
-   if (comparison?.verified) endOfWeek={rows:comparison.rows,score:comparison.score};
+   const comparison=ours&&opponent?categoryComparison(ours.stats,opponent.stats):null;
+   if (comparison?.verified) endOfWeek={rows:comparison.rows,score:comparison.score,shooting:ours.shooting};
    else reasons.push('Verified Yahoo shooting totals or projected denominators unavailable');
  }
  return {teams,historyThrough,baseline:{source:official.source,observedAt:official.observedAt},blocked:reasons,endOfWeek,readOnly:true};

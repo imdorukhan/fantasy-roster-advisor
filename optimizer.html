@@ -32,6 +32,7 @@
 </section>
 </main>
 <script type="module">
+import {playerLink} from "./player-dialog.mjs";
 import {officialMatchupView} from './decision-core.mjs';
 
 const q=id=>document.getElementById(id);
@@ -98,7 +99,7 @@ async function refreshLineups(){
   list.innerHTML=report.teams.map(team=>{
    const rows=team.players.map(player=>{
     const upcoming=assignment=>player.games.filter(game=>game.assignment===assignment).map(game=>esc(game.date.slice(5))+' '+esc(game.slot)).join(', ')||'—';
-    return '<tr><td>'+esc(player.name)+(player.unknownDates.length?' <span class="small">Schedule unknown on '+esc(player.unknownDates.map(date=>date.slice(5)).join(', '))+'</span>':'')+'</td><td>'+upcoming('STARTER')+'</td><td>'+upcoming('BENCH')+'</td><td>'+upcoming('IL')+'</td></tr>';
+    return '<tr><td>'+playerLink(player)+(player.unknownDates.length?' <span class="small">Schedule unknown on '+esc(player.unknownDates.map(date=>date.slice(5)).join(', '))+'</span>':'')+'</td><td>'+upcoming('STARTER')+'</td><td>'+upcoming('BENCH')+'</td><td>'+upcoming('IL')+'</td></tr>';
    }).join('');
    return '<section><h3>'+esc(team.name)+'</h3>'+(rows?'<div class="scroll"><table style="min-width:400px"><thead><tr><th>Player</th><th>Starter</th><th>Bench</th><th>IL</th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<p>No verified lineup rows.</p>')+'</section>';
   }).join('');
