@@ -97,13 +97,16 @@ async function sc3CloudHealth(req,res){
  res.setHeader('Cache-Control','private, no-store');
  if(process.env.VERCEL_ENV!=='preview'||process.env.SC3_SHARED_DB!=='1')return res.status(404).json({error:'Not found'});
  if(req.method!=='GET')return res.status(405).json({error:'Method not allowed'});
+ let stage='imports';
  try{
   const {readPerformance}=await import('../performance-store.mjs');
   const {withScopedTransaction}=await import('../sc3-postgres.mjs');
+  stage='database';
   const counts=await withScopedTransaction(async c=>{
    const {rows}=await c.query("select (select count(*)::int from sc3.sc3_nba_game_logs) as logs,(select count(*)::int from sc3.sc3_nba_sync_days) as days,(select count(*)::int from sc3.espn_player_identity) as espn,(select count(*)::int from sc3.sc3_player_identity where status='verified') as verified");
    return rows[0];
   });
+  stage='performance';
   const {report,links,historyEnd}=await readPerformance({scoped:true,start:process.env.SC3_SEASON_START,end:process.env.SC3_HISTORY_END});
   const w=report.players.find(p=>p.id==='5104157');
   const c=report.players.find(p=>p.id==='3975');
@@ -111,9 +114,11 @@ async function sc3CloudHealth(req,res){
  }catch(e){
   const allowed=['28P01','28000','42501','ECONNREFUSED','ETIMEDOUT','ENOTFOUND','EAI_AGAIN','SELF_SIGNED_CERT_IN_CHAIN','UNABLE_TO_VERIFY_LEAF_SIGNATURE','CERT_HAS_EXPIRED','ERR_TLS_CERT_ALTNAME_INVALID','53400','53300','57P01','25006','42601','42703','42P01'];
   const safeMessages=['Invalid scoped PostgreSQL connection','Shared SC3 database is not enabled','Scoped role verification failed','Incomplete NBA history','Stored game-log coverage mismatch','Performance report unavailable','Invalid ISO date range','Invalid dates'];
-  const code=allowed.includes(e.code)?e.code:safeMessages.includes(e.message)?e.message:'SC3_CLOUD_UNAVAILABLE';
+  const msg=String(e?.message||'');
+  const classes=[['POOLER_TENANT_OR_USER',/tenant or user not found|tenant not found|user not found/i],['POOLER_STARTUP_PARAMETER',/startup parameter|unrecognized configuration parameter/i],['CONNECT_TIMEOUT',/connection timeout|timeout expired|connection terminated due to connection timeout/i],['MODULE_LOAD',/cannot find (module|package)|require\(\) of ES Module/i],['INVALID_URL',/invalid url|URI malformed/i],['PASSWORD_AUTH',/password authentication failed|authentication failed|SASL/i],['CERTIFICATE',/certificate|self.signed/i],['CONNECTION_CLOSED',/connection terminated|server closed the connection/i],['SQL_PERMISSION',/permission denied/i]];
+  const code=allowed.includes(e.code)?e.code:safeMessages.includes(e.message)?e.message:classes.find(([,re])=>re.test(msg))?.[0]||(/^[A-Z][A-Z0-9_]{2,40}$/.test(e.code||'')?e.code:'SC3_CLOUD_UNAVAILABLE');
   console.warn('SC3 cloud readiness failed',code);
-  return res.status(503).json({status:'unavailable',code});
+  return res.status(503).json({status:'unavailable',stage,code});
  }
 }
 
