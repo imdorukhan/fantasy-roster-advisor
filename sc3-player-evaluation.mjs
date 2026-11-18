@@ -31,8 +31,12 @@ export function matchupWithPlayer(baseline,addition){
   'FG%':(FGM+addition.FGM)/(FGA+addition.FGA),'FT%':(FTM+addition.FTM)/(FTA+addition.FTA)};
  const result=categoryComparison(after,opponent);
  if(!result.verified)return null;
- return {before:baseline.score,after:result.score,changes:result.rows.map(row=>({
-  category:row.category,baseline:own[row.category],withPlayer:row.ours,opponent:row.opponent,leader:row.leader
+ const before=categoryComparison(own,opponent);
+ if(!before.verified)return null;
+ const previousLeaders=new Map(before.rows.map(row=>[row.category,row.leader]));
+ return {before:before.score,after:result.score,changes:result.rows.map(row=>({
+  category:row.category,baseline:own[row.category],withPlayer:row.ours,opponent:row.opponent,
+  delta:row.ours-own[row.category],previousLeader:previousLeaders.get(row.category),leader:row.leader
  }))};
 }
 

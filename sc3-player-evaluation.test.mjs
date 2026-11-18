@@ -12,7 +12,11 @@ test('add scenario recomputes head-to-head percentage categories with attempts',
  const result=matchupWithPlayer(baseline,add);
  assert.equal(result.changes.find(row=>row.category==='FG%').withPlayer,17/36);
  assert.equal(result.changes.find(row=>row.category==='TO').leader,'OPPONENT');
- assert.equal(result.changes.find(row=>row.category==='PTS').leader,'OURS');
+ assert.equal(result.changes.length,9);
+ const points=result.changes.find(row=>row.category==='PTS');
+ assert.deepEqual([points.baseline,points.withPlayer,points.opponent,points.delta,points.previousLeader,points.leader],[20,44,30,24,'OPPONENT','OURS']);
+ const turnovers=result.changes.find(row=>row.category==='TO');
+ assert.deepEqual([turnovers.delta,turnovers.previousLeader,turnovers.leader],[2,'TIE','OPPONENT']);
  assert.equal(matchupWithPlayer(null,add),null);
 });
 test('season schedule uses published games through the Yahoo league deadline',()=>{

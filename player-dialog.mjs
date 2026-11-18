@@ -67,6 +67,17 @@ function netTable(report){
  }));
 }
 
+function categoryChangeTable(scenario){
+ const leader=value=>value==='OURS'?'Salary CAPtain':value==='OPPONENT'?'Opponent':'Tied';
+ return table(['Category','Before move','After move','Change','Opponent','Category result'],scenario.changes.map(row=>{
+  const percent=row.category.endsWith('%');
+  const delta=Number((row.delta*(percent?100:1)).toFixed(2));
+  const signed=(delta>0?'+':'')+delta+(percent?' pp':'');
+  const total=value=>percent?(value*100).toFixed(2)+'%':fmt(value,row.category);
+  return [row.category,total(row.baseline),total(row.withPlayer),signed,
+   total(row.opponent),row.previousLeader===row.leader?leader(row.leader):leader(row.previousLeader)+' → '+leader(row.leader)];
+ }));
+}
 function comparisonBody(data){
  const c=data.comparison;
  if(!c)return '<p>Comparison unavailable.</p>';
@@ -77,8 +88,9 @@ function comparisonBody(data){
  if(c.week){
   const {week}=c;
   sections.push('<h4>Net matchup impact</h4><p>'+esc(week.addedDates.length)+' projected incoming starts · '+esc(week.removedDates.length)+' currently assigned outgoing starts lost</p>');
-  if(week.score)sections.push('<p><strong>Baseline '+esc(score(week.score.before))+' → With change '+esc(score(week.score.after))+'</strong></p>');
-  sections.push(netTable(week));
+  if(week.score)sections.push('<p><strong>Baseline '+esc(score(week.score.before))+' → With change '+esc(score(week.score.after))+'</strong></p>'+
+   '<h4>Projected change in all 9 categories</h4><p>FG% and FT% changes are in percentage points. Lower turnovers are better.</p>'+categoryChangeTable(week.score));
+  sections.push('<details'+(week.score?'':' open')+'><summary>Incoming and outgoing player production</summary>'+netTable(week)+'</details>');
  }
  if(c.season){
   const {season}=c;
