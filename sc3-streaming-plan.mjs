@@ -79,20 +79,22 @@ export function openYahooSlots(html, day, starters) {
   return open;
 }
 
-export function upcomingTeams(json, date, now) {
+export function upcomingTeams(json, date, now, baseline) {
   if (json?.leagues?.[0]?.slug !== 'nba' || !Array.isArray(json.events)) throw Error('ESPN NBA scoreboard could not be verified');
   const teams = new Set();
+  let baselineAligned = true;
   for (const game of json.events) {
     const start = Date.parse(game.date);
     const competitors = game.competitions?.[0]?.competitors?.map(entry => nbaTeam(entry.team?.abbreviation));
     if (!Number.isFinite(start) || leagueToday(new Date(start)) !== date ||
         competitors?.length !== 2 || new Set(competitors).size !== 2 || competitors.some(team => !/^[A-Z]{2,3}$/.test(team)) ||
         !['pre','in','post'].includes(game.status?.type?.state)) throw Error('ESPN game coverage could not be verified');
+    if (baseline && (game.status.type.state==='in' || start>=baseline.getTime() && start<=now.getTime())) baselineAligned = false;
     if (start > now.getTime() && game.status.type.state === 'pre' && game.status.type.name === 'STATUS_SCHEDULED') {
       for (const team of competitors) teams.add(team);
     }
   }
-  return {teams, gameCount:json.events.length};
+  return {teams, gameCount:json.events.length, baselineAligned};
 }
 
 export function rankStreamingFits(players, dates, acquisitions) {

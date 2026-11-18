@@ -1,6 +1,7 @@
 import {datedYahooRows,upcomingTeams} from './sc3-streaming-plan.mjs';
 import {leagueToday,officialMatchupFromScoreboard} from './yahoo-scoreboard.mjs';
 import {bridgeSnapshots} from './sc3-yahoo-bridge.mjs';
+import {readMatchupProjection} from './sc3-matchup-projection.mjs';
 
 const yahoo = 'https://basketball.fantasysports.yahoo.com/nba/85892/';
 const espn = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=';
@@ -35,7 +36,7 @@ function groupPlayers(days, id) {
   return [...players.values()].sort((a,b)=>a.name.localeCompare(b.name));
 }
 
-export async function readMatchupLineups({now=new Date(),fetcher=fetch}={}) {
+export async function readMatchupLineups({now=new Date(),fetcher=fetch,includeProjection=false}={}) {
   const snapshots = await bridgeSnapshots();
   const official = officialMatchupFromScoreboard(snapshots.scoreboard?.payload,{observedAt:snapshots.scoreboard?.observed_at,now});
   const settingsAge=now.getTime()-Date.parse(snapshots.settings?.observed_at);
@@ -61,7 +62,7 @@ export async function readMatchupLineups({now=new Date(),fetcher=fetch}={}) {
   }
   const days = await Promise.all(dates.map(async date=>{
     const [schedule,...teams]=await Promise.allSettled([
-      source(espn+date.replaceAll('-',''),'json').then(data=>upcomingTeams(data,date,now)),
+      source(espn+date.replaceAll('-',''),'json').then(data=>upcomingTeams(data,date,now,new Date(official.observedAt))),
       ...ids.map(id=>source(yahoo+id+'?date='+date,'text').then(html=>datedYahooRows(html,date,id)))
     ]);
     const lineups=teams.map((team,i)=>{
@@ -70,13 +71,18 @@ export async function readMatchupLineups({now=new Date(),fetcher=fetch}={}) {
         return {id:ids[i],verified:true,players:lineupSlots(team.value,config,schedule.value.teams)};
       }catch{return {id:ids[i],verified:false,players:[]};}
     });
-    return {date,scheduleVerified:schedule.status==='fulfilled',lineups};
+    return {date,scheduleVerified:schedule.status==='fulfilled',baselineAligned:schedule.status==='fulfilled' && schedule.value.baselineAligned,lineups};
   }));
-  return {
+  const report = {
     mode:'SC3_MATCHUP_LINEUPS',week:official.week,scoreboardObservedAt:official.observedAt,
     observedAt:now.toISOString(),readOnly:true,
     complete:days.every(day=>day.scheduleVerified&&day.lineups.every(team=>team.verified)),
     days:days.map(({date,scheduleVerified,lineups})=>({date,scheduleVerified,lineups:lineups.map(({id,verified})=>({id,verified}))})),
     teams:[official.ourTeam,official.opponent].map(team=>({id:team.id,name:team.name,players:groupPlayers(days,team.id)}))
   };
+  if(includeProjection){
+    try{report.projection=await readMatchupProjection(report,official,{now,baselineAligned:days.every(day=>day.baselineAligned)});}
+    catch{report.projection={teams:[],blocked:['Verified NBA history unavailable'],endOfWeek:null};}
+  }
+  return report;
 }

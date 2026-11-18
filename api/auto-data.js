@@ -133,7 +133,7 @@ export default async function handler(req,res){
   if(!bridgeEnabled())return response(res,404,{error:'Not found'});
   try{
    const {readMatchupLineups}=await import('../sc3-matchup-lineups.mjs');
-   return response(res,200,await readMatchupLineups());
+   return response(res,200,await readMatchupLineups({includeProjection:req.query?.projection==='1'}));
   }catch{return response(res,503,{error:'Verified Yahoo and ESPN matchup lineups unavailable'});}
  }
  if(req.query?.sc3Streaming==='1'){

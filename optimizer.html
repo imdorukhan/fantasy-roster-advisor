@@ -25,6 +25,11 @@
  <p id="lineup-status" role="status">Checking Yahoo lineups and ESPN schedule…</p>
  <div id="lineup-teams" class="split"></div>
 </section>
+<section class="panel">
+ <h2>9-CAT matchup scenario</h2>
+ <p class="small">Uses each player's latest 3–10 completed ESPN games and counts upcoming Yahoo starting slots. FG% and FT% use combined makes and attempts. Bench and IL games are excluded.</p>
+ <div id="projection" role="status">Checking player history coverage…</div>
+</section>
 </main>
 <script type="module">
 import {officialMatchupView} from './decision-core.mjs';
@@ -50,16 +55,31 @@ function render(d) {
  q('targets').innerHTML=d.targets.length?'<ul>'+d.targets.map(t=>'<li>'+esc(t.category)+' · '+(t.status==='TIED'?'Tied':'Trailing by '+gap(t.gap,t.category))+'</li>').join('')+'</ul>':'<p>Leading all categories in this snapshot.</p>';
 }
 
+function renderProjection(projection){
+ const panel=q('projection');
+ if(!projection){panel.textContent='Projection coverage unavailable.';return;}
+ const header=projection.historyThrough?'<p>Completed ESPN history through '+esc(projection.historyThrough)+'.</p>':'';
+ const coverage=projection.teams.map(team=>'<p><strong>'+esc(team.name)+'</strong> · '+team.covered+'/'+team.expected+' upcoming starter games with verified player history</p>').join('');
+ const totals=projection.teams.some(team=>team.future)?'<div class="scroll"><table><thead><tr><th>Category</th>'+projection.teams.map(team=>'<th>'+esc(team.name)+'</th>').join('')+'</tr></thead><tbody>'+
+ ['FG%','FT%','3PM','PTS','REB','AST','STL','BLK','TO'].map(cat=>'<tr><td>'+esc(cat)+'</td>'+projection.teams.map(team=>'<td>'+(team.future?.[cat]==null?'Unavailable':percentage(cat)?fmt(team.future[cat],cat):team.future[cat].toFixed(1))+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>':'';
+ const scenario=projection.endOfWeek;
+ const outcome=scenario?'<p><strong>Estimated week-end score '+scenario.score.ours+' – '+scenario.score.opponent+' – '+scenario.score.ties+'</strong></p><div class="scroll"><table><thead><tr><th>Category</th><th>Our estimated total</th><th>Opponent estimated total</th><th>Margin</th></tr></thead><tbody>'+scenario.rows.map(row=>'<tr><td>'+esc(row.category)+'</td><td>'+fmt(row.ours,row.category)+'</td><td>'+fmt(row.opponent,row.category)+'</td><td>'+gap(row.absoluteGap,row.category)+'</td></tr>').join('')+'</tbody></table></div>'
+  :'<p>Full week-end projection unavailable.</p><ul>'+projection.blocked.map(reason=>'<li>'+esc(reason)+'</li>').join('')+'</ul>';
+ panel.innerHTML=header+coverage+(totals?'<h3>Expected production from covered upcoming starts</h3>'+totals:'')+outcome;
+}
+
 async function refreshLineups(){
  const status=q('lineup-status');
  const list=q('lineup-teams');
  status.textContent='Checking Yahoo lineups and ESPN schedule…';
+ q('projection').textContent='Checking player history coverage…';
  list.textContent='';
  try{
-  const response=await fetch('/api/auto-data?sc3MatchupLineups=1',{credentials:'same-origin',cache:'no-store'});
+  const response=await fetch('/api/auto-data?sc3MatchupLineups=1&projection=1',{credentials:'same-origin',cache:'no-store'});
   if(!response.ok)throw Error('Lineup details unavailable (HTTP '+response.status+')');
   const report=await response.json();
   if(report.mode!=='SC3_MATCHUP_LINEUPS')throw Error('Verified lineup details unavailable');
+  renderProjection(report.projection);
   const completeDays=report.days.filter(day=>day.scheduleVerified&&day.lineups.every(team=>team.verified)).length;
   status.textContent='Week '+report.week+' · '+completeDays+'/'+report.days.length+' days verified for both teams · Checked '+new Date(report.observedAt).toLocaleString()+'.';
   if(!report.complete){
@@ -73,7 +93,7 @@ async function refreshLineups(){
    }).join('');
    return '<section><h3>'+esc(team.name)+'</h3>'+(rows?'<div class="scroll"><table style="min-width:400px"><thead><tr><th>Player</th><th>Starter</th><th>Bench</th><th>IL</th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<p>No verified lineup rows.</p>')+'</section>';
   }).join('');
- }catch(error){status.textContent=error.message;}
+ }catch(error){status.textContent=error.message;renderProjection(null);}
 }
 
 async function refresh(){

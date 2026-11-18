@@ -26,7 +26,15 @@ function teamsFor(matchup){
    if(!Number.isFinite(n)||n<0||((cat==='FG%'||cat==='FT%')&&n>1))throw Error('Invalid official '+cat);
    normalized[cat]=n;
   }
-  return {key,id:Number(key.split('.t.').at(-1)),name:name||key,stats:normalized,remainingGames:value.team_remaining_games?.total?.remaining_games??null,completedGames:value.team_remaining_games?.total?.completed_games??null,scoredPoints:Number(value.team_points?.total)};
+  function shotPair(id){
+   const match=String(statMap.get(id)??'').match(/^(\d+)\/(\d+)$/);
+   if(!match)return null;
+   const [,made,attempted]=match.map(Number);
+   return Number.isSafeInteger(made)&&Number.isSafeInteger(attempted)&&made<=attempted?[made,attempted]:null;
+  }
+  const fg=shotPair('9004003'),ft=shotPair('9007006');
+  const shooting=fg&&ft?{FGM:fg[0],FGA:fg[1],FTM:ft[0],FTA:ft[1]}:null;
+  return {key,id:Number(key.split('.t.').at(-1)),name:name||key,stats:normalized,shooting,remainingGames:value.team_remaining_games?.total?.remaining_games??null,completedGames:value.team_remaining_games?.total?.completed_games??null,scoredPoints:Number(value.team_points?.total)};
  });
 }
 export function officialMatchupFromScoreboard(raw,{observedAt,now=new Date(),teamKey=MY_KEY,maxAgeMs=30*60*60*1000}={}){
