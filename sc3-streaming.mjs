@@ -1,4 +1,5 @@
 import {withScopedTransaction} from './sc3-postgres.mjs';
+import {buildStreamingPlan} from './sc3-streaming-plan.mjs';
 
 const leagueId = 85892;
 const maxAgeMs = 30 * 60 * 60 * 1000;
@@ -36,8 +37,13 @@ export function streamingAvailability(rows, now = Date.now()) {
 
 export async function readStreamingAvailability() {
   const rows = await withScopedTransaction(async client => (await client.query(
-    "select section, payload, observed_at::text from sc3.yahoo_league_snapshots where league_id = $1 and section in ('free_agents', 'waivers') and source = 'Yahoo Fantasy Basketball league player list'",
-    [leagueId]
+    `select section, payload, observed_at::text from sc3.yahoo_league_snapshots
+     where league_id = $1 and (
+       (section in ('free_agents', 'waivers') and source = 'Yahoo Fantasy Basketball league player list') or
+       (section in ('settings', 'roster', 'scoreboard') and source = 'Yahoo Fantasy Sports API')
+     )`, [leagueId]
   )).rows);
-  return streamingAvailability(rows);
+  const result = streamingAvailability(rows);
+  const yahooRows = Object.fromEntries(rows.map(row => [row.section, row]));
+  return {...result, plan: await buildStreamingPlan(result, yahooRows)};
 }

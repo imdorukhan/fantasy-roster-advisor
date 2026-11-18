@@ -1,6 +1,8 @@
 // Read-only Yahoo league player list collector. Run with Node.js 24+.
 // Output is JSON Lines. A successful run emits a final count for both filters.
 // Treat intermediate pages as unverified until both complete successfully.
+import {pathToFileURL} from 'node:url';
+
 const base = new URL('https://basketball.fantasysports.yahoo.com/nba/85892/players');
 function decode(s) {
   const names = {amp:'&', apos:"'", quot:'"', lt:'<', gt:'>', nbsp:' '};
@@ -23,7 +25,13 @@ function parsePage(html, filter) {
     const statusCell = [...row.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)][4]?.[1];
     const status = decode(statusCell?.replace(/<[^>]+>/g,'') ?? '');
     if (filter === 'FA' ? status !== 'FA' : !/^W \([A-Z][a-z]{2} \d{1,2}\)$/.test(status)) throw Error('Unexpected Yahoo roster status: '+status);
-    players.push({yahooId:a[1],name:decode(a[2]),availability:filter === 'FA' ? 'FREE_AGENT' : 'WAIVERS',yahooRosterStatus:status});
+    const position = row.match(/<span\s+class=["']Fz-xxs["']>\s*([A-Z]{2,3})\s*-\s*((?:PG|SG|SF|PF|C)(?:,\s*(?:PG|SG|SF|PF|C))*)\s*<\/span>/i);
+    const player = {yahooId:a[1],name:decode(a[2]),availability:filter === 'FA' ? 'FREE_AGENT' : 'WAIVERS',yahooRosterStatus:status};
+    if (filter === 'FA' && position) {
+      player.nbaTeam = position[1];
+      player.eligiblePositions = position[2].split(',').map(value => value.trim());
+    }
+    players.push(player);
   }
   if (players.length > 25 || (!players.length && !/>\s*No players found\s*</i.test(html))) throw Error('Unexpected Yahoo player row coverage');
   const next = [...html.matchAll(/<a\b[^>]*\bhref="([^"]+)"[^>]*>\s*Next 25\s*<\/a>/gi)].map(m=>decode(m[1]));
@@ -31,7 +39,8 @@ function parsePage(html, filter) {
   if (!next.length && !/>\s*Next 25\s*<\/li>/i.test(html)) throw Error('Missing Yahoo pagination marker');
   return {players,next:next[0]??null};
 }
-async function collect(filter) {
+export async function collect(filter, onPage = () => {}) {
+  if (filter !== 'FA' && filter !== 'W') throw Error('Invalid Yahoo ownership filter');
   let url = new URL(base); url.searchParams.set('status',filter);
   const startedAt = new Date().toISOString();
   const ids = new Set();
@@ -43,7 +52,7 @@ async function collect(filter) {
       if (ids.has(p.yahooId)) throw Error('Repeated Yahoo player ID');
       ids.add(p.yahooId);
     }
-    console.log(JSON.stringify({filter,offset,http:response.status,observedAt:new Date().toISOString(),players,complete:!next}));
+    onPage({filter,offset,http:response.status,observedAt:new Date().toISOString(),players,complete:!next});
     if (!next) return {filter,startedAt,count:ids.size};
     url = new URL(next,base);
     if (url.origin !== base.origin || url.pathname !== base.pathname || url.searchParams.get('status') !== filter ||
@@ -51,4 +60,6 @@ async function collect(filter) {
   }
   throw Error('Yahoo pagination limit reached');
 }
-for (const filter of ['FA','W']) console.log(JSON.stringify(await collect(filter)));
+if (!process.argv[1] || process.argv[1] === '-' || import.meta.url === pathToFileURL(process.argv[1]).href) {
+  for (const filter of ['FA','W']) console.log(JSON.stringify(await collect(filter, page => console.log(JSON.stringify(page)))));
+}
