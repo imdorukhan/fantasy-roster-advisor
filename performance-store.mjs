@@ -3,8 +3,8 @@ import {dateRange,coverage} from './nba-sync.mjs';
 import {readScopedRows} from './sc3-postgres.mjs';
 // Read only from an explicitly isolated Supabase project. Never use production env.
 export async function readPerformance({url,secret,expectedRef,start,end,fetcher=fetch,scoped=false,pool}={}){
+ if(scoped){const data=await readScopedRows({start,pool});const actualEnd=data.end;return summarize(data.days,data.raw,data.identities,start,actualEnd,dateRange(start,actualEnd));}
  const days=dateRange(start,end);
- if(scoped){const data=await readScopedRows({start,end,pool});return summarize(data.days,data.raw,data.identities,start,end,days);}
  const u=new URL(url);
  if(!expectedRef||expectedRef==='bmsfbcuausbfzheufjtc'||u.hostname!==expectedRef+'.supabase.co'||u.protocol!=='https:'||u.pathname!=='/'||u.search||u.hash||!secret)throw Error('Isolated performance database not configured');
  async function read(table,params){
