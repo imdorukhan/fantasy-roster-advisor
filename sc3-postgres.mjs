@@ -40,7 +40,11 @@ export async function withScopedTransaction(fn,{pool:provided,readOnly=true}={})
  const check=await c.query("select current_user as role, session_user as login, has_schema_privilege(current_user,'sc3','USAGE') as allowed, exists(select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p','v','m') and (has_table_privilege(current_user,c.oid,'SELECT') or has_table_privilege(current_user,c.oid,'INSERT') or has_table_privilege(current_user,c.oid,'UPDATE') or has_table_privilege(current_user,c.oid,'DELETE'))) as legacy_access");
  const row=check.rows[0];if(row?.role!=='sc3_app'||row.login!=='sc3_app'||row.allowed!==true||row.legacy_access!==false)throw Error('Scoped role verification failed');
  const result=await fn(c);await c.query('COMMIT');return result;
- }catch(e){try{await c.query('ROLLBACK')}catch{}throw e}finally{c.release()}
+ }catch(e){try{await c.query('ROLLBACK')}catch{}throw e}finally{
+  // Serverless instances may freeze before idle pool timers fire. Return the SC3 role slot immediately.
+  if(!provided&&process.env.VERCEL==='1')c.release(true);
+  else c.release();
+ }
 }
 export function latestExpectedDay(now=new Date()){
  const eastern=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
