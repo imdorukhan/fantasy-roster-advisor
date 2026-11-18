@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 import {parseMatchup} from '../matchup-data.mjs';
 import {loadPlayerStats} from '../yahoo-player-stats.mjs';
 import {dataHealth} from '../decision-core.mjs';
+import {requireSc3Read} from '../sc3-read-access.mjs';
+import {sc3ProductionEnabled} from '../sc3-yahoo-bridge.mjs';
 import {officialMatchupFromScoreboard} from '../yahoo-scoreboard.mjs';
 import {cookies,configured,tokenRequest} from './auth/yahoo/_lib.js';
 import {loadSession,saveSession,storeConfigured,loadLeagueSnapshots,saveLeagueSnapshots,loadBackgroundYahooSession,updateBackgroundYahooSession} from './auth/yahoo/_store.js';
@@ -128,18 +130,14 @@ async function sc3CloudHealth(req,res){
 
 export default async function handler(req,res){
  if(req.query?.sc3MatchupLineups==='1'){
-  if(req.method!=='GET')return response(res,405,{error:'Method not allowed'});
-  const {bridgeEnabled}=await import('../sc3-yahoo-bridge.mjs');
-  if(!bridgeEnabled())return response(res,404,{error:'Not found'});
+  if(!await requireSc3Read(req,res))return;
   try{
    const {readMatchupLineups}=await import('../sc3-matchup-lineups.mjs');
    return response(res,200,await readMatchupLineups({includeProjection:req.query?.projection==='1'}));
   }catch{return response(res,503,{error:'Verified Yahoo and ESPN matchup lineups unavailable'});}
  }
  if(req.query?.sc3Streaming==='1'){
-  if(req.method!=='GET')return response(res,405,{error:'Method not allowed'});
-  const {bridgeEnabled}=await import('../sc3-yahoo-bridge.mjs');
-  if(!bridgeEnabled())return response(res,404,{error:'Not found'});
+  if(!await requireSc3Read(req,res))return;
   try{
    const {readStreamingAvailability}=await import('../sc3-streaming.mjs');
    return response(res,200,await readStreamingAvailability());
@@ -161,6 +159,10 @@ export default async function handler(req,res){
   if(!/^[A-Z]{2,3}$/.test(team))return res.status(400).json({error:'Invalid NBA team'});
   try{if(process.env.VERCEL_ENV==='preview'&&process.env.SC3_SHARED_DB==='1'){const {readDepth}=await import('../sc3-depth-store.mjs');const data=await readDepth(team);res.setHeader('Cache-Control','private, no-store');return res.status(200).json(data)}const data=await espnDepth(team);res.setHeader('Cache-Control','public, s-maxage=3600');return res.status(200).json(data)}
   catch(e){return res.status(502).json({error:'ESPN depth chart unavailable',detail:e.message})}
+ }
+ if(req.query?.live==='1'&&req.query?.officialMatchup==='1'&&sc3ProductionEnabled()){
+  if(!await requireSc3Read(req,res))return;
+  return bridgeHandler(req,res);
  }
  if(req.query?.live==='1')return liveHandler(req,res);
  try{const result=await buildAutoData();res.setHeader('Cache-Control','s-maxage=600, stale-while-revalidate=600');res.status(200).json(result)}

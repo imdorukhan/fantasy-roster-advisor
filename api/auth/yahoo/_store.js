@@ -12,6 +12,14 @@ function settings(){const {url,secret}=authConfig();if(!url||!secret)throw Error
 async function request(path,{method='GET',body,prefer}={}){const {url,secret}=settings();const r=await fetch(url+'/rest/v1/'+TABLE+path,{method,headers:{apikey:secret,Authorization:'Bearer '+secret,'Content-Type':'application/json',...(prefer?{Prefer:prefer}:{})},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error('Session store unavailable (HTTP '+r.status+')');if(r.status===204||prefer?.includes('return=minimal'))return null;return r.json()}
 export async function saveSession(id,tokens){const hash=sessionHash(id);if(scoped())return tx(c=>c.query('insert into sc3.yahoo_oauth_sessions(session_hash,token_ciphertext,expires_at) values($1,$2,$3) on conflict(session_hash) do update set token_ciphertext=excluded.token_ciphertext,expires_at=excluded.expires_at',[hash,tokenEncrypt(tokens),new Date(Date.now()+30*86400000)]),false);await request('?on_conflict=session_hash',{method:'POST',prefer:'resolution=merge-duplicates,return=minimal',body:{session_hash:hash,token_ciphertext:tokenEncrypt(tokens),expires_at:new Date(Date.now()+30*86400000).toISOString()}})}
 export async function loadSession(id){if(typeof id!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(id))return null;if(scoped()){const rows=await tx(async c=>(await c.query('select token_ciphertext from sc3.yahoo_oauth_sessions where session_hash=$1 and expires_at>now()',[sessionHash(id)])).rows);return rows[0]?tokenDecrypt(rows[0].token_ciphertext):null}const rows=await request('?session_hash=eq.'+sessionHash(id)+'&expires_at=gt.'+encodeURIComponent(new Date().toISOString())+'&select=token_ciphertext&limit=1');return rows?.[0]?tokenDecrypt(rows[0].token_ciphertext):null}
+// The OAuth callback issues sessions only after the account matches the enrolled owner.
+export async function hasProductionOwnerSession(id,{now=new Date(),readSession=request,readOwner=requestOwner}={}){
+ if(typeof id!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(id))return false;
+ const sessions=await readSession('?session_hash=eq.'+sessionHash(id)+'&expires_at=gt.'+encodeURIComponent(now.toISOString())+'&select=expires_at&limit=1');
+ if(sessions?.length!==1||!(Date.parse(sessions[0].expires_at)>now.getTime()))return false;
+ const owner=await readOwner('?singleton=eq.true&select=singleton&limit=1');
+ return owner?.length===1&&owner[0].singleton===true;
+}
 export async function deleteSession(id){if(typeof id==='string'&&/^[A-Za-z0-9_-]{43}$/.test(id)){if(scoped())return tx(c=>c.query('delete from sc3.yahoo_oauth_sessions where session_hash=$1',[sessionHash(id)]),false);await request('?session_hash=eq.'+sessionHash(id),{method:'DELETE',prefer:'return=minimal'})}}
 export function storeConfigured(){try{if(!scoped())settings();return true}catch{return false}}
 
