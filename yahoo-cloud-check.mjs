@@ -36,7 +36,7 @@ function validPlayers(players, count, seen) {
 
 // Dependencies use the application's existing session loader and Yahoo parsers.
 // This check never refreshes OAuth, saves snapshots, or returns player/token data.
-export async function yahooCloudCheck(req, res, {loadSession, read, findTeams, findPlayers, env = process.env, now = Date.now} = {}) {
+export async function yahooCloudCheck(req, res, {loadSession, read, findTeams, findPlayers, env = process.env, now = Date.now, log = console.info} = {}) {
   res.setHeader('Cache-Control', 'private, no-store');
   res.setHeader('Referrer-Policy', 'no-referrer');
   if (req.method !== 'GET') {
@@ -50,10 +50,23 @@ export async function yahooCloudCheck(req, res, {loadSession, read, findTeams, f
     startedAt: new Date(now()).toISOString(), readOnly: true,
     snapshotWrites: 0, oauthRefreshAttempted: false, checks: []
   };
-  const finish = (status, category) => res.status(status).json({
-    ...result, status: status === 200 ? 'PASS' : status >= 500 || status === 422 ? 'FAILED' : 'UNVERIFIED',
-    category, completedAt: new Date(now()).toISOString()
-  });
+  const finish = (status, category, outcome) => {
+    const summary = {
+      ...result, status: outcome ?? (status === 200 ? 'PASS' : status >= 500 || status === 422 ? 'FAILED' : 'UNVERIFIED'),
+      category, completedAt: new Date(now()).toISOString()
+    };
+    log('YAHOO_CLOUD_ACCESS_CHECK ' + JSON.stringify(summary));
+    return res.status(status).json(summary);
+  };
+  // Activate only for an explicitly bounded UTC test window at deployment time.
+  // The cron registration remains until removed from vercel.json and redeployed.
+  const cutoff = env.YAHOO_CLOUD_CHECK_UNTIL;
+  if (!cutoff) return finish(200, 'test_window_not_configured', 'SKIPPED');
+  const until = Date.parse(cutoff);
+  const canonical = cutoff.includes('.') ? cutoff : cutoff.replace('Z', '.000Z');
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(cutoff) || !Number.isFinite(until) || new Date(until).toISOString() !== canonical) return finish(503, 'invalid_test_window');
+  if (now() >= until) return finish(200, 'test_window_expired', 'SKIPPED');
+  result.testWindowUntil = new Date(until).toISOString();
   let session;
   try {
     session = (await loadSession())?.tokens;

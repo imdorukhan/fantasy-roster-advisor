@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {yahooCloudCheck} from './yahoo-cloud-check.mjs';
 import handler from './api/auto-data.js';
+import {readFileSync} from 'node:fs';
 
 const secret = 'fixture-cron-secret-with-at-least-32-characters';
 const instant = Date.parse('2026-11-18T22:00:00Z');
@@ -15,10 +16,12 @@ function response() {
 }
 function fixture() {
   const requests = [];
+  const logs = [];
   const teams = Array.from({length: 14}, (_, i) => ({key: `478.l.85892.t.${i + 1}`}));
   let loads = 0;
   const dependencies = {
-    env: {CRON_SECRET: secret}, now: () => instant,
+    env: {CRON_SECRET: secret, YAHOO_CLOUD_CHECK_UNTIL: '2026-11-19T22:00:00Z'}, now: () => instant,
+    log: message => logs.push(message),
     async loadSession() { loads++; return {tokens: {access_token: 'fixture-access-token', expires_at: instant + 3600000}}; },
     findTeams: raw => raw.parsedTeams,
     findPlayers: raw => raw.parsedPlayers,
@@ -33,7 +36,7 @@ function fixture() {
       throw Error('Unexpected Yahoo path');
     }
   };
-  return {dependencies, requests, teams, loads: () => loads};
+  return {dependencies, requests, teams, logs, loads: () => loads};
 }
 const request = () => ({method: 'GET', headers: {authorization: `Bearer ${secret}`}});
 
@@ -56,6 +59,7 @@ test('invalid authorization including Unicode and query-string credentials never
     assert.ok([401, 405].includes(res.code));
     assert.equal(fixtureData.loads(), 0);
     assert.equal(fixtureData.requests.length, 0);
+    assert.equal(fixtureData.logs.length, 0);
   }
 });
 
@@ -72,6 +76,9 @@ test('valid session checks 14 unique rosters and both filter samples without ret
   assert.equal(res.body.snapshotWrites, 0);
   assert.equal(res.body.oauthRefreshAttempted, false);
   assert.doesNotMatch(JSON.stringify(res.body), /fixture-access-token|Fixture player|Fixture waiver/);
+  assert.equal(fixtureData.logs.length, 1);
+  assert.deepEqual(JSON.parse(fixtureData.logs[0].slice('YAHOO_CLOUD_ACCESS_CHECK '.length)), res.body);
+  assert.doesNotMatch(fixtureData.logs[0], /fixture-access-token|Fixture player|Fixture waiver/);
 });
 
 test('missing and expired authorization stops before Yahoo access or refresh', async () => {
@@ -135,4 +142,57 @@ test('session-store exceptions are classified without echoing their contents', a
   assert.equal(res.code, 503);
   assert.equal(res.body.category, 'session_store_unavailable');
   assert.doesNotMatch(JSON.stringify(res.body), /private connection/);
+  assert.doesNotMatch(fixtureData.logs.join('\n'), /private connection/);
+});
+
+test('an unconfigured, expired or invalid test window stops before session access', async () => {
+  const cases = [
+    [undefined, 200, 'SKIPPED', 'test_window_not_configured'],
+    ['2026-11-18T22:00:00Z', 200, 'SKIPPED', 'test_window_expired'],
+    ['2026-11-18T21:59:59.999Z', 200, 'SKIPPED', 'test_window_expired'],
+    ['invalid-secret-like-input', 503, 'FAILED', 'invalid_test_window'],
+    ['2026-02-30T22:00:00Z', 503, 'FAILED', 'invalid_test_window'],
+    ['2026-11-19T22:00:00+00:00', 503, 'FAILED', 'invalid_test_window']
+  ];
+  for (const [cutoff, code, status, category] of cases) {
+    const fixtureData = fixture(), res = response();
+    fixtureData.dependencies.env.YAHOO_CLOUD_CHECK_UNTIL = cutoff;
+    await yahooCloudCheck(request(), res, fixtureData.dependencies);
+    assert.equal(res.code, code);
+    assert.equal(res.body.status, status);
+    assert.equal(res.body.category, category);
+    assert.equal(fixtureData.loads(), 0);
+    assert.equal(fixtureData.requests.length, 0);
+    assert.equal(fixtureData.logs.length, 1);
+    assert.doesNotMatch(fixtureData.logs[0], /invalid-secret-like-input/);
+  }
+});
+
+test('a window remains open immediately before its UTC cutoff', async () => {
+  const fixtureData = fixture(), res = response();
+  fixtureData.dependencies.env.YAHOO_CLOUD_CHECK_UNTIL = '2026-11-18T22:00:00.001Z';
+  await yahooCloudCheck(request(), res, fixtureData.dependencies);
+  assert.equal(res.code, 200);
+  assert.equal(res.body.status, 'PASS');
+  assert.equal(fixtureData.loads(), 1);
+});
+
+test('a classified upstream failure has one safe, correlated summary log', async () => {
+  const fixtureData = fixture(), res = response();
+  fixtureData.dependencies.read = async () => { throw Object.assign(Error('Authorization: Bearer private-upstream-echo'), {status: 403}); };
+  await yahooCloudCheck(request(), res, fixtureData.dependencies);
+  assert.equal(res.code, 502);
+  assert.equal(fixtureData.logs.length, 1);
+  const logged = JSON.parse(fixtureData.logs[0].slice('YAHOO_CLOUD_ACCESS_CHECK '.length));
+  assert.deepEqual(logged, res.body);
+  assert.equal(logged.checks[0].http, 403);
+  assert.doesNotMatch(fixtureData.logs[0], /Authorization|Bearer|private-upstream-echo/);
+});
+
+test('the diagnostic has its own daily cron while the league sync schedule remains registered', () => {
+  const config = JSON.parse(readFileSync(new URL('./vercel.json', import.meta.url), 'utf8'));
+  assert.deepEqual(config.crons, [
+    {path: '/api/auto-data?cron=1', schedule: '15 12 * * *'},
+    {path: '/api/auto-data?yahooCloudCheck=1', schedule: '35 12 * * *'}
+  ]);
 });
