@@ -110,7 +110,11 @@ async function sc3CloudHealth(req,res){
   const {report,links,historyEnd}=await readPerformance({scoped:true,start:process.env.SC3_SEASON_START,end:process.env.SC3_HISTORY_END});
   const w=report.players.find(p=>p.id==='5104157');
   const c=report.players.find(p=>p.id==='3975');
-  return res.status(200).json({status:'ok',scopedRole:true,counts,historyEnd,pool:report.pool,rankingAvailable:report.rankingAvailable,verifiedLinks:links.size,publicSamples:{wembanyama:{rank:w?.z?.rank??null,chart:w?.chart?.length??0},curry:{rank:c?.z?.rank??null,chart:c?.chart?.length??0}}});
+  const publicTestData=req.query?.sample==='1'?{
+   source:report.source,historyEnd,pool:report.pool,
+   players:['5104157','3975','4898371'].map(espnId=>({espnId,performance:report.players.find(p=>p.id===espnId)||null}))
+  }:undefined;
+  return res.status(200).json({status:'ok',scopedRole:true,counts,historyEnd,pool:report.pool,rankingAvailable:report.rankingAvailable,verifiedLinks:links.size,publicSamples:{wembanyama:{rank:w?.z?.rank??null,chart:w?.chart?.length??0},curry:{rank:c?.z?.rank??null,chart:c?.chart?.length??0}},publicTestData});
  }catch(e){
   const allowed=['28P01','28000','42501','ECONNREFUSED','ETIMEDOUT','ENOTFOUND','EAI_AGAIN','SELF_SIGNED_CERT_IN_CHAIN','UNABLE_TO_VERIFY_LEAF_SIGNATURE','CERT_HAS_EXPIRED','ERR_TLS_CERT_ALTNAME_INVALID','53400','53300','57P01','25006','42601','42703','42P01'];
   const safeMessages=['Invalid scoped PostgreSQL connection','SC3 database URL missing','SC3 database URL scheme missing','SC3 database URL role mismatch','SC3 database URL endpoint mismatch','SC3 database password segment invalid','Shared SC3 database is not enabled','Scoped role verification failed','Incomplete NBA history','Stored game-log coverage mismatch','Performance report unavailable','Invalid ISO date range','Invalid dates'];
