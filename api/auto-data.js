@@ -240,6 +240,16 @@ async function liveHandler(req,res){
   const matches=findTeams(teams).filter(x=>/\.l\.85892\.t\.5$/.test(x.key));
   const unique=[...new Map(matches.map(x=>[x.key,x])).values()];
   if(unique.length!==1)return response(res,409,{mode:'UNAVAILABLE',error:'League 85892 team 5 was not found in the authorized Yahoo account',teamMatches:unique.length});
+  if(req.query?.performance==='1'){
+   const ids=[...new Set(String(req.query.ids||'').split(',').filter(x=>/^\d+$/.test(x)))];
+   if(!ids.length||ids.length>25)return response(res,400,{error:'Supply 1–25 Yahoo player IDs'});
+   try{
+    const {readPerformance}=await import('../performance-store.mjs');
+    const {report,links,historyEnd}=await readPerformance({url:process.env.SC3_DEV_SUPABASE_URL,secret:process.env.SC3_DEV_SUPABASE_SECRET_KEY,expectedRef:process.env.SC3_DEV_SUPABASE_REF,start:process.env.SC3_SEASON_START,end:process.env.SC3_HISTORY_END});
+    const byId=new Map(report.players.map(p=>[p.id,p]));
+    return response(res,200,{mode:'YAHOO_LINKED_PERFORMANCE',historyEnd,source:report.source,pool:report.pool,players:ids.map(yahooId=>({yahooId,performance:links.has(yahooId)?byId.get(links.get(yahooId))||null:null})),readOnly:true});
+   }catch(e){return response(res,503,{mode:'PERFORMANCE_UNAVAILABLE',error:'Isolated verified performance data unavailable',readOnly:true})}
+  }
   if(req.query?.playerStats==='1'){
    const ids=String(req.query.ids||'').split(',').filter(x=>/^\d+$/.test(x));
    if(!ids.length||ids.length>25)return response(res,400,{error:'Supply 1–25 Yahoo player IDs'});
