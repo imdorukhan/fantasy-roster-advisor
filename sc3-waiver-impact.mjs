@@ -61,7 +61,11 @@ export async function enrichWaiverImpact(waiverPlan,matchup,{now,fetcher=fetch})
  });
  const yesterday=new Date(Date.parse(leagueToday(now)+'T12:00:00Z')-86400_000).toISOString().slice(0,10);
  if(!historyThrough||historyThrough<yesterday)return {...waiverPlan,impactStatus:'Latest NBA history has not synced',impactCoverage:0};
- const linked=catalog.length?await verifyMissingYahooPlayers(candidates.filter(row=>!known.some(k=>k.yahoo_id===row.yahooId)),catalog,fetcher):[];
+ const knownIds=new Set(known.map(row=>row.yahoo_id));
+ const missing=candidates.filter(row=>!knownIds.has(row.yahooId));
+ const catalogNames=new Set(catalog.map(player=>player.name.normalize('NFKD').replace(/\p{Diacritic}/gu,'').toLowerCase().replace(/[^a-z0-9]/g,'')));
+ const toVerify=missing.filter(player=>catalogNames.has(player.name.normalize('NFKD').replace(/\p{Diacritic}/gu,'').toLowerCase().replace(/[^a-z0-9]/g,''))).slice(0,20);
+ const linked=toVerify.length?await verifyMissingYahooPlayers(toVerify,catalog,fetcher):[];
  const pairs=[...known,...linked.map(row=>({yahoo_id:row.yahooId,espn_id:row.espnId}))];
  const logs=pairs.length?await withScopedTransaction(async c=>(await c.query(`
   select i.yahoo_id,g.stats from jsonb_to_recordset($1::jsonb) as i(yahoo_id text,espn_id text)
@@ -72,5 +76,5 @@ export async function enrichWaiverImpact(waiverPlan,matchup,{now,fetcher=fetch})
   ) g`,[JSON.stringify(pairs),historyThrough])).rows):[];
  const rows=applyWaiverImpact(waiverPlan.rows,logs,baseline);
  return {...waiverPlan,rows,impactCoverage:rows.filter(row=>row.impact).length,impactChecked:candidates.length,
-  historyThrough,impactObservedAt:baseline.observedAt};
+  historyThrough,impactObservedAt:baseline.observedAt,displayImpactCoverage:rows.slice(0,25).filter(row=>row.impact).length};
 }

@@ -38,7 +38,7 @@ export function rankWaiverOpportunities(candidates,days,starters){
  }).sort((a,b)=>(b.extraStarts??-1)-(a.extraStarts??-1)||a.name.localeCompare(b.name));
 }
 
-export async function readWaiverOpportunities(waivers,days,starters,budget,fetcher=fetch){
+export async function readWaiverOpportunities(waivers,days,starters,budget,fetcher=fetch,{rankAll=false}={}){
  let verified=waivers.players.filter(p=>p.nbaTeam&&p.eligiblePositions?.length);
  let source='Yahoo SC3 waiver snapshot';
  if(verified.length<waivers.count){
@@ -56,5 +56,5 @@ export async function readWaiverOpportunities(waivers,days,starters,budget,fetch
  }
  const ranked=rankWaiverOpportunities(verified,days,starters);
  return {evaluated:verified.length,rankable:ranked.filter(player=>player.extraStarts!==null).length,
-  source,totalWaivers:waivers.count,remainingAdds:budget.remaining,rows:ranked.slice(0,25),readOnly:true};
+  source,totalWaivers:waivers.count,remainingAdds:budget.remaining,rows:rankAll?ranked:ranked.slice(0,25),readOnly:true};
 }

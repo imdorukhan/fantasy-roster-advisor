@@ -82,9 +82,9 @@ function renderWaiverPlan(plan){
  };
  const table=plan.rows.map(row=>'<tr><td>'+esc(row.name)+'</td><td>'+esc(row.waiverStatus)+'</td><td>'+esc(row.extraStarts??'Unavailable')+'</td><td>'+esc(row.dates.join(', ')||'—')+'</td><td>'+impactCell(row)+'</td></tr>').join('');
  const impact=plan.impactStatus?'<p class="small">'+esc(plan.impactStatus)+'</p>':plan.impactChecked?
-  '<p class="small">9-CAT coverage '+esc(plan.impactCoverage)+'/'+esc(plan.impactChecked)+' displayed candidates with extra starts · ESPN through '+esc(plan.historyThrough)+' · Yahoo observed '+esc(new Date(plan.impactObservedAt).toLocaleString())+'.</p>':'';
+  '<p class="small">9-CAT coverage '+esc(plan.impactCoverage)+'/'+esc(plan.impactChecked)+' eligible candidates in the full waiver pool · '+esc(plan.displayImpactCoverage)+' displayed with 9-CAT impact · ESPN through '+esc(plan.historyThrough)+' · Yahoo observed '+esc(new Date(plan.impactObservedAt).toLocaleString())+'.</p>':'';
  panel.innerHTML='<p>'+esc(plan.evaluated)+' of '+esc(plan.totalWaivers)+' waiver players evaluated · '+esc(plan.rankable)+' with verified dates · Top '+esc(plan.rows.length)+' shown · '+esc(plan.remainingAdds)+' weekly adds remaining.</p>'+
- '<p class="small">Extra starts rank first. Among displayed ties, projected contribution to trailing or tied categories decides the order. Turnovers count against you. Each candidate is evaluated individually after the listed waiver date.</p>'+impact+
+ '<p class="small">Extra starts rank first. Among candidates with the same start count, projected contribution to trailing or tied categories decides the order. Turnovers count against you. Each candidate is evaluated individually after the listed waiver date.</p>'+impact+
  (table?'<div class="table-wrap"><table><thead><tr><th>Player</th><th>Yahoo status</th><th>Extra starts</th><th>Eligible game dates</th><th>9-CAT matchup impact</th></tr></thead><tbody>'+table+'</tbody></table></div>':'');
 }
 function renderFreeAgents(){

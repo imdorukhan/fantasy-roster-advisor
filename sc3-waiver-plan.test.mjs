@@ -23,4 +23,7 @@ test('complete snapshot ranks the full pool and limits displayed results',async(
  assert.equal(all.rankable,50);
  assert.equal(all.rows.length,25);
  assert.equal(all.rows[0].extraStarts,1);
+ const expanded=await readWaiverOpportunities({players,count:50},days,[{count:1,position:'G'},{count:1,position:'SF'}],{remaining:5},()=>{throw Error('unexpected live fetch');},{rankAll:true});
+ assert.equal(expanded.rows.length,50);
+ assert.ok(expanded.rows.some(row=>row.name==='Candidate 49'));
 });

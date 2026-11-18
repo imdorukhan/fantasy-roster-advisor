@@ -158,10 +158,11 @@ export async function buildStreamingPlan(availability, yahooRows, {now=new Date(
       }
     }
     const result = rankStreamingFits(metadata,daily.map(({date,openSlots,schedule})=>({date,openSlots,teams:schedule.teams})),acquisitions);
-    let waiverPlan=await readWaiverOpportunities(availability.waivers,daily,starters,acquisitions,fetcher)
+    let waiverPlan=await readWaiverOpportunities(availability.waivers,daily,starters,acquisitions,fetcher,{rankAll:includeWaiverImpact})
       .catch(()=>({error:'Current Yahoo waiver candidates unavailable'}));
     if(includeWaiverImpact&&!waiverPlan.error)waiverPlan=await enrichWaiverImpact(waiverPlan,matchup,{now,fetcher})
       .catch(()=>({...waiverPlan,impactStatus:'Verified NBA candidate statistics unavailable',impactCoverage:0}));
+    if(waiverPlan.rows)waiverPlan.rows=waiverPlan.rows.slice(0,25);
     return {...result,week,acquisitions,days:coverage,waiverPlan};
   } catch {
     return {available:false,reason:'Streaming schedule or eligibility verification failed',week,acquisitions};
