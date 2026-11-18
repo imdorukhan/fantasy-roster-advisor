@@ -13,7 +13,7 @@ export default async function handler(req,res){
  if(pending.bootstrap!==true&&pending.diagnostic!==true&&pending.ownerLogin!==true)return res.status(403).json({error:'Setup authorization expired or missing; restart setup',help:'Open /api/auth/yahoo/setup'});
  let stage='token_exchange';
  try{
-  const token=await tokenRequest({grant_type:'authorization_code',code:req.query.code,redirect_uri:redirect,code_verifier:pending.verifier});
+  const token=await tokenRequest({grant_type:'authorization_code',code:req.query.code,redirect_uri:redirect(),code_verifier:pending.verifier});
   if(!token.access_token||!token.refresh_token)throw Error('Yahoo response missing required tokens');
   stage='fantasy_access';
   if(pending.diagnostic===true){
