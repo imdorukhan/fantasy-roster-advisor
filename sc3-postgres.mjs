@@ -1,3 +1,4 @@
+import {supabaseRoots} from './sc3-supabase-ca.mjs';
 // Only explicit scoped credentials; never reuse a Supabase service-role key.
 const ref='bmsfbcuausbfzheufjtc';
 export function pgConfig(env=process.env){
@@ -24,7 +25,7 @@ export function pgConfig(env=process.env){
    }
   }catch{ /* Raw password in an exact fixed envelope; never log it. */ }
   if(!password)throw Error('SC3 database password segment invalid');
-  return {host,port:5432,database:'postgres',user,password,ssl:{rejectUnauthorized:true},connectionTimeoutMillis:10000,statement_timeout:20000,max:2};
+  return {host,port:5432,database:'postgres',user,password,ssl:{ca:supabaseRoots,rejectUnauthorized:true,minVersion:'TLSv1.2'},connectionTimeoutMillis:10000,statement_timeout:20000,max:2};
  }
  // These error labels describe only the public connection envelope.
  if(!/^postgres(?:ql)?:\/\//.test(raw))throw Error('SC3 database URL scheme missing');
