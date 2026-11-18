@@ -127,6 +127,15 @@ async function sc3CloudHealth(req,res){
 }
 
 export default async function handler(req,res){
+ if(req.query?.sc3DailySync==='1'){
+  res.setHeader('Cache-Control','private, no-store');
+  if(process.env.VERCEL_ENV!=='preview'||process.env.SC3_SHARED_DB!=='1')return res.status(404).json({error:'Not found'});
+  if(req.method!=='GET')return res.status(405).json({error:'Method not allowed'});
+  // This preview is protected by Vercel Authentication. The operation only
+  // refreshes publicly available NBA data, never Yahoo data.
+  try{const {dailySync}=await import('../sc3-daily-sync.mjs');const result=await dailySync();return res.status(result.complete?200:503).json(result)}
+  catch{return res.status(503).json({error:'SC3 daily sync unavailable'})}
+ }
  if(req.query?.sc3Health==='1')return sc3CloudHealth(req,res);
  if(req.query?.cron==='1')return backgroundLeagueSync(req,res);
  if(req.query?.depthTeam){
