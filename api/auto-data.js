@@ -107,14 +107,14 @@ async function sc3CloudHealth(req,res){
    return rows[0];
   });
   stage='performance';
-  const {report,links,historyEnd}=await readPerformance({scoped:true,start:process.env.SC3_SEASON_START,end:process.env.SC3_HISTORY_END});
+  const {report,links,historyEnd,expectedEnd,missingDays,fresh}=await readPerformance({scoped:true,start:process.env.SC3_SEASON_START});
   const w=report.players.find(p=>p.id==='5104157');
   const c=report.players.find(p=>p.id==='3975');
   const publicTestData=req.query?.sample==='1'?{
    source:report.source,historyEnd,pool:report.pool,
    players:['5104157','3975','4898371'].map(espnId=>({espnId,performance:report.players.find(p=>p.id===espnId)||null}))
   }:undefined;
-  return res.status(200).json({status:'ok',scopedRole:true,counts,historyEnd,pool:report.pool,rankingAvailable:report.rankingAvailable,verifiedLinks:links.size,publicSamples:{wembanyama:{rank:w?.z?.rank??null,chart:w?.chart?.length??0},curry:{rank:c?.z?.rank??null,chart:c?.chart?.length??0}},publicTestData});
+  return res.status(200).json({status:fresh?'ok':'degraded',scopedRole:true,counts,historyEnd,expectedEnd,missingDays,fresh,pool:report.pool,rankingAvailable:report.rankingAvailable,verifiedLinks:links.size,publicSamples:{wembanyama:{rank:w?.z?.rank??null,chart:w?.chart?.length??0},curry:{rank:c?.z?.rank??null,chart:c?.chart?.length??0}},publicTestData});
  }catch(e){
   const allowed=['28P01','28000','42501','ECONNREFUSED','ETIMEDOUT','ENOTFOUND','EAI_AGAIN','SELF_SIGNED_CERT_IN_CHAIN','UNABLE_TO_VERIFY_LEAF_SIGNATURE','CERT_HAS_EXPIRED','ERR_TLS_CERT_ALTNAME_INVALID','53400','53300','57P01','25006','42601','42703','42P01'];
   const safeMessages=['Invalid scoped PostgreSQL connection','SC3 database URL missing','SC3 database URL scheme missing','SC3 database URL role mismatch','SC3 database URL endpoint mismatch','SC3 database password segment invalid','Shared SC3 database is not enabled','Scoped role verification failed','Incomplete NBA history','Stored game-log coverage mismatch','Performance report unavailable','Invalid ISO date range','Invalid dates'];
@@ -279,10 +279,10 @@ async function bridgeHandler(req,res){
    const ids=[...new Set(String(req.query.ids||'').split(',').filter(x=>/^\d+$/.test(x)))];
    if(!ids.length||ids.length>25)return response(res,400,{error:'Supply 1–25 Yahoo player IDs'});
    const {readPerformance}=await import('../performance-store.mjs');
-   const {report,links,historyEnd}=await readPerformance({scoped:true,start:process.env.SC3_SEASON_START});
+   const {report,links,historyEnd,expectedEnd,missingDays,fresh}=await readPerformance({scoped:true,start:process.env.SC3_SEASON_START});
    const byId=new Map(report.players.map(p=>[p.id,p]));
    const get=id=>links.has(id)?byId.get(links.get(id))||null:null;
-   if(req.query.performance==='1')return response(res,200,{...common,mode:'YAHOO_LINKED_PERFORMANCE',historyEnd,source:report.source,pool:report.pool,players:ids.map(yahooId=>({yahooId,performance:get(yahooId)}))});
+   if(req.query.performance==='1')return response(res,200,{...common,mode:'YAHOO_LINKED_PERFORMANCE',historyEnd,expectedEnd,missingDays,fresh,source:report.source,pool:report.pool,players:ids.map(yahooId=>({yahooId,performance:get(yahooId)}))});
    return response(res,200,{...common,mode:'YAHOO_PLAYER_STATS',source:'ESPN verified performance, not Yahoo live stats',players:ids.map(yahooId=>({yahooId,stats:null,mpg:null})),coverage:{requested:ids.length,returned:0,errors:[{section:'Yahoo live player stats unavailable in snapshot bridge'}]}});
   }
   if(req.query?.officialMatchup==='1'){
