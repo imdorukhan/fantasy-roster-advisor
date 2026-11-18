@@ -1,3 +1,4 @@
+import {readWaiverOpportunities} from './sc3-waiver-plan.mjs';
 import {streamingCalendar} from './decision-core.mjs';
 import {leagueToday, officialMatchupFromScoreboard} from './yahoo-scoreboard.mjs';
 import {collect} from './scripts/collect-yahoo-ownership.mjs';
@@ -13,7 +14,7 @@ function fresh(row, now) {
   return Number.isFinite(observed) && observed <= now.getTime() && now.getTime() - observed <= maxAge;
 }
 
-function yahooWindow(rows, now) {
+export function yahooWindow(rows, now) {
   const {settings, roster, scoreboard} = rows;
   if (![settings, roster, scoreboard].every(row => fresh(row, now))) throw Error('Yahoo matchup, settings or roster snapshot is missing or stale');
   const matchup = officialMatchupFromScoreboard(scoreboard.payload, {observedAt: scoreboard.observed_at, now});
@@ -34,7 +35,8 @@ function yahooWindow(rows, now) {
   }
   return {
     week: matchup.week, start: leagueToday(now), end: matchup.weekEnd, starters,
-    acquisitions: {limit:Number(limit), used:Number(used), remaining:Number(limit) - Number(used), observedAt:roster.observed_at}
+    acquisitions: {limit:Number(limit), used:Number(used), remaining:Number(limit) - Number(used), observedAt:roster.observed_at,
+      fab:/^\d+$/.test(String(teamMeta.find(part=>part?.faab_balance!==undefined)?.faab_balance))?Number(teamMeta.find(part=>part?.faab_balance!==undefined).faab_balance):null}
   };
 }
 
@@ -58,18 +60,22 @@ export function datedYahooRows(html, day, teamId) {
   }
   return [...body.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map(([, row]) => {
     const player = row.match(/<a\b[^>]*\bclass=["'][^"']*\bname\b[^"']*["'][^>]*\bdata-ys-playerid=["'](\d+)["'][^>]*>([\s\S]*?)<\/a>/i);
-    const team = row.match(/<span\s+class=["']Fz-xxs["']>\s*([A-Z]{2,3})\s*-\s*[^<]+<\/span>/i);
+    const team = row.match(/<span\s+class=["']Fz-xxs["']>\s*([A-Z]{2,3})\s*-\s*([^<]+)<\/span>/i);
     return {
       slot: row.match(/\bdata-pos=["']([^"']+)["']/i)?.[1],
       occupied: /\bdata-ys-playerid=["']\d+["']/i.test(row),
       empty: />\s*(?:\(Empty\)|Empty)\s*</i.test(row),
-      yahooId:player?.[1], name:plain(player?.[2]), nbaTeam:team ? nbaTeam(team[1]) : null
+      yahooId:player?.[1], name:plain(player?.[2]), nbaTeam:team ? nbaTeam(team[1]) : null,
+      eligiblePositions:team?.[2].split(',').map(value=>value.trim()).filter(value=>/^(PG|SG|SF|PF|C)$/.test(value))??[]
     };
   });
 }
 
 export function openYahooSlots(html, day, starters) {
-  const rows = datedYahooRows(html, day, 5);
+  return openSlotsFromRows(datedYahooRows(html,day,5),starters);
+}
+
+function openSlotsFromRows(rows,starters){
   const open = [];
   for (const {position, count} of starters) {
     const matches = rows.filter(row => row.slot === position);
@@ -126,10 +132,13 @@ export async function buildStreamingPlan(availability, yahooRows, {now=new Date(
     }
     const checkDay = async date => {
       const [lineup,schedule] = await Promise.allSettled([
-        source(rosterUrl+'?date='+date,'text').then(html => openYahooSlots(html,date,starters)),
+        source(rosterUrl+'?date='+date,'text').then(html=>{
+          const rows=datedYahooRows(html,date,5);
+          return {rows,open:openSlotsFromRows(rows,starters)};
+        }),
         source(espnUrl+date.replaceAll('-',''),'json').then(json => upcomingTeams(json,date,now))
       ]);
-      return {date, openSlots:lineup.status==='fulfilled'?lineup.value:null, schedule:schedule.status==='fulfilled'?schedule.value:null};
+      return {date, openSlots:lineup.status==='fulfilled'?lineup.value.open:null, lineup:lineup.status==='fulfilled'?lineup.value.rows:null, schedule:schedule.status==='fulfilled'?schedule.value:null};
     };
     const daily = await Promise.all(dates.map(checkDay));
     const coverage = daily.map(({date,openSlots,schedule}) => ({date,openSlots,scheduledGames:schedule?.gameCount??null}));
@@ -148,7 +157,9 @@ export async function buildStreamingPlan(availability, yahooRows, {now=new Date(
       }
     }
     const result = rankStreamingFits(metadata,daily.map(({date,openSlots,schedule})=>({date,openSlots,teams:schedule.teams})),acquisitions);
-    return {...result,week,acquisitions,days:coverage};
+    const waiverPlan=await readWaiverOpportunities(availability.waivers,daily,starters,acquisitions,fetcher)
+      .catch(()=>({error:'Current Yahoo waiver candidates unavailable'}));
+    return {...result,week,acquisitions,days:coverage,waiverPlan};
   } catch {
     return {available:false,reason:'Streaming schedule or eligibility verification failed',week,acquisitions};
   }

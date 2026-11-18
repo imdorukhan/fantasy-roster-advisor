@@ -11,7 +11,7 @@ function decode(s) {
     return names[ref.toLowerCase()];
   }).trim();
 }
-function parsePage(html, filter) {
+export function parsePage(html, filter) {
   const label = filter === 'FA' ? 'Free Agents Only' : 'Waivers Only';
   if (!html.includes('/nba/85892/') ||
       !html.includes('<option value="'+filter+'" selected>'+label+'</option>')) throw Error('Yahoo league or status filter not verified');
@@ -27,7 +27,7 @@ function parsePage(html, filter) {
     if (filter === 'FA' ? status !== 'FA' : !/^W \([A-Z][a-z]{2} \d{1,2}\)$/.test(status)) throw Error('Unexpected Yahoo roster status: '+status);
     const position = row.match(/<span\s+class=["']Fz-xxs["']>\s*([A-Z]{2,3})\s*-\s*((?:PG|SG|SF|PF|C)(?:,\s*(?:PG|SG|SF|PF|C))*)\s*<\/span>/i);
     const player = {yahooId:a[1],name:decode(a[2]),availability:filter === 'FA' ? 'FREE_AGENT' : 'WAIVERS',yahooRosterStatus:status};
-    if (filter === 'FA' && position) {
+    if (position) {
       player.nbaTeam = position[1];
       player.eligiblePositions = position[2].split(',').map(value => value.trim());
     }

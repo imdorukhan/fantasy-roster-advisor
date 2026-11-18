@@ -129,6 +129,13 @@ async function sc3CloudHealth(req,res){
 }
 
 export default async function handler(req,res){
+ if(req.query?.sc3LeagueRosters==='1'){
+  if(!await requireSc3Read(req,res))return;
+  try{
+   const {readLeagueRosters}=await import('../sc3-league-rosters.mjs');
+   return response(res,200,await readLeagueRosters());
+  }catch{return response(res,503,{error:'Verified Yahoo league rosters unavailable'});}
+ }
  if(req.query?.sc3MatchupLineups==='1'){
   if(!await requireSc3Read(req,res))return;
   try{
