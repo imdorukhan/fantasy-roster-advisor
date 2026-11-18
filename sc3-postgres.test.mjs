@@ -17,3 +17,12 @@ test('session pooler accepts scoped encoded and raw password characters without 
  assert.equal(raw.host,'aws-0-us-west-1.pooler.supabase.com');assert.equal(raw.ssl.rejectUnauthorized,true);
  for(const url of [prefix+'sample@evil.example:5432/postgres',prefix+'sample'+suffix+'?sslmode=disable',prefix+'sample'+suffix.replace(':5432',':6543'),prefix.replace('sc3_app.','postgres.')+'sample'+suffix])assert.throws(()=>pgConfig({...env,SC3_DATABASE_URL:url}));
 });
+
+test('official Supabase CA roots are self-signed valid trust anchors',async()=>{
+ const {X509Certificate}=await import('node:crypto');
+ const c=pgConfig(env);
+ assert.equal(c.ssl.rejectUnauthorized,true);
+ assert.equal(c.ssl.minVersion,'TLSv1.2');
+ assert.equal(c.ssl.ca.length,2);
+ for(const pem of c.ssl.ca){const cert=new X509Certificate(pem);assert.equal(cert.ca,true);assert.equal(cert.subject,cert.issuer);assert.equal(cert.verify(cert.publicKey),true);assert.match(cert.subject,/Supabase Root (2021|2025) CA/);assert.ok(Date.parse(cert.validTo)>Date.parse('2026-11-17'))}
+});
