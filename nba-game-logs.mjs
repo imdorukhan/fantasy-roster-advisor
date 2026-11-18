@@ -40,7 +40,11 @@ export async function ingestGameLogs({dates,fetcher=fetch,concurrency=4}){
  const BASE='https://site.api.espn.com/apis/site/v2/sports/basketball/nba/';
  const errors=[],events=new Map(),rows=[];
  async function load(url){const r=await fetcher(url,{signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error('HTTP '+r.status);return r.json()}
- for(const date of [...new Set(dates)])try{const d=await load(BASE+'scoreboard?dates='+date);if(!Array.isArray(d.events))throw Error('Invalid scoreboard');for(const e of d.events)if(e.status?.type?.completed===true&&e.id)events.set(String(e.id),e)}catch(e){errors.push({date,error:e.message})}
+ for(const date of [...new Set(dates)])try{const d=await load(BASE+'scoreboard?dates='+date);if(!Array.isArray(d.events))throw Error('Invalid scoreboard');for(const e of d.events){
+ if(e.season&&Number(e.season.type)!==2)continue;
+ if(e.status?.type?.completed===true&&e.id)events.set(String(e.id),e);
+ else if(!['STATUS_POSTPONED','STATUS_CANCELED','STATUS_CANCELLED'].includes(e.status?.type?.name))errors.push({date,eventId:e.id||null,error:'Game not final or status missing'});
+ }}catch(e){errors.push({date,error:e.message})}
  const list=[...events.values()],size=Math.max(1,Math.min(5,concurrency));
  for(let i=0;i<list.length;i+=size)await Promise.all(list.slice(i,i+size).map(async e=>{try{const data=await load(BASE+'summary?event='+encodeURIComponent(e.id));const parsed=parseBoxScore(data,e);if(!parsed.length)throw Error('No valid player rows');rows.push(...parsed)}catch(err){errors.push({eventId:e.id,error:err.message})}}));
  return {source:'ESPN NBA',observedAt:new Date().toISOString(),requestedDates:[...new Set(dates)],completedEvents:list.length,rows,errors,complete:errors.length===0};
