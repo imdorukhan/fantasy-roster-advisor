@@ -69,6 +69,14 @@ function renderProjection(projection){
  panel.innerHTML=header+baseline+coverage+(totals?'<h3>Expected production from covered upcoming starts</h3>'+totals:'')+outcome;
 }
 
+async function readMatchupEndpoint(url){
+ const options={credentials:'same-origin',cache:'no-store'};
+ const first=await fetch(url,options);
+ if(first.status!==503)return first;
+ await new Promise(resolve=>setTimeout(resolve,500));
+ return fetch(url,options);
+}
+
 async function refreshLineups(){
  const status=q('lineup-status');
  const list=q('lineup-teams');
@@ -76,7 +84,7 @@ async function refreshLineups(){
  q('projection').textContent='Checking player history coverage…';
  list.textContent='';
  try{
-  const response=await fetch('/api/auto-data?sc3MatchupLineups=1&projection=1',{credentials:'same-origin',cache:'no-store'});
+  const response=await readMatchupEndpoint('/api/auto-data?sc3MatchupLineups=1&projection=1');
   if(!response.ok)throw Error('Lineup details unavailable (HTTP '+response.status+')');
   const report=await response.json();
   if(report.mode!=='SC3_MATCHUP_LINEUPS')throw Error('Verified lineup details unavailable');
@@ -100,9 +108,9 @@ async function refreshLineups(){
 async function refresh(){
  const button=q('refresh');
  button.disabled=true;
- const lineups=refreshLineups();
+
  try{
-  const response=await fetch('/api/auto-data?live=1&officialMatchup=1',{credentials:'same-origin',cache:'no-store'});
+  const response=await readMatchupEndpoint('/api/auto-data?live=1&officialMatchup=1');
   if(!response.ok)throw Error('Yahoo snapshot unavailable (HTTP '+response.status+')');
   const view=officialMatchupView(await response.json());
   if(!view.usable)throw Error(view.reason);
@@ -111,7 +119,10 @@ async function refresh(){
   for(const id of ['score','our-count','opp-count'])q(id).textContent='—';
   for(const id of ['matchup-teams','our-name','opp-name','categories','targets'])q(id).textContent='';
   q('matchup-source').textContent=error.message;
- }finally{await lineups;button.disabled=false;}
+ }finally{
+  await refreshLineups();
+  button.disabled=false;
+ }
 }
 q('refresh').addEventListener('click',refresh);
 refresh();
