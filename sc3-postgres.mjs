@@ -42,12 +42,17 @@ export async function withScopedTransaction(fn,{pool:provided,readOnly=true}={})
  const result=await fn(c);await c.query('COMMIT');return result;
  }catch(e){try{await c.query('ROLLBACK')}catch{}throw e}finally{c.release()}
 }
+export function latestExpectedDay(now=new Date()){
+ const eastern=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
+ return new Date(Date.parse(eastern+'T12:00:00Z')-86400000).toISOString().slice(0,10);
+}
 export async function readScopedRows({start,end,pool}){
  return withScopedTransaction(async c=>{
+ end=end||latestExpectedDay();
  const days=(await c.query('select game_day::text,status,player_rows,completed_events from sc3.sc3_nba_sync_days where game_day between $1::date and $2::date order by game_day',[start,end])).rows;
  const raw=(await c.query('select event_id,espn_id,game_day::text,tipoff::text,player_name,nba_team,stats from sc3.sc3_nba_game_logs where game_day between $1::date and $2::date order by event_id,espn_id',[start,end])).rows;
  const identities=(await c.query("select yahoo_id,espn_id,status,evidence from sc3.sc3_player_identity where status='verified' order by yahoo_id")).rows;
- return {days,raw,identities};
+ return {days,raw,identities,end};
  },{pool});
 }
 export function scopedSyncStore({pool}={}){
