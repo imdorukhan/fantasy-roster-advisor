@@ -62,10 +62,11 @@ function renderProjection(projection){
  const coverage=projection.teams.map(team=>'<p><strong>'+esc(team.name)+'</strong> · '+team.covered+'/'+team.expected+' upcoming starter games with verified player history</p>').join('');
  const totals=projection.teams.some(team=>team.future)?'<div class="scroll"><table><thead><tr><th>Category</th>'+projection.teams.map(team=>'<th>'+esc(team.name)+'</th>').join('')+'</tr></thead><tbody>'+
  ['FG%','FT%','3PM','PTS','REB','AST','STL','BLK','TO'].map(cat=>'<tr><td>'+esc(cat)+'</td>'+projection.teams.map(team=>'<td>'+(team.future?.[cat]==null?'Unavailable':percentage(cat)?fmt(team.future[cat],cat):team.future[cat].toFixed(1))+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>':'';
+ const baseline=projection.baseline?.source?'<p class="small">Scenario baseline: '+esc(projection.baseline.source)+' · Observed '+esc(new Date(projection.baseline.observedAt).toLocaleString())+'</p>':'';
  const scenario=projection.endOfWeek;
  const outcome=scenario?'<p><strong>Estimated week-end score '+scenario.score.ours+' – '+scenario.score.opponent+' – '+scenario.score.ties+'</strong></p><div class="scroll"><table><thead><tr><th>Category</th><th>Our estimated total</th><th>Opponent estimated total</th><th>Margin</th></tr></thead><tbody>'+scenario.rows.map(row=>'<tr><td>'+esc(row.category)+'</td><td>'+fmt(row.ours,row.category)+'</td><td>'+fmt(row.opponent,row.category)+'</td><td>'+gap(row.absoluteGap,row.category)+'</td></tr>').join('')+'</tbody></table></div>'
   :'<p>Full week-end projection unavailable.</p><ul>'+projection.blocked.map(reason=>'<li>'+esc(reason)+'</li>').join('')+'</ul>';
- panel.innerHTML=header+coverage+(totals?'<h3>Expected production from covered upcoming starts</h3>'+totals:'')+outcome;
+ panel.innerHTML=header+baseline+coverage+(totals?'<h3>Expected production from covered upcoming starts</h3>'+totals:'')+outcome;
 }
 
 async function refreshLineups(){

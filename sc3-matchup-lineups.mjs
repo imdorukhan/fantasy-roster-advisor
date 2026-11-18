@@ -2,6 +2,8 @@ import {datedYahooRows,upcomingTeams} from './sc3-streaming-plan.mjs';
 import {leagueToday,officialMatchupFromScoreboard} from './yahoo-scoreboard.mjs';
 import {bridgeSnapshots} from './sc3-yahoo-bridge.mjs';
 import {readMatchupProjection} from './sc3-matchup-projection.mjs';
+import {readYahooPageBaseline} from './sc3-projection-sources.mjs';
+import {freshness} from './decision-core.mjs';
 
 const yahoo = 'https://basketball.fantasysports.yahoo.com/nba/85892/';
 const espn = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=';
@@ -60,9 +62,12 @@ export async function readMatchupLineups({now=new Date(),fetcher=fetch,includePr
     if (!response.ok || response.redirected) throw Error('Source unavailable');
     return response[format]();
   }
+  const baseline = includeProjection && !freshness(official.observedAt,{now:now.getTime()}).valid
+    ? await readYahooPageBaseline(official,now,fetcher).catch(()=>official)
+    : official;
   const days = await Promise.all(dates.map(async date=>{
     const [schedule,...teams]=await Promise.allSettled([
-      source(espn+date.replaceAll('-',''),'json').then(data=>upcomingTeams(data,date,now,new Date(official.observedAt))),
+      source(espn+date.replaceAll('-',''),'json').then(data=>upcomingTeams(data,date,now,new Date(baseline.observedAt))),
       ...ids.map(id=>source(yahoo+id+'?date='+date,'text').then(html=>datedYahooRows(html,date,id)))
     ]);
     const lineups=teams.map((team,i)=>{
@@ -81,7 +86,7 @@ export async function readMatchupLineups({now=new Date(),fetcher=fetch,includePr
     teams:[official.ourTeam,official.opponent].map(team=>({id:team.id,name:team.name,players:groupPlayers(days,team.id)}))
   };
   if(includeProjection){
-    try{report.projection=await readMatchupProjection(report,official,{now,baselineAligned:days.every(day=>day.baselineAligned)});}
+    try{report.projection=await readMatchupProjection(report,baseline,{now,fetcher,baselineAligned:days.every(day=>day.baselineAligned)});}
     catch{report.projection={teams:[],blocked:['Verified NBA history unavailable'],endOfWeek:null};}
   }
   return report;

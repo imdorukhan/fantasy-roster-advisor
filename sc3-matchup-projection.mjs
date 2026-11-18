@@ -1,6 +1,7 @@
 import {NINE_CAT,categoryComparison,freshness} from './decision-core.mjs';
 import {leagueToday} from './yahoo-scoreboard.mjs';
 import {withScopedTransaction} from './sc3-postgres.mjs';
+import {verifyMissingYahooPlayers} from './sc3-projection-sources.mjs';
 
 const counting = NINE_CAT.filter(key=>!key.includes('%'));
 const keys = [...counting,'FGM','FGA','FTM','FTA'];
@@ -65,25 +66,41 @@ export function matchupProjection(report, official, logs, historyThrough, {now=n
    if (comparison?.verified) endOfWeek={rows:comparison.rows,score:comparison.score};
    else reasons.push('Verified Yahoo shooting totals or projected denominators unavailable');
  }
- return {teams,historyThrough,blocked:reasons,endOfWeek,readOnly:true};
+ return {teams,historyThrough,baseline:{source:official.source,observedAt:official.observedAt},blocked:reasons,endOfWeek,readOnly:true};
 }
 
 export async function readMatchupProjection(report,official,options){
+ const players=new Map();
+ for(const team of report.teams)for(const player of team.players){
+   const teams=[...new Set(player.games.filter(game=>game.assignment==='STARTER').map(game=>game.nbaTeam))];
+   if(teams.length===1)players.set(player.yahooId,{yahooId:player.yahooId,name:player.name,nbaTeam:teams[0]});
+ }
  const ids=[...new Set(report.teams.flatMap(team=>team.players.filter(player=>player.games.some(game=>game.assignment==='STARTER')).map(player=>player.yahooId)))];
  const before=leagueToday(options.now);
- const {logs,historyThrough}=await withScopedTransaction(async client=>{
+ const {verified,catalog,historyThrough}=await withScopedTransaction(async client=>{
    const cutoff=(await client.query("select max(game_day)::text as latest from sc3.sc3_nba_sync_days where status='complete' and game_day<$1::date",[before])).rows[0]?.latest??null;
-   if (!cutoff||!ids.length) return {logs:[],historyThrough:cutoff};
-   const result=await client.query(`
-     select i.yahoo_id, g.stats
-     from sc3.sc3_player_identity i
+   if (!cutoff||!ids.length) return {verified:[],catalog:[],historyThrough:cutoff};
+   const verified=(await client.query("select yahoo_id,espn_id from sc3.sc3_player_identity where status='verified' and yahoo_id=any($1::text[])",[ids])).rows;
+   const catalog=verified.length===ids.length?[]:(await client.query(`
+     select e.espn_id as "espnId",e.name,e.nba_team as team,e.birth_date::text as "birthDate"
+     from sc3.espn_player_identity e
+     where e.birth_date is not null and not exists
+       (select 1 from sc3.sc3_player_identity i where i.espn_id=e.espn_id and i.status='verified')
+   `)).rows;
+   return {verified,catalog,historyThrough:cutoff};
+ });
+ const known=new Set(verified.map(row=>row.yahoo_id));
+ const missing=[...players.values()].filter(player=>!known.has(player.yahooId));
+ const linked=catalog.length&&missing.length?await verifyMissingYahooPlayers(missing,catalog,options.fetcher):[];
+ const pairs=[...verified,...linked.map(row=>({yahoo_id:row.yahooId,espn_id:row.espnId}))];
+ const logs=historyThrough&&pairs.length?await withScopedTransaction(async client=>(await client.query(`
+     select i.yahoo_id,g.stats
+     from jsonb_to_recordset($1::jsonb) as i(yahoo_id text,espn_id text)
      cross join lateral (
        select l.stats from sc3.sc3_nba_game_logs l
        join sc3.sc3_nba_sync_days d using(game_day)
        where l.espn_id=i.espn_id and l.game_day<=$2::date and d.status='complete'
-       order by l.game_day desc, l.tipoff desc, l.event_id desc limit 10
-     ) g where i.status='verified' and i.yahoo_id=any($1::text[])`,[ids,cutoff]);
-   return {logs:result.rows,historyThrough:cutoff};
- });
+       order by l.game_day desc,l.tipoff desc,l.event_id desc limit 10
+     ) g`,[JSON.stringify(pairs),historyThrough])).rows):[];
  return matchupProjection(report,official,logs,historyThrough,options);
 }
