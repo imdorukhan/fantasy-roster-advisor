@@ -22,7 +22,10 @@ function verifiedGroup(row, filter, now) {
       throw Error('Invalid Yahoo ownership snapshot');
     }
     seen.add(player.yahooId);
-    return {yahooId: player.yahooId, name: player.name, availability, yahooRosterStatus: player.yahooRosterStatus};
+    const metadata=/^[A-Z]{2,3}$/.test(player.nbaTeam)&&Array.isArray(player.eligiblePositions)&&player.eligiblePositions.length&&
+      player.eligiblePositions.every(pos=>/^(PG|SG|SF|PF|C)$/.test(pos))
+      ? {nbaTeam:player.nbaTeam,eligiblePositions:player.eligiblePositions} : {};
+    return {yahooId: player.yahooId, name: player.name, availability, yahooRosterStatus: player.yahooRosterStatus, ...metadata};
   });
   return {observedAt: row.observed_at, count: players.length, players};
 }

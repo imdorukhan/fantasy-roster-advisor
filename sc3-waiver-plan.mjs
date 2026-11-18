@@ -39,12 +39,22 @@ export function rankWaiverOpportunities(candidates,days,starters){
 }
 
 export async function readWaiverOpportunities(waivers,days,starters,budget,fetcher=fetch){
- const url='https://basketball.fantasysports.yahoo.com/nba/85892/players?status=W';
- const response=await fetcher(url,{signal:AbortSignal.timeout(7500),redirect:'error'});
- if(!response.ok)throw Error('Current Yahoo waiver candidates unavailable');
- const {players}=parsePage(await response.text(),'W');
- const saved=new Map(waivers.players.map(p=>[p.yahooId,p]));
- const verified=players.filter(p=>saved.get(p.yahooId)?.yahooRosterStatus===p.yahooRosterStatus&&p.nbaTeam&&p.eligiblePositions?.length);
- return {evaluated:verified.length,sourcePageCount:players.length,totalWaivers:waivers.count,remainingAdds:budget.remaining,
-   rows:rankWaiverOpportunities(verified,days,starters),readOnly:true};
+ let verified=waivers.players.filter(p=>p.nbaTeam&&p.eligiblePositions?.length);
+ let source='Yahoo SC3 waiver snapshot';
+ if(verified.length<waivers.count){
+  const url='https://basketball.fantasysports.yahoo.com/nba/85892/players?status=W';
+  const response=await fetcher(url,{signal:AbortSignal.timeout(7500),redirect:'error'});
+  if(!response.ok)throw Error('Current Yahoo waiver candidates unavailable');
+  const {players}=parsePage(await response.text(),'W');
+  const saved=new Map(waivers.players.map(p=>[p.yahooId,p]));
+  const merged=new Map(verified.map(player=>[player.yahooId,player]));
+  for(const player of players)if(saved.get(player.yahooId)?.yahooRosterStatus===player.yahooRosterStatus&&player.nbaTeam&&player.eligiblePositions?.length){
+   merged.set(player.yahooId,player);
+  }
+  verified=[...merged.values()];
+  source='Yahoo SC3 snapshot and first live Yahoo page';
+ }
+ const ranked=rankWaiverOpportunities(verified,days,starters);
+ return {evaluated:verified.length,rankable:ranked.filter(player=>player.extraStarts!==null).length,
+  source,totalWaivers:waivers.count,remainingAdds:budget.remaining,rows:ranked.slice(0,25),readOnly:true};
 }

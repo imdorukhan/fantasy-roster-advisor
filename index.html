@@ -68,7 +68,7 @@ function renderWaiverPlan(plan){
  const panel=document.querySelector('#waiver-plan');
  if(!plan||plan.error){panel.textContent=plan?.error||'Verified waiver schedule unavailable.';return;}
  const table=plan.rows.map(row=>'<tr><td>'+esc(row.name)+'</td><td>'+esc(row.waiverStatus)+'</td><td>'+esc(row.extraStarts??'Unavailable')+'</td><td>'+esc(row.dates.join(', ')||'—')+'</td></tr>').join('');
- panel.innerHTML='<p>'+esc(plan.evaluated)+' of '+esc(plan.totalWaivers)+' waiver players evaluated (first Yahoo page) · '+esc(plan.remainingAdds)+' weekly adds remaining.</p>'+
+ panel.innerHTML='<p>'+esc(plan.evaluated)+' of '+esc(plan.totalWaivers)+' waiver players evaluated · '+esc(plan.rankable)+' with verified dates · Top '+esc(plan.rows.length)+' shown · '+esc(plan.remainingAdds)+' weekly adds remaining.</p>'+
  '<p class="small">Extra starts are counted after the listed waiver date, with eligible bench moves included. Candidates are evaluated individually. A claim, open roster spot or drop, and Yahoo processing are still required.</p>'+
  (table?'<div class="table-wrap"><table><thead><tr><th>Player</th><th>Yahoo status</th><th>Extra starts</th><th>Eligible game dates</th></tr></thead><tbody>'+table+'</tbody></table></div>':'');
 }
