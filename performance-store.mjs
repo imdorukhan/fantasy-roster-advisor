@@ -3,7 +3,7 @@ import {dateRange,coverage} from './nba-sync.mjs';
 import {readScopedRows} from './sc3-postgres.mjs';
 // Read only from an explicitly isolated Supabase project. Never use production env.
 export async function readPerformance({url,secret,expectedRef,start,end,fetcher=fetch,scoped=false,pool}={}){
- if(scoped){const data=await readScopedRows({start,pool});const actualEnd=data.end;return summarize(data.days,data.raw,data.identities,start,actualEnd,dateRange(start,actualEnd));}
+ if(scoped){const data=await readScopedRows({start,pool});const expected=dateRange(start,data.end);const complete=new Set(data.days.filter(d=>d.status==='complete').map(d=>d.game_day));const missing=expected.filter(d=>!complete.has(d));const first=expected.findIndex(d=>!complete.has(d));if(first===0)throw Error('Incomplete NBA history');const contiguous=first<0?expected:expected.slice(0,first);const actualEnd=contiguous.at(-1);const result=summarize(data.days.filter(d=>d.game_day<=actualEnd),data.raw.filter(d=>d.game_day<=actualEnd),data.identities,start,actualEnd,contiguous);return {...result,expectedEnd:data.end,missingDays:missing,fresh:missing.length===0};}
  const days=dateRange(start,end);
  const u=new URL(url);
  if(!expectedRef||expectedRef==='bmsfbcuausbfzheufjtc'||u.hostname!==expectedRef+'.supabase.co'||u.protocol!=='https:'||u.pathname!=='/'||u.search||u.hash||!secret)throw Error('Isolated performance database not configured');
