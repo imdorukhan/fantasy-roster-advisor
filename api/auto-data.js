@@ -254,7 +254,7 @@ async function liveHandler(req,res){
    if(!ids.length||ids.length>25)return response(res,400,{error:'Supply 1–25 Yahoo player IDs'});
    try{
     const {readPerformance}=await import('../performance-store.mjs');
-    const {report,links,historyEnd}=await readPerformance({url:process.env.SC3_DEV_SUPABASE_URL,secret:process.env.SC3_DEV_SUPABASE_SECRET_KEY,expectedRef:process.env.SC3_DEV_SUPABASE_REF,start:process.env.SC3_SEASON_START,end:process.env.SC3_HISTORY_END});
+    const {report,links,historyEnd}=await readPerformance({scoped:process.env.SC3_SHARED_DB==='1',url:process.env.SC3_DEV_SUPABASE_URL,secret:process.env.SC3_DEV_SUPABASE_SECRET_KEY,expectedRef:process.env.SC3_DEV_SUPABASE_REF,start:process.env.SC3_SEASON_START,end:process.env.SC3_HISTORY_END});
     const byId=new Map(report.players.map(p=>[p.id,p]));
     return response(res,200,{mode:'YAHOO_LINKED_PERFORMANCE',historyEnd,source:report.source,pool:report.pool,players:ids.map(yahooId=>({yahooId,performance:links.has(yahooId)?byId.get(links.get(yahooId))||null:null})),readOnly:true});
    }catch(e){return response(res,503,{mode:'PERFORMANCE_UNAVAILABLE',error:'Isolated verified performance data unavailable',readOnly:true})}
