@@ -33,7 +33,7 @@ export function rankWaiverOpportunities(candidates,days,starters){
   const clears=days.find(day=>'W ('+dateLabel(day.date)+')'===candidate.yahooRosterStatus)?.date??null;
   const dates=clears?windows.filter(day=>day.date>clears&&day.verified&&day.teams.has(club(candidate.nbaTeam))&&
    maxStarts([...day.active,candidate],slots)>day.baseline).map(day=>day.date):[];
-  return {yahooId:candidate.yahooId,name:candidate.name,waiverStatus:candidate.yahooRosterStatus,clears,dates,
+  return {yahooId:candidate.yahooId,name:candidate.name,nbaTeam:candidate.nbaTeam,waiverStatus:candidate.yahooRosterStatus,clears,dates,
     extraStarts:clears&&windows.filter(day=>day.date>clears).every(day=>day.verified)?dates.length:null};
  }).sort((a,b)=>(b.extraStarts??-1)-(a.extraStarts??-1)||a.name.localeCompare(b.name));
 }

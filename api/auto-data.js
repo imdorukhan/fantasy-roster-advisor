@@ -147,7 +147,7 @@ export default async function handler(req,res){
   if(!await requireSc3Read(req,res))return;
   try{
    const {readStreamingAvailability}=await import('../sc3-streaming.mjs');
-   return response(res,200,await readStreamingAvailability());
+   return response(res,200,await readStreamingAvailability({includeWaiverImpact:req.query?.waiverImpact==='1'}));
   }catch{return response(res,503,{error:'Verified Yahoo availability unavailable'});}
  }
  if(req.query?.sc3DailySync==='1'){

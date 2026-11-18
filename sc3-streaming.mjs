@@ -38,7 +38,7 @@ export function streamingAvailability(rows, now = Date.now()) {
   return {mode: 'SC3_STREAMING_AVAILABILITY', leagueId, readOnly: true, freeAgents, waivers};
 }
 
-export async function readStreamingAvailability() {
+export async function readStreamingAvailability({includeWaiverImpact=false}={}) {
   const rows = await withScopedTransaction(async client => (await client.query(
     `select section, payload, observed_at::text from sc3.yahoo_league_snapshots
      where league_id = $1 and (
@@ -48,5 +48,5 @@ export async function readStreamingAvailability() {
   )).rows);
   const result = streamingAvailability(rows);
   const yahooRows = Object.fromEntries(rows.map(row => [row.section, row]));
-  return {...result, plan: await buildStreamingPlan(result, yahooRows)};
+  return {...result, plan: await buildStreamingPlan(result, yahooRows,{includeWaiverImpact})};
 }

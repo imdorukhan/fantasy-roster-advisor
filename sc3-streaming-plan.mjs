@@ -1,3 +1,4 @@
+import {enrichWaiverImpact} from './sc3-waiver-impact.mjs';
 import {readWaiverOpportunities} from './sc3-waiver-plan.mjs';
 import {streamingCalendar} from './decision-core.mjs';
 import {leagueToday, officialMatchupFromScoreboard} from './yahoo-scoreboard.mjs';
@@ -34,7 +35,7 @@ export function yahooWindow(rows, now) {
     throw Error('Yahoo starting slots could not be verified');
   }
   return {
-    week: matchup.week, start: leagueToday(now), end: matchup.weekEnd, starters,
+    matchup, week: matchup.week, start: leagueToday(now), end: matchup.weekEnd, starters,
     acquisitions: {limit:Number(limit), used:Number(used), remaining:Number(limit) - Number(used), observedAt:roster.observed_at,
       fab:/^\d+$/.test(String(teamMeta.find(part=>part?.faab_balance!==undefined)?.faab_balance))?Number(teamMeta.find(part=>part?.faab_balance!==undefined).faab_balance):null}
   };
@@ -113,11 +114,11 @@ export function rankStreamingFits(players, dates, acquisitions) {
   return streamingCalendar(candidates,{startDate:dates[0].date,endDate:dates.at(-1).date,remainingAdds:acquisitions.remaining});
 }
 
-export async function buildStreamingPlan(availability, yahooRows, {now=new Date(), fetcher=fetch}={}) {
+export async function buildStreamingPlan(availability, yahooRows, {now=new Date(), fetcher=fetch, includeWaiverImpact=false}={}) {
   let window;
   try {window = yahooWindow(yahooRows, now);}
   catch (error) {return {available:false, reason:error.message};}
-  const {start,end,week,starters,acquisitions} = window;
+  const {start,end,week,starters,acquisitions,matchup} = window;
   const dates = [];
   for (let date = new Date(start+'T12:00:00Z'); date.toISOString().slice(0,10)<=end && dates.length<8; date.setUTCDate(date.getUTCDate()+1)) {
     dates.push(date.toISOString().slice(0,10));
@@ -157,8 +158,10 @@ export async function buildStreamingPlan(availability, yahooRows, {now=new Date(
       }
     }
     const result = rankStreamingFits(metadata,daily.map(({date,openSlots,schedule})=>({date,openSlots,teams:schedule.teams})),acquisitions);
-    const waiverPlan=await readWaiverOpportunities(availability.waivers,daily,starters,acquisitions,fetcher)
+    let waiverPlan=await readWaiverOpportunities(availability.waivers,daily,starters,acquisitions,fetcher)
       .catch(()=>({error:'Current Yahoo waiver candidates unavailable'}));
+    if(includeWaiverImpact&&!waiverPlan.error)waiverPlan=await enrichWaiverImpact(waiverPlan,matchup,{now,fetcher})
+      .catch(()=>({...waiverPlan,impactStatus:'Verified NBA candidate statistics unavailable',impactCoverage:0}));
     return {...result,week,acquisitions,days:coverage,waiverPlan};
   } catch {
     return {available:false,reason:'Streaming schedule or eligibility verification failed',week,acquisitions};

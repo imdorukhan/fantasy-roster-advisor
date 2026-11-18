@@ -29,7 +29,7 @@
 <script type="module">
 import {getLeagueData,leagueHealth} from './league-data.js';
 const names={overview:['Fantasy Command Center','Your team intelligence, all in one place.'],roster:['My Roster','Who is on Salary CAPtain, by position.'],drop:['Keep or Cut','Identify performance decline without overreacting to three games.'],injury:['Injury Return Radar','Track recovery news and possible pickup opportunities.'],waiver:['Waiver Planner','Manage weekly acquisition budget and pending claims.'],freeagents:['Streaming Optimizer','Check which Yahoo free agents are available to stream.'],sources:['Source Accuracy Lab','Learn which injury return forecasts become reliable over time.']};
-function go(v){if(!names[v])return;document.querySelectorAll('.view').forEach(e=>e.classList.toggle('hidden',e.id!==v));document.querySelectorAll('.nav button').forEach(e=>e.classList.toggle('active',e.dataset.view===v));document.querySelector('#page-title').textContent=names[v][0];document.querySelector('#page-desc').textContent=names[v][1];if(v==='freeagents')loadFreeAgents();if(v==='waiver')loadFreeAgents();if(v==='sources')loadSystemHealth();location.hash=v;window.scrollTo({top:0,behavior:'smooth'})}
+function go(v){if(!names[v])return;document.querySelectorAll('.view').forEach(e=>e.classList.toggle('hidden',e.id!==v));document.querySelectorAll('.nav button').forEach(e=>e.classList.toggle('active',e.dataset.view===v));document.querySelector('#page-title').textContent=names[v][0];document.querySelector('#page-desc').textContent=names[v][1];if(v==='freeagents')loadFreeAgents();if(v==='waiver')loadFreeAgents(true);if(v==='sources')loadSystemHealth();location.hash=v;window.scrollTo({top:0,behavior:'smooth'})}
 document.querySelectorAll('[data-view]').forEach(el=>el.addEventListener('click',()=>go(el.dataset.view)));document.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>go(el.dataset.go)));
 async function loadSystemHealth(){
  const panel=document.getElementById('system-health-panel');if(!panel)return;
@@ -44,6 +44,7 @@ async function loadSystemHealth(){
 }
 document.getElementById('health-refresh').addEventListener('click',loadSystemHealth);
 let streamingSnapshot=null;
+let pendingWaiverImpact=false;
 let freeAgentsLoading=false,freeAgentPlayers=[],faDepthCache=new Map(),faDepthErrors=[],faDataComplete=false,faLoadError=null;
 const faNormalize=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z]/g,'');
 function faDepthFor(p){const team=faDepthCache.get(p.nbaTeam);return (team?.rows||[]).filter(x=>faNormalize(x.name)===faNormalize(p.name)&&['PG','SG','SF','PF','C'].includes(x.position)&&Number.isInteger(x.rank)&&x.rank>0).sort((a,b)=>a.rank-b.rank)}
@@ -67,10 +68,24 @@ function renderStreamingPlan(plan){
 function renderWaiverPlan(plan){
  const panel=document.querySelector('#waiver-plan');
  if(!plan||plan.error){panel.textContent=plan?.error||'Verified waiver schedule unavailable.';return;}
- const table=plan.rows.map(row=>'<tr><td>'+esc(row.name)+'</td><td>'+esc(row.waiverStatus)+'</td><td>'+esc(row.extraStarts??'Unavailable')+'</td><td>'+esc(row.dates.join(', ')||'—')+'</td></tr>').join('');
+ const format=(category,value)=>{
+  const delta=category.endsWith('%')?value*100:value;
+  return (delta>0?'+':'')+delta.toFixed(1)+(category.endsWith('%')?' pp':'');
+ };
+ const impactCell=row=>{
+  if(!row.impact)return 'Unavailable';
+  const {delta,progress,games}=row.impact;
+  const targets=Object.keys(progress).map(category=>esc(category)+' '+esc(format(category,delta[category]))).join(' · ');
+  return '<details><summary>'+esc(targets||'No trailing or tied categories')+'</summary><div class="small">'+
+   Object.entries(delta).map(([category,value])=>esc(category)+' '+esc(format(category,value))).join(' · ')+
+   ' · Based on '+esc(games)+' completed games</div></details>';
+ };
+ const table=plan.rows.map(row=>'<tr><td>'+esc(row.name)+'</td><td>'+esc(row.waiverStatus)+'</td><td>'+esc(row.extraStarts??'Unavailable')+'</td><td>'+esc(row.dates.join(', ')||'—')+'</td><td>'+impactCell(row)+'</td></tr>').join('');
+ const impact=plan.impactStatus?'<p class="small">'+esc(plan.impactStatus)+'</p>':plan.impactChecked?
+  '<p class="small">9-CAT coverage '+esc(plan.impactCoverage)+'/'+esc(plan.impactChecked)+' displayed candidates with extra starts · ESPN through '+esc(plan.historyThrough)+' · Yahoo observed '+esc(new Date(plan.impactObservedAt).toLocaleString())+'.</p>':'';
  panel.innerHTML='<p>'+esc(plan.evaluated)+' of '+esc(plan.totalWaivers)+' waiver players evaluated · '+esc(plan.rankable)+' with verified dates · Top '+esc(plan.rows.length)+' shown · '+esc(plan.remainingAdds)+' weekly adds remaining.</p>'+
- '<p class="small">Extra starts are counted after the listed waiver date, with eligible bench moves included. Candidates are evaluated individually. A claim, open roster spot or drop, and Yahoo processing are still required.</p>'+
- (table?'<div class="table-wrap"><table><thead><tr><th>Player</th><th>Yahoo status</th><th>Extra starts</th><th>Eligible game dates</th></tr></thead><tbody>'+table+'</tbody></table></div>':'');
+ '<p class="small">Extra starts rank first. Among displayed ties, projected contribution to trailing or tied categories decides the order. Turnovers count against you. Each candidate is evaluated individually after the listed waiver date.</p>'+impact+
+ (table?'<div class="table-wrap"><table><thead><tr><th>Player</th><th>Yahoo status</th><th>Extra starts</th><th>Eligible game dates</th><th>9-CAT matchup impact</th></tr></thead><tbody>'+table+'</tbody></table></div>':'');
 }
 function renderFreeAgents(){
  const body=document.querySelector('#fa-body');
@@ -103,8 +118,8 @@ function renderFreeAgents(){
  const best=ranks.length?Math.min(...ranks):null;
  document.querySelector('#fa-status').textContent=filtered.length+' shown / '+freeAgentPlayers.length+' Yahoo free agents loaded ('+(faDataComplete?'complete':'incomplete')+') · '+(faLoadError?'Paging: '+faLoadError+' · ':'')+'MPG available: '+freeAgentPlayers.filter(p=>Number.isFinite(p.mpg)).length+' · Best available rank: '+(best===null?'not verified':'#'+best)+' · '+faDepthCache.size+' NBA teams checked'+(faDepthErrors.length?' · '+faDepthErrors.length+' depth feeds unavailable':'')+' · Depth source: ESPN';
 }
-async function loadFreeAgents(){
- if(freeAgentsLoading)return;
+async function loadFreeAgents(includeImpact=false){
+ if(freeAgentsLoading){if(includeImpact)pendingWaiverImpact=true;return;}
  freeAgentsLoading=true;faDataComplete=false;faLoadError=null;
  const status=document.querySelector('#fa-status');
  const pageSize=25,maxPages=40,batchSize=3;
@@ -118,7 +133,7 @@ async function loadFreeAgents(){
  renderStreamingPlan(null);
  freeAgentPlayers=[];faDepthErrors=[];
  try{
-  const snapshotResponse=await fetch('/api/auto-data?sc3Streaming=1',{credentials:'same-origin',cache:'no-store'});
+  const snapshotResponse=await fetch('/api/auto-data?sc3Streaming=1'+(includeImpact?'&waiverImpact=1':''),{credentials:'same-origin',cache:'no-store'});
   if(snapshotResponse.status!==404){
    if(!snapshotResponse.ok)throw Error('Verified SC3 snapshot unavailable (HTTP '+snapshotResponse.status+')');
    const snapshot=await snapshotResponse.json();
@@ -161,10 +176,13 @@ async function loadFreeAgents(){
   }));
   await loadPerformance(freeAgentPlayers);renderFreeAgents();
  }catch(e){faLoadError=e.message;status.textContent='Yahoo free-agent verification failed: '+e.message;waiverStatus.textContent='Verified Yahoo waiver data unavailable.';renderWaiverPlan(null);document.querySelector('#fa-body').innerHTML='';}
- finally{freeAgentsLoading=false}
+ finally{
+  freeAgentsLoading=false;
+  if(pendingWaiverImpact){pendingWaiverImpact=false;loadFreeAgents(true);}
+ }
 }
 for(const id of ['fa-position','fa-rank','fa-sort'])document.getElementById(id).addEventListener('change',renderFreeAgents);
-document.querySelector('#fa-refresh').addEventListener('click',loadFreeAgents);
+document.querySelector('#fa-refresh').addEventListener('click',()=>loadFreeAgents());
 const PLAYER_STAT_KEYS=["GP","MPG","FG%","FT%","3PM","PTS","REB","AST","STL","BLK","TO","FGM","FGA","FTM","FTA","3PA","3P%","OREB","DREB","PF","DD","TD"];
 function playerStat(p,key){return p.stats?.values?.[key]??(key==='MPG'?p.mpg:null);}
 function statDisplay(value,key){return typeof value!=='number'||!Number.isFinite(value)?'—':key.endsWith('%')?(value*100).toFixed(1)+'%':String(Math.round(value*100)/100)}
