@@ -1,0 +1,40 @@
+name: SC3 isolated NBA sync
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: First game day (YYYY-MM-DD; blank = yesterday)
+        required: false
+      end:
+        description: Last game day (YYYY-MM-DD; blank = yesterday)
+        required: false
+permissions:
+  contents: read
+concurrency:
+  group: sc3-isolated-nba-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    if: github.ref == 'refs/heads/feature/salarycaptain-3-expanded'
+    runs-on: ubuntu-24.04
+    environment: sc3-isolated
+    env:
+      SC3_DEV_SUPABASE_URL: ${{ secrets.SC3_DEV_SUPABASE_URL }}
+      SC3_DEV_SUPABASE_SECRET_KEY: ${{ secrets.SC3_DEV_SUPABASE_SECRET_KEY }}
+      SC3_DEV_SUPABASE_REF: ${{ vars.SC3_DEV_SUPABASE_REF }}
+      SYNC_START: ${{ inputs.start }}
+      SYNC_END: ${{ inputs.end }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '24'
+      - run: node --test
+      - name: Sync isolated database
+        run: |
+          args=()
+          if [ -n "$SYNC_START" ]; then args+=("--start=$SYNC_START"); fi
+          if [ -n "$SYNC_END" ]; then args+=("--end=$SYNC_END"); fi
+          node scripts/sync-nba-dev.mjs "${args[@]}"

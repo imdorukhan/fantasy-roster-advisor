@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {buildPerformance,attachPerformance} from './player-performance.mjs';
+const rows=Array.from({length:8},(_,i)=>({espnId:'99',eventId:String(i),date:'2026-11-'+String(i+1).padStart(2,'0')+'T20:00:00Z',name:'Example',team:'BOS',stats:{MIN:i<5?20:30,PTS:i<5?10:20,REB:i<5?4:8,AST:3,STL:1,BLK:0,TO:2,FGM:4,FGA:8,FTM:2,FTA:3,'3PM':1,'3PA':2,OREB:1,DREB:3,PF:2}}));
+const opts={asOf:'2026-11-17T00:00:00Z',historyComplete:true};
+test('performance refuses incomplete history and computes nonoverlapping trend baseline',()=>{assert.equal(buildPerformance(rows,{...opts,historyComplete:false}).available,false);const p=buildPerformance(rows,opts).players[0];assert.equal(p.season.games,8);assert.equal(p.windows[3].values.MPG,30);assert.equal(p.windows[14].complete,false);assert.equal(p.signal.type,'breakout_watch');assert.equal(p.signal.minutesDelta,10);assert.equal(p.z,null)});
+test('identity map attaches verified players only',()=>{const report=buildPerformance(rows,opts);const y={yahooId:'42',name:'Example',nbaTeam:'BOS',birthDate:'2000-01-01'};const e={espnId:'99',name:'Example',team:'BOS',birthDate:'2000-01-01'};assert.equal(attachPerformance([y],[e],report)[0].performance.id,'99');assert.equal(attachPerformance([{...y,birthDate:null}],[e],report)[0].performance,null)});

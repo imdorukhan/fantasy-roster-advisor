@@ -1,0 +1,236 @@
+const esc=value=>String(value??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const cats=['FG%','FT%','3PM','PTS','REB','AST','STL','BLK','TO'];
+const fmt=(value,key)=>!Number.isFinite(value)?'—':key.endsWith('%')?(value*100).toFixed(1)+'%':Number(value.toFixed(1)).toString();
+export function playerLink(player){
+ const id=String(player.yahooId??player.playerId??player.id??'');
+ return '<button type="button" class="player-profile-link" data-player-id="'+esc(/^\d{1,10}$/.test(id)?id:'')+'">'+esc(player.name)+'</button>';
+}
+function table(headers,rows){
+ return '<div class="player-card-scroll"><table><thead><tr>'+headers.map(value=>'<th scope="col">'+esc(value)+'</th>').join('')+
+  '</tr></thead><tbody>'+rows.map(row=>'<tr>'+row.map((value,index)=>index===0?'<th scope="row">'+esc(value)+'</th>':'<td>'+esc(value)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';
+}
+const score=value=>value?value.ours+'–'+value.opponent+'–'+value.ties:'Unavailable';
+const sourceTime=value=>value?new Date(value).toLocaleString():'Unavailable';
+function profileBody(data){
+ const {profile:p,week,season}=data;
+ const a=p.analytics;
+ const sections=[];
+ sections.push('<p>'+esc([p.nbaTeam,p.fantasyTeam,p.slot,p.yahooRosterStatus??p.ownership].filter(Boolean).join(' · '))+' · Yahoo observed '+esc(sourceTime(p.observedAt))+'</p>');
+ const details=[['Yahoo ID',p.yahooId],['ESPN ID',p.espnId],['Yahoo injury flag',p.status],['Eligible positions',p.eligiblePositions?.map(pos=>typeof pos==='string'?pos:pos.position).filter(Boolean).join(', ')],['Yahoo rank',p.yahooRank],['Percent owned',p.percentOwned],
+  ['Percent started',p.forecast?.percentStarted],['Next 7-day rank',p.forecast?.next7DayRank],['Next 14-day rank',p.forecast?.next14DayRank],['Rest-of-season rank',p.forecast?.restOfSeasonRank]];
+ sections.push('<details open><summary>Player information</summary>'+table(['Field','Value'],details)+'</details>');
+ if(a){
+  const windows=[a.season,...[1,3,7,14].map(n=>a.windows[n])];
+  const keys=['GP','MPG',...cats,'FGM','FGA','FTM','FTA','3PA','OREB','DREB','PF','DD','TD'];
+  sections.push('<details><summary>ESPN production by sample</summary><p>Completed games through '+esc(p.historyThrough)+' · '+esc(a.signal.type.replaceAll('_',' '))+'</p>'+
+   table(['Stat','Season ('+a.season.games+')','Last 1','Last 3','Last 7','Last 14'],keys.map(key=>[key,...windows.map(window=>window?.complete?fmt(window.values?.[key],key):'—')]))+'</details>');
+  sections.push('<details><summary>Latest completed game logs</summary>'+table(['Date',...cats,'MIN','FGM','FGA','FTM','FTA'],a.chart.map(row=>[
+   row.date.slice(0,10),...[...cats,'MIN','FGM','FGA','FTM','FTA'].map(key=>fmt(key==='FG%'?row.stats.FGA>0?row.stats.FGM/row.stats.FGA:null:key==='FT%'?row.stats.FTA>0?row.stats.FTM/row.stats.FTA:null:row.stats[key],key))
+  ]))+'</details>');
+ }else sections.push('<p>Verified ESPN player history unavailable.</p>');
+ if(p.depth.length)sections.push('<details><summary>ESPN depth chart</summary>'+table(['Position','Rank','NBA team','Injury marker','Observed'],p.depth.map(row=>[row.position,row.rank,row.nba_team,row.injury_marker,sourceTime(row.observed_at)]))+'</details>');
+ sections.push(dropSelector(data));
+ sections.push('<h3>Current matchup impact</h3><p>'+esc(week.reason||'Gross addition scenario. A corresponding drop or claim is separate.')+'</p>');
+ if(Number.isInteger(week.rosteredStarts))sections.push('<p>Upcoming starts on your lineup: '+esc(week.rosteredStarts)+(week.dates?.length?' · '+esc(week.dates.join(', ')):'')+'</p>');
+ else if(Number.isInteger(week.extraStarts))sections.push('<p>Estimated extra starts: '+esc(week.extraStarts)+(week.dates?.length?' · '+esc(week.dates.join(', ')):'')+'</p>');
+ if(week.production)sections.push(table(['Category','Expected player contribution'],cats.map(key=>[key,fmt(week.production[key],key)])));
+ if(week.score)sections.push('<p><strong>Week-end scenario: '+esc(score(week.score.before))+' → '+esc(score(week.score.after))+'</strong></p>'+
+  table(['Category','Current lineup scenario','With player','Opponent'],week.score.changes.map(row=>[row.category,fmt(row.baseline,row.category),fmt(row.withPlayer,row.category),fmt(row.opponent,row.category)])));
+ sections.push('<h3>Rest of fantasy season</h3>');
+ if(season){
+  sections.push('<p>'+esc(season.scheduledGames)+' ESPN games currently scheduled through Yahoo league end '+esc(season.yahooEnd)+'.</p>');
+  if(season.production)sections.push('<p>Gross schedule scenario at the player’s verified season rate ('+esc(season.sampleGames)+' games). Lineup conflicts, injuries and a possible drop are excluded.</p>'+
+   table(['Category','Player contribution if all scheduled games are played'],cats.map(key=>[key,fmt(season.production[key],key)])));
+  else sections.push('<p>Verified season production unavailable.</p>');
+  sections.push('<details><summary>Remaining scheduled dates</summary><p>'+esc(season.dates.join(', ')||'None')+'</p></details>');
+ }else sections.push('<p>Verified season schedule unavailable.</p>');
+ sections.push('<p><a href="https://basketball.fantasysports.yahoo.com/nba/85892/player/'+encodeURIComponent(p.yahooId)+'" target="_blank" rel="noopener noreferrer">View on Yahoo Fantasy ↗</a></p>');
+ return sections.join('');
+}
+function dropSelector(data){
+ if(!data.dropOptions?.length)return '<h3>Add / drop comparison</h3><p>Verified Salary CAPtain roster unavailable.</p>';
+ const options=data.dropOptions.map(player=>'<option value="'+esc(player.id)+'">'+esc(player.name+(player.slot?' · '+player.slot:''))+'</option>').join('');
+ const selects=[1,2,3].map(number=>{
+  const id='sc3-drop-player-'+number;
+  return '<label for="'+id+'">Drop option '+number+' <select id="'+id+'" class="player-card-select" data-drop-option>'+
+   '<option value="">Select a player</option>'+options+'</select></label>';
+ }).join('');
+ return '<h3>Add / drop comparison</h3><p>'+esc(data.profile.own?'Compare dropping different players while keeping the rest of your roster.':'Compare up to three possible drops to add '+data.profile.name+'.')+'</p>'+
+  '<div class="player-card-drop-options">'+selects+'</div><div id="sc3-drop-comparison" aria-live="polite"></div>';
+}
+
+function netTable(report){
+ const shotKeys=['FGM','FGA','FTM','FTA'];
+ const scoreChanges=new Map((report.score?.changes??[]).map(row=>[row.category,row]));
+ return table(['Category','Incoming','Outgoing','Net change'],[...cats,...shotKeys].map(key=>{
+  const change=scoreChanges.get(key);
+  const percentage=key.endsWith('%');
+  const value=percentage&&change?(change.withPlayer-change.baseline)*100:report.net[key];
+  const formatted=Number.isFinite(value)?(value>0?'+':'')+Number(value.toFixed(2))+(percentage?' pp':''):'—';
+  return [key,fmt(report.incoming[key],key),fmt(report.outgoing[key],key),formatted];
+ }));
+}
+
+function categoryChangeTable(scenario){
+ const leader=value=>value==='OURS'?'Salary CAPtain':value==='OPPONENT'?'Opponent':'Tied';
+ return table(['Category','Before move','After move','Change','Opponent','Category result'],scenario.changes.map(row=>{
+  const percent=row.category.endsWith('%');
+  const delta=Number((row.delta*(percent?100:1)).toFixed(2));
+  const signed=(delta>0?'+':'')+delta+(percent?' pp':'');
+  const total=value=>percent?(value*100).toFixed(2)+'%':fmt(value,row.category);
+  return [row.category,total(row.baseline),total(row.withPlayer),signed,
+   total(row.opponent),row.previousLeader===row.leader?leader(row.leader):leader(row.previousLeader)+' → '+leader(row.leader)];
+ }));
+}
+function comparisonBody(data){
+ const c=data.comparison;
+ if(!c)return '<p>Comparison unavailable.</p>';
+ const title=c.dropOnly?'Drop '+c.drop.name:'Add '+data.profile.name+' · Drop '+c.drop.name;
+ const sections=['<h4>'+esc(title)+'</h4>'];
+ if(c.effectiveOn)sections.push('<p>Model starts '+esc(c.effectiveOn)+'. No Yahoo transaction is submitted.</p>');
+ if(c.reason)sections.push('<p>'+esc(c.reason)+'</p>');
+ if(c.week){
+  const {week}=c;
+  sections.push('<h4>Net matchup impact</h4><p>'+esc(week.addedDates.length)+' projected incoming starts · '+esc(week.removedDates.length)+' currently assigned outgoing starts lost</p>');
+  if(week.score)sections.push('<p><strong>Baseline '+esc(score(week.score.before))+' → With change '+esc(score(week.score.after))+'</strong></p>'+
+   '<h4>Projected change in all 9 categories</h4><p>FG% and FT% changes are in percentage points. Lower turnovers are better.</p>'+categoryChangeTable(week.score));
+  sections.push('<details'+(week.score?'':' open')+'><summary>Incoming and outgoing player production</summary>'+netTable(week)+'</details>');
+ }
+ if(c.season){
+  const {season}=c;
+  sections.push('<h4>Net rest-of-season impact</h4><p>'+esc(season.addedGames)+' scheduled incoming games · '+esc(season.removedGames)+' scheduled outgoing games · Through '+esc(season.through)+'. These are schedule opportunities. Future lineup conflicts and team shooting percentages are unavailable.</p>'+netTable(season));
+ }else sections.push('<p>Verified rest-of-season net comparison unavailable.</p>');
+ return sections.join('');
+}
+
+const signed=(value,percentage=false)=>{
+ if(!Number.isFinite(value))return '—';
+ const rounded=Number((value*(percentage?100:1)).toFixed(2));
+ return (rounded>0?'+':'')+rounded+(percentage?' pp':'');
+};
+function comparableBaseline(results){
+ const forecast=results.map(result=>result?.data?.comparison?.week?.score);
+ if(forecast.some(value=>!value))return false;
+ const key=value=>JSON.stringify(value.changes.map(({category,baseline,opponent})=>[category,baseline,opponent]));
+ return forecast.every(value=>key(value)===key(forecast[0]));
+}
+function sideBySide(selected,results){
+ const columns=selected.map(option=>({name:option.name,result:results.get(option.id)}));
+ const maps=columns.map(column=>new Map((column.result?.data?.comparison?.week?.score?.changes??[]).map(row=>[row.category,row])));
+ const value=(column,render,empty='Unavailable')=>{
+  const result=column.result;
+  return !result?'Calculating…':result.error?'Unavailable':render(result.data.comparison)??empty;
+ };
+ const header=['Metric',...columns.map(column=>column.name)];
+ const matchup=[
+  ['Projected matchup score',...columns.map(column=>value(column,c=>c.week?.score?score(c.week.score.before)+' → '+score(c.week.score.after):null))],
+  ['Incoming / lost starts',...columns.map(column=>value(column,c=>c.week?c.week.addedDates.length+' / '+c.week.removedDates.length:null))],
+  ...cats.map(category=>[category,...columns.map((column,i)=>value(column,()=>{
+   const row=maps[i].get(category);
+   if(!row)return null;
+   const swing=row.previousLeader===row.leader?'':row.leader==='OURS'?' · flips to Salary CAPtain':row.leader==='OPPONENT'?' · flips to opponent':' · becomes tied';
+   return signed(row.delta,category.endsWith('%'))+swing;
+  }))])
+ ];
+ const season=[
+  ['Incoming / lost scheduled games',...columns.map(column=>value(column,c=>c.season?c.season.addedGames+' / '+c.season.removedGames:null))],
+  ...[...cats.filter(category=>!category.endsWith('%')),'FGM','FGA','FTM','FTA'].map(category=>
+   [category,...columns.map(column=>value(column,c=>c.season?signed(c.season.net[category]):null))])
+ ];
+ const allDone=columns.every(column=>column.result);
+ const sameBaseline=allDone&&comparableBaseline(columns.map(column=>column.result));
+ const note=allDone&&!sameBaseline
+  ?'<p>Complete projections from a shared matchup baseline were unavailable. Each available change uses its own baseline.</p>'
+  :'<p>Percentage changes are in percentage points. Lower turnovers are better.</p>';
+ return '<h4>Drop options side by side</h4><h5>Matchup score and nine category changes</h5>'+note+table(header,matchup)+
+  '<h5>Rest-of-season net production</h5><p>Uses published schedule opportunities. Shooting volume is shown in makes and attempts.</p>'+table(header,season)+
+  columns.map(column=>column.result?.data?'<details><summary>Full scenario: Drop '+esc(column.name)+'</summary>'+comparisonBody(column.result.data)+'</details>'
+   :column.result?.error?'<p>'+esc(column.name+': '+column.result.error)+'</p>':'').join('');
+}
+
+let comparisonRequest;
+function attachDropSelector(content,id){
+ const selects=[...content.querySelectorAll('[data-drop-option]')];
+ if(!selects.length)return;
+ const output=content.querySelector('#sc3-drop-comparison');
+ const results=new Map();
+ let selected=[], running=false;
+ function render(){
+  if(!selected.length){output.textContent='';return;}
+  if(selected.length>1){output.innerHTML=sideBySide(selected,results);return;}
+  const result=results.get(selected[0].id);
+  if(result?.data)output.innerHTML=comparisonBody(result.data);
+  else output.textContent=result?.error||'Calculating verified net add/drop impact…';
+ }
+ async function load(){
+  if(running)return;
+  running=true;
+  try{
+   let option;
+   while(output.isConnected&&dialog.open&&(option=selected.find(row=>!results.has(row.id)))){
+    const request=new AbortController();
+    comparisonRequest=request;
+    try{
+     const params=new URLSearchParams({sc3Player:'1',id,dropId:option.id});
+     const response=await fetch('/api/auto-data?'+params,{credentials:'same-origin',cache:'no-store',signal:request.signal});
+     const data=await response.json();
+     if(!response.ok||data.mode!=='SC3_PLAYER_EVALUATION'||!data.comparison)throw Error(data.error||'Comparison unavailable');
+     if(request.signal.aborted)return;
+     results.set(option.id,{data});
+    }catch(error){
+     if(request.signal.aborted)return;
+     results.set(option.id,{error:error.message});
+    }
+    if(output.isConnected&&dialog.open)render();
+   }
+  }finally{running=false;}
+ }
+ for(const select of selects)select.addEventListener('change',()=>{
+  selected=selects.filter(control=>control.value).map(control=>({id:control.value,name:control.selectedOptions[0].textContent.split(' · ')[0]}));
+  const ids=new Set(selected.map(option=>option.id));
+  for(const control of selects)for(const option of control.options){
+   option.disabled=option.value!==control.value&&ids.has(option.value);
+  }
+  for(const [key,result] of results)if(result.error&&!ids.has(key))results.delete(key);
+  render();
+  void load();
+ });
+}
+let dialog,controller;
+function init(){
+ if(dialog)return;
+ const style=document.createElement('style');
+ style.textContent='.player-profile-link{background:none;border:0;padding:0;color:inherit;font:inherit;font-weight:700;text-align:left;text-decoration:underline;text-underline-offset:3px;cursor:pointer}.player-profile-link:focus-visible{outline:2px solid #b5a9ff;outline-offset:3px}#sc3-player-dialog{box-sizing:border-box;width:min(760px,94vw);max-height:88dvh;overflow:auto;color:#edf1ff;background:#151d32;border:1px solid #485370;border-radius:16px;padding:16px}#sc3-player-dialog::backdrop{background:#0b1020bb}.player-card-header{display:flex;justify-content:space-between;align-items:center;gap:12px;position:sticky;top:0;background:#151d32;padding:8px 0;z-index:1}.player-card-header h2{margin:0}.player-card-close{padding:7px 12px;border:1px solid #7c70b5;border-radius:8px;background:#3d3268;color:white;cursor:pointer}.player-card-scroll{overflow:auto;margin:10px 0}.player-card-scroll table{width:100%;min-width:unset!important;border-collapse:collapse}.player-card-scroll th,.player-card-scroll td{font-size:13px;text-align:left!important;padding:7px;border-bottom:1px solid #34405b;white-space:nowrap}#sc3-player-dialog details{margin:12px 0}#sc3-player-dialog summary{cursor:pointer;font-weight:650}.player-card-drop-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(195px,100%),1fr));gap:10px;margin:10px 0}.player-card-drop-options label{display:flex;flex-direction:column;gap:5px}.player-card-select{max-width:100%;color:#edf1ff;background:#25304a;border:1px solid #687395;border-radius:6px;padding:6px 9px}.player-card-select:focus-visible{outline:2px solid #b5a9ff}';
+ document.head.append(style);
+ dialog=document.createElement('dialog');
+ dialog.id='sc3-player-dialog';
+ dialog.setAttribute('aria-labelledby','sc3-player-name');
+ dialog.innerHTML='<div class="player-card-header"><h2 id="sc3-player-name"></h2><button type="button" class="player-card-close">Close</button></div><div id="sc3-player-content" role="status"></div>';
+ document.body.append(dialog);
+ dialog.querySelector('button').addEventListener('click',()=>dialog.close());
+ dialog.addEventListener('close',()=>{controller?.abort();comparisonRequest?.abort();});
+}
+document.addEventListener('click',async event=>{
+ const button=event.target.closest?.('[data-player-id]');
+ if(!button)return;
+ init();
+ controller?.abort();
+ comparisonRequest?.abort();
+ const current=new AbortController();
+ controller=current;
+ dialog.querySelector('h2').textContent=button.textContent.trim();
+ const content=dialog.querySelector('#sc3-player-content');
+ content.textContent='Checking verified player data and lineup impact…';
+ if(!dialog.open)dialog.showModal();
+ const id=button.dataset.playerId;
+ if(!id){content.textContent='Verified Yahoo player ID unavailable.';return;}
+ try{
+  const response=await fetch('/api/auto-data?sc3Player=1&id='+encodeURIComponent(id),{credentials:'same-origin',cache:'no-store',signal:current.signal});
+  const data=await response.json();
+  if(!response.ok||data.mode!=='SC3_PLAYER_EVALUATION')throw Error(data.error||'Player evaluation unavailable');
+  if(current.signal.aborted)return;
+  dialog.querySelector('h2').textContent=data.profile.name;
+  content.innerHTML=profileBody(data);
+  attachDropSelector(content,id);
+ }catch(error){if(!current.signal.aborted)content.textContent=error.message;}
+});

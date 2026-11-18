@@ -11,118 +11,224 @@
 <button data-view="sources"><span class="glyph">≋</span><span class="navtext">Sources</span></button>
 </nav><div class="spacer"></div><div class="sidebar-note"><div class="label"><span class="status-dot"></span>Data: Checking Yahoo API</div><div class="small" style="margin-top:6px">Checking authenticated Yahoo roster. No transactions are performed.</div></div></aside>
 <main class="main"><header class="top"><div><div class="eyebrow">Game of Trolls · League #85892</div><h1 class="title" id="page-title">Fantasy Command Center</h1><div class="muted" id="page-desc">Your team intelligence, all in one place.</div></div><div class="header-actions"><a id="yahoo-login-button" href="/api/auth/yahoo/login?owner=1" class="button" aria-label="Sign in with Yahoo">Sign in with Yahoo</a><span id="yahoo-login-state" class="small" aria-live="polite"></span><span class="tag">2026–27 · H2H 9-CAT</span><a href="/matchup.html" class="button">Matchup Live Box Scores ↗</a><a href="/optimizer.html" class="button">Optimization Lab ↗</a><a href="https://basketball.fantasysports.yahoo.com/nba/85892/5" target="_blank" rel="noopener" class="button">Open Yahoo ↗</a></div></header>
-<div class="banner">Checking authenticated Yahoo API roster. If unavailable, public Yahoo data is used and clearly labeled. Acquisition/FAB and IL counters are historical October 22 screenshots, not live data. No transactions.</div>
+<div class="banner">Yahoo roster, acquisition and availability snapshots show their observation times. Decisions are read-only.</div>
 <section id="overview" class="view"><div class="hero"><div><div class="eyebrow">YOUR TEAM · #5</div><h2>Salary CAPtain</h2><p>14-team H2H categories · 9-CAT fantasy basketball</p></div><div class="hero-logo">♛</div></div><div class="stats">
 <div class="stat"><div class="small">Roster players</div><div class="val" id="team-count">—</div><div class="sub">Includes Yahoo roster slots</div></div>
 <div class="stat"><div class="small">Weekly adds used</div><div class="val">—</div><div class="sub">Awaiting live Yahoo league settings</div></div>
 <div class="stat"><div class="small">FAB remaining</div><div class="val">—</div><div class="sub">Awaiting live Yahoo budget</div></div>
 <div class="stat"><div class="small">IL slots occupied</div><div class="val" id="live-il-count">—</div><div class="sub">Current roster slots · capacity unverified</div></div></div>
-<div class="card" style="margin-bottom:16px"><h3>Yahoo League Data · Source of Truth</h3><div id="league-data-health" class="small">Loading authenticated league data…</div><div id="league-teams" class="small" style="margin-top:8px">Checking league teams…</div></div><div class="grid2"><div class="card"><h3>Action Center · Live</h3><div id="live-actions" class="empty">Waiting for Yahoo API roster…</div></div><div class="card"><h3>Acquisition Intelligence</h3><div class="notice">Weekly adds, FAB balance, waiver claims and deadlines are not yet available from verified Yahoo league endpoints. Historical October screenshots are excluded from current decisions.</div><p class="subtitle" style="margin-top:12px">Use Free Agents for verified availability. Pickup recommendations remain disabled until matchup and waiver data are confirmed.</p><button class="button" data-go="freeagents">Browse free agents →</button></div></div>
+<div class="card" style="margin-bottom:16px"><h3>Yahoo League Data · Source of Truth</h3><div id="league-data-health" class="small">Loading authenticated league data…</div><div id="league-teams" class="small" style="margin-top:8px">Checking league teams…</div></div><div class="grid2"><div class="card"><h3>Action Center · Live</h3><div id="live-actions" class="empty">Waiting for Yahoo API roster…</div></div><div class="card"><h3>Acquisition Intelligence</h3><div id="acquisition-summary" class="notice" role="status">Checking Yahoo acquisition data…</div><p class="subtitle" style="margin-top:12px">Use Free Agents for verified availability. Pickup recommendations remain disabled until matchup and waiver data are confirmed.</p><button class="button" data-go="freeagents">Browse free agents →</button></div></div>
 <div class="section-head"><h3>Yahoo Current Roster</h3><button class="button" data-go="roster">View full roster →</button></div><div class="card" id="overview-roster">Loading roster…</div></section>
-<section id="roster" class="view hidden"><div class="section-head"><h3>Salary CAPtain roster</h3><input class="search" id="roster-search" aria-label="Search players" placeholder="Search players…"></div><p class="subtitle">Roster source is displayed in the status panel. Yahoo API is preferred; public data is fallback only.</p><div class="table-wrap"><table><thead><tr><th>Player</th><th>Roster Slot</th><th>Injury Flag</th><th>Keep/Cut Rating</th></tr></thead><tbody id="roster-body"></tbody></table></div><div class="section-head"><h3>League-wide Player Profiles</h3><button class="button" id="league-rosters-refresh" type="button">Refresh Yahoo rosters</button></div><p class="subtitle" id="league-rosters-status">Loading all league rosters from Yahoo…</p><div class="table-wrap"><table><thead><tr><th>Player</th><th>Fantasy team</th><th>NBA team</th><th>Eligible positions</th></tr></thead><tbody id="league-rosters-body"></tbody></table></div></section>
-<section id="drop" class="view hidden"><div class="section-head"><h3>Keep or Cut · Automated Data</h3><span class="pill violet">READ ONLY</span></div><div class="notice">Manual uploads are removed. Player analysis will use the public Yahoo roster and NBA box scores. Drop recommendations remain disabled until a verified three-game sample, longer-term baseline and injury context exist.</div><div class="grid2" style="margin-top:19px"><div class="card"><h3>Current Player Pool</h3><div id="drop-results" class="empty">Retrieving your current Yahoo roster…</div></div><div class="card"><h3>Automatic Intelligence</h3><p class="subtitle">Yahoo matchup/category totals and ESPN NBA schedule are available now. Three-game injury-aware Keep/Cut remains evidence-gated rather than estimating missing game logs.</p><a class="button" href="/optimizer.html">Open Decision Intelligence ↗</a></div></div></section>
+<section id="roster" class="view hidden"><div class="section-head"><h3>Salary CAPtain roster</h3><input class="search" id="roster-search" aria-label="Search players" placeholder="Search players…"></div><p class="subtitle">Roster source is displayed in the status panel. Yahoo API is preferred; public data is fallback only.</p><div class="table-wrap"><table><thead><tr><th>Player</th><th>Roster Slot</th><th>Injury Flag</th><th>Keep/Cut Rating</th><th>9-CAT rank</th><th>Trend</th><th>GP</th><th>MPG</th><th>FG%</th><th>FT%</th><th>3PM</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>FGM</th><th>FGA</th><th>FTM</th><th>FTA</th><th>3PA</th><th>3P%</th><th>OREB</th><th>DREB</th><th>PF</th><th>DD</th><th>TD</th></tr></thead><tbody id="roster-body"></tbody></table></div><div class="section-head"><h3>League-wide Player Profiles</h3><button class="button" id="league-rosters-refresh" type="button">Refresh Yahoo rosters</button></div><p class="subtitle" id="league-rosters-status">Loading all league rosters from Yahoo…</p><div class="table-wrap"><table><thead><tr><th>Player</th><th>Fantasy team</th><th>NBA team</th><th>Eligible positions</th><th>GP</th><th>MPG</th><th>FG%</th><th>FT%</th><th>3PM</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>FGM</th><th>FGA</th><th>FTM</th><th>FTA</th><th>3PA</th><th>3P%</th><th>OREB</th><th>DREB</th><th>PF</th><th>DD</th><th>TD</th></tr></thead><tbody id="league-rosters-body"></tbody></table></div></section>
+<section id="drop" class="view hidden"><div class="section-head"><h3>Keep or Cut · Automated Data</h3><span class="pill violet">READ ONLY</span></div><div class="notice">Manual uploads are removed. Player analysis uses verified Yahoo IDs linked to completed ESPN game history. Drop recommendations remain disabled until a verified three-game sample, longer-term baseline and injury context exist.</div><div class="grid2" style="margin-top:19px"><div class="card"><h3>Current Player Pool</h3><div id="drop-results" class="empty">Retrieving your current Yahoo roster…</div></div><div class="card"><h3>Automatic Intelligence</h3><p class="subtitle">Yahoo matchup/category totals and ESPN NBA schedule are available now. Three-game injury-aware Keep/Cut remains evidence-gated rather than estimating missing game logs.</p><a class="button" href="/optimizer.html">Open Decision Intelligence ↗</a></div></div></section>
 <section id="injury" class="view hidden"><div class="section-head"><h3>Injury Return Radar</h3><span class="pill violet">OWN TEAM + VERIFIED FREE AGENTS ONLY</span></div><div class="grid2"><div class="card"><h3>My Team · Injury Watch (awaiting verified injury feed)</h3><div id="injury-roster"></div><div class="notice" style="margin-top:13px">Injury flags shown below come from the current authenticated Yahoo roster when available. Return dates require independent verification.</div></div><div class="card"><h3>Available Player Return Opportunities</h3><div class="empty">Yahoo free-agent ownership is available in the Free Agents tab. Injury-return opportunities still require verified reports.</div><p class="subtitle" style="margin-top:14px">The hourly ChatGPT injury monitor runs separately; this page does not yet sync those alerts.</p></div></div></section>
-<section id="waiver" class="view hidden"><div class="section-head"><h3>Waiver Command</h3><span class="pill orange">LIVE STATUS NOT VERIFIED</span></div><div class="card"><h3>Waiver and FAB verification</h3><p class="subtitle">Current claims, waiver processing dates, FAB remaining, weekly acquisition limit and adds used must be fetched from the authenticated Yahoo league and transactions endpoints before making a pickup recommendation.</p><div class="notice">No historical October 22 waiver claim is shown as pending today. Yahoo roster membership alone does not prove a waiver claim or its cost.</div><button class="button" data-go="freeagents" style="margin-top:12px">See confirmed free agents →</button></div></section>
-<section id="freeagents" class="view hidden"><div class="section-head"><h3>League Free Agents</h3><span class="pill violet">YAHOO AVAILABILITY · ESPN DEPTH</span></div><div class="card"><p class="subtitle">Yahoo confirms league availability. ESPN supplies verified NBA depth-chart positions. The list automatically starts with the best verified rank among available players (#2, #3, etc. when no #1 is available). This is not a fantasy projection.</p><div class="flex" style="gap:12px;flex-wrap:wrap;margin:12px 0"><button class="button" id="fa-refresh" type="button">Refresh Yahoo availability</button><a class="button" href="https://basketball.fantasysports.yahoo.com/nba/85892/players" target="_blank" rel="noopener">Yahoo Players ↗</a></div><div class="flex" style="gap:12px;flex-wrap:wrap;margin:14px 0"><label for="fa-position">Depth position <select id="fa-position" class="search"><option value="ANY">Any position (best rank)</option><option>PG</option><option>SG</option><option>SF</option><option>PF</option><option>C</option></select></label><label for="fa-rank">Highest depth rank <select id="fa-rank" class="search"><option value="0">All ranks</option><option value="1">#1 only</option><option value="2">Top 2</option><option value="3">Top 3</option><option value="5">Top 5</option></select></label><label for="fa-sort">Sort <select id="fa-sort" class="search"><option value="rank">Best available depth rank (ascending)</option><option value="positions">Most depth-chart positions</option><option value="rankThenPositions">Best rank → most positions</option><option value="name">Player name A–Z</option><option value="mpg">MPG (highest first, Yahoo)</option></select></label></div><div id="fa-status" class="muted">Open this tab to check current free agents.</div><div class="table-wrap"><table style="width:100%;margin-top:14px"><thead><tr><th>Player / Profile</th><th>NBA</th><th>Depth chart (all positions)</th><th>Best rank</th><th>Position count</th><th>MPG</th><th>Yahoo status</th></tr></thead><tbody id="fa-body"></tbody></table></div><div class="notice" style="margin-top:12px">Only verified depth positions are ranked. Players with missing depth data are shown as unranked when no rank filter is active. Yahoo waiver players are not included.</div></div></section>
-<section id="sources" class="view hidden"><div class="section-head"><h3>Source Accuracy Lab</h3><span class="pill gray">AWAITING VERIFIED RETURNS</span></div><div class="stats"><div class="stat"><div class="small">Recorded real forecasts</div><div class="val">0</div></div><div class="stat"><div class="small">Settled returns</div><div class="val">0</div></div><div class="stat"><div class="small">Source ranking</div><div class="val">—</div><div class="sub">No samples yet</div></div><div class="stat"><div class="small">Accuracy window</div><div class="val">±3d</div><div class="sub">Estimated vs observed</div></div></div><div class="card"><h3>How trust scores are calculated</h3><div class="source-item"><strong>1 · Save the original forecast</strong><div class="muted">Source name, article URL, published date, player and estimated return. Never overwrite prior forecasts.</div></div><div class="source-item"><strong>2 · Verify first real game appearance</strong><div class="muted">Settle prediction only with supporting official game records.</div></div><div class="source-item"><strong>3 · Measure accuracy</strong><div class="muted">Absolute day error, ±3-day hit rate and conservative confidence adjusted for sample size.</div></div><div class="notice" style="margin-top:14px">Scoring logic exists in GitHub; this dashboard has no connected permanent forecast ledger yet. No source has an earned accuracy score.</div></div></section>
+<section id="waiver" class="view hidden"><div class="section-head"><h3>Waiver Watch</h3></div><div class="card"><h3>Waiver Optimizer</h3><div id="waiver-plan" role="status">Open this tab to evaluate Yahoo waiver options.</div><h3 style="margin-top:16px">Yahoo waiver players</h3><p id="waiver-status" class="muted" role="status">Open this tab to check Yahoo waivers.</p><details id="waiver-results" hidden><summary>Show waiver players</summary><div class="table-wrap"><table><thead><tr><th>Player</th><th>Yahoo roster status</th></tr></thead><tbody id="waiver-body"></tbody></table></div></details><h3 style="margin-top:16px">Acquisition rules</h3><p class="subtitle">Current claims, waiver processing dates, FAB remaining, weekly acquisition limit and adds used must be fetched from the authenticated Yahoo league and transactions endpoints before making a pickup recommendation.</p><div class="notice">No historical October 22 waiver claim is shown as pending today. Yahoo roster membership alone does not prove a waiver claim or its cost.</div><button class="button" data-go="freeagents" style="margin-top:12px">See confirmed free agents →</button></div></section>
+<section id="freeagents" class="view hidden"><div class="section-head"><h3>Streaming Optimizer</h3><span class="pill violet">YAHOO AVAILABILITY · ESPN DEPTH</span></div><div class="card"><p class="subtitle">Yahoo confirms league availability. ESPN supplies verified NBA depth-chart positions. The list automatically starts with the best verified rank among available players (#2, #3, etc. when no #1 is available). This is not a fantasy projection.</p><div class="flex" style="gap:12px;flex-wrap:wrap;margin:12px 0"><button class="button" id="fa-refresh" type="button">Refresh Yahoo availability</button><a class="button" href="https://basketball.fantasysports.yahoo.com/nba/85892/players" target="_blank" rel="noopener">Yahoo Players ↗</a></div><div class="flex" style="gap:12px;flex-wrap:wrap;margin:14px 0"><label for="fa-position">Depth position <select id="fa-position" class="search"><option value="ANY">Any position (best rank)</option><option>PG</option><option>SG</option><option>SF</option><option>PF</option><option>C</option></select></label><label for="fa-rank">Highest depth rank <select id="fa-rank" class="search"><option value="0">All ranks</option><option value="1">#1 only</option><option value="2">Top 2</option><option value="3">Top 3</option><option value="5">Top 5</option></select></label><label for="fa-sort">Sort <select id="fa-sort" class="search"><option value="rank">Best available depth rank (ascending)</option><option value="positions">Most depth-chart positions</option><option value="rankThenPositions">Best rank → most positions</option><option value="name">Player name A–Z</option><option value="stat:GP">GP (highest first)</option><option value="stat:MPG">MPG (highest first)</option><option value="stat:FG%">FG% (highest first)</option><option value="stat:FT%">FT% (highest first)</option><option value="stat:3PM">3PM (highest first)</option><option value="stat:PTS">PTS (highest first)</option><option value="stat:REB">REB (highest first)</option><option value="stat:AST">AST (highest first)</option><option value="stat:STL">STL (highest first)</option><option value="stat:BLK">BLK (highest first)</option><option value="stat:TO">TO (lowest first)</option><option value="stat:FGM">FGM (highest first)</option><option value="stat:FGA">FGA (highest first)</option><option value="stat:FTM">FTM (highest first)</option><option value="stat:FTA">FTA (highest first)</option><option value="stat:3PA">3PA (highest first)</option><option value="stat:3P%">3P% (highest first)</option><option value="stat:OREB">OREB (highest first)</option><option value="stat:DREB">DREB (highest first)</option><option value="stat:PF">PF (highest first)</option><option value="stat:DD">DD (highest first)</option><option value="stat:TD">TD (highest first)</option></select></label></div><div id="fa-status" class="muted" role="status">Open this tab to check current free agents.</div><div id="streaming-plan" hidden style="margin-top:14px"></div><div class="table-wrap"><table style="width:100%;margin-top:14px"><thead><tr><th>Player / Profile</th><th>NBA</th><th>Depth chart (all positions)</th><th>Best rank</th><th>Position count</th><th>GP</th><th>MPG</th><th>FG%</th><th>FT%</th><th>3PM</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>FGM</th><th>FGA</th><th>FTM</th><th>FTA</th><th>3PA</th><th>3P%</th><th>OREB</th><th>DREB</th><th>PF</th><th>DD</th><th>TD</th><th>9-CAT rank</th><th>Trend</th><th>Yahoo status</th></tr></thead><tbody id="fa-body"></tbody></table></div><div class="notice" style="margin-top:12px">Only verified depth positions are ranked. Players with missing depth data are shown as unranked when no rank filter is active. Yahoo waiver players are not included.</div></div></section>
+<section id="sources" class="view hidden"><div class="section-head"><h3>Source Accuracy Lab</h3><span class="pill gray">AWAITING VERIFIED RETURNS</span></div><div class="stats"><div class="stat"><div class="small">Recorded real forecasts</div><div class="val">0</div></div><div class="stat"><div class="small">Settled returns</div><div class="val">0</div></div><div class="stat"><div class="small">Source ranking</div><div class="val">—</div><div class="sub">No samples yet</div></div><div class="stat"><div class="small">Accuracy window</div><div class="val">±3d</div><div class="sub">Estimated vs observed</div></div></div><div class="card"><h3>How trust scores are calculated</h3><div class="source-item"><strong>1 · Save the original forecast</strong><div class="muted">Source name, article URL, published date, player and estimated return. Never overwrite prior forecasts.</div></div><div class="source-item"><strong>2 · Verify first real game appearance</strong><div class="muted">Settle prediction only with supporting official game records.</div></div><div class="source-item"><strong>3 · Measure accuracy</strong><div class="muted">Absolute day error, ±3-day hit rate and conservative confidence adjusted for sample size.</div></div><div class="notice" style="margin-top:14px">Scoring logic exists in GitHub; this dashboard has no connected permanent forecast ledger yet. No source has an earned accuracy score.</div></div><div class="card" style="margin-top:18px"><h3>Data Health Monitor · 3.0</h3><p class="subtitle">Authenticated Yahoo snapshot sections; never exposes tokens or source payloads.</p><div id="system-health-panel" class="muted">Open this tab to check Yahoo data freshness.</div><button class="button" id="health-refresh" type="button" style="margin-top:12px">Refresh data health</button></div></section>
 <div class="footer">Independent analytics prototype · Not affiliated with Yahoo or the NBA · <a href="https://github.com/imdorukhan/fantasy-roster-advisor" target="_blank" rel="noopener">View source on GitHub ↗</a></div></main></div>
 <script type="module">
+import {playerLink} from "./player-dialog.mjs";
 import {getLeagueData,leagueHealth} from './league-data.js';
-const names={overview:['Fantasy Command Center','Your team intelligence, all in one place.'],roster:['My Roster','Who is on Salary CAPtain, by position.'],drop:['Keep or Cut','Identify performance decline without overreacting to three games.'],injury:['Injury Return Radar','Track recovery news and possible pickup opportunities.'],waiver:['Waiver Planner','Manage weekly acquisition budget and pending claims.'],freeagents:['Free Agents','Verified league availability, injury and waiver eligibility.'],sources:['Source Accuracy Lab','Learn which injury return forecasts become reliable over time.']};
-function go(v){if(!names[v])return;document.querySelectorAll('.view').forEach(e=>e.classList.toggle('hidden',e.id!==v));document.querySelectorAll('.nav button').forEach(e=>e.classList.toggle('active',e.dataset.view===v));document.querySelector('#page-title').textContent=names[v][0];document.querySelector('#page-desc').textContent=names[v][1];if(v==='freeagents')loadFreeAgents();location.hash=v;window.scrollTo({top:0,behavior:'smooth'})}
+const names={overview:['Fantasy Command Center','Your team intelligence, all in one place.'],roster:['My Roster','Who is on Salary CAPtain, by position.'],drop:['Keep or Cut','Identify performance decline without overreacting to three games.'],injury:['Injury Return Radar','Track recovery news and possible pickup opportunities.'],waiver:['Waiver Planner','Manage weekly acquisition budget and pending claims.'],freeagents:['Streaming Optimizer','Check which Yahoo free agents are available to stream.'],sources:['Source Accuracy Lab','Learn which injury return forecasts become reliable over time.']};
+function go(v){if(!names[v])return;document.querySelectorAll('.view').forEach(e=>e.classList.toggle('hidden',e.id!==v));document.querySelectorAll('.nav button').forEach(e=>e.classList.toggle('active',e.dataset.view===v));document.querySelector('#page-title').textContent=names[v][0];document.querySelector('#page-desc').textContent=names[v][1];if(v==='freeagents')loadFreeAgents();if(v==='waiver')loadFreeAgents(true);if(v==='sources')loadSystemHealth();location.hash=v;window.scrollTo({top:0,behavior:'smooth'})}
 document.querySelectorAll('[data-view]').forEach(el=>el.addEventListener('click',()=>go(el.dataset.view)));document.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>go(el.dataset.go)));
-let freeAgentsLoading=false,freeAgentPlayers=[],faDepthCache=new Map(),faDepthErrors=[];
+async function loadSystemHealth(){
+ const panel=document.getElementById('system-health-panel');if(!panel)return;
+ panel.textContent='Checking authenticated Yahoo snapshot freshness…';
+ try{
+  const r=await fetch('/api/auto-data?live=1&health=1',{credentials:'same-origin',cache:'no-store'});
+  if(r.status===401){panel.textContent='Yahoo sign-in required to view private data health.';return;}
+  if(!r.ok)throw Error('Data health endpoint unavailable (HTTP '+r.status+')');
+  const d=await r.json();
+  panel.innerHTML='<p><strong>Overall: '+esc(d.status)+'</strong> · Checked '+esc(new Date(d.checkedAt).toLocaleString())+'</p><table><thead><tr><th>Yahoo section</th><th>Status</th><th>Last observed</th></tr></thead><tbody>'+(d.sections||[]).map(x=>'<tr><td>'+esc(x.section)+'</td><td>'+esc(x.status)+'</td><td>'+esc(x.observedAt?new Date(x.observedAt).toLocaleString():'Not available')+'</td></tr>').join('')+'</tbody></table>';
+ }catch(e){panel.textContent='Data health unavailable: '+e.message;}
+}
+document.getElementById('health-refresh').addEventListener('click',loadSystemHealth);
+let streamingSnapshot=null;
+let pendingWaiverImpact=false;
+let freeAgentsLoading=false,freeAgentPlayers=[],faDepthCache=new Map(),faDepthErrors=[],faDataComplete=false,faLoadError=null;
 const faNormalize=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z]/g,'');
 function faDepthFor(p){const team=faDepthCache.get(p.nbaTeam);return (team?.rows||[]).filter(x=>faNormalize(x.name)===faNormalize(p.name)&&['PG','SG','SF','PF','C'].includes(x.position)&&Number.isInteger(x.rank)&&x.rank>0).sort((a,b)=>a.rank-b.rank)}
 function faRank(p){const pos=document.querySelector('#fa-position').value;const rows=faDepthFor(p).filter(x=>pos==='ANY'||x.position===pos);return rows.length?Math.min(...rows.map(x=>x.rank)):null}
 function faPositionCount(p){const pos=document.querySelector('#fa-position').value;return new Set(faDepthFor(p).filter(x=>pos==='ANY'||x.position===pos).map(x=>x.position)).size}
+function renderStreamingPlan(plan){
+ const panel=document.querySelector('#streaming-plan');
+ panel.hidden=!plan;
+ if(!plan){panel.textContent='';return;}
+ const budget=plan.acquisitions;
+ const summary=budget
+  ? '<p><strong>'+esc(budget.remaining)+' of '+esc(budget.limit)+' Yahoo adds remaining</strong> · Week '+esc(plan.week)+' · Observed '+esc(new Date(budget.observedAt).toLocaleString())+'</p>'
+  : '';
+ const coverage=plan.days?.map(day=>'<tr><td>'+esc(day.date)+'</td><td>'+esc(day.scheduledGames??'Unavailable')+'</td><td>'+esc(day.openSlots===null?'Unavailable':day.openSlots.join(', ')||'None')+'</td></tr>').join('');
+ const calendar=coverage?'<details><summary>Show NBA schedule and open Yahoo lineup slots</summary><div class="table-wrap"><table><thead><tr><th>Date</th><th>NBA games</th><th>Open starting slots</th></tr></thead><tbody>'+coverage+'</tbody></table></div></details>':'';
+ const ranked=plan.shortlist?.map(player=>'<li>'+playerLink(player)+' · '+esc(player.eligibleGames)+' eligible games · '+esc(player.dates.join(', '))+'</li>').join('');
+ panel.innerHTML=summary+calendar+(plan.available
+  ? '<p>'+ (ranked?'Schedule-based shortlist':'No pickups fit an open slot and the remaining Yahoo add budget.') +'</p>'+(ranked?'<ol>'+ranked+'</ol>':'')
+  : '<p>Streaming ranking unavailable: '+esc(plan.reason)+'</p>');
+}
+function renderWaiverPlan(plan){
+ const panel=document.querySelector('#waiver-plan');
+ if(!plan||plan.error){panel.textContent=plan?.error||'Verified waiver schedule unavailable.';return;}
+ const format=(category,value)=>{
+  const delta=category.endsWith('%')?value*100:value;
+  return (delta>0?'+':'')+delta.toFixed(1)+(category.endsWith('%')?' pp':'');
+ };
+ const impactCell=row=>{
+  if(!row.impact)return 'Unavailable';
+  const {delta,progress,games}=row.impact;
+  const targets=Object.keys(progress).map(category=>esc(category)+' '+esc(format(category,delta[category]))).join(' · ');
+  return '<details><summary>'+esc(targets||'No trailing or tied categories')+'</summary><div class="small">'+
+   Object.entries(delta).map(([category,value])=>esc(category)+' '+esc(format(category,value))).join(' · ')+
+   ' · Based on '+esc(games)+' completed games</div></details>';
+ };
+ const table=plan.rows.map(row=>'<tr><td>'+playerLink(row)+'</td><td>'+esc(row.waiverStatus)+'</td><td>'+esc(row.extraStarts??'Unavailable')+'</td><td>'+esc(row.dates.join(', ')||'—')+'</td><td>'+impactCell(row)+'</td></tr>').join('');
+ const impact=plan.impactStatus?'<p class="small">'+esc(plan.impactStatus)+'</p>':plan.impactChecked?
+  '<p class="small">9-CAT coverage '+esc(plan.impactCoverage)+'/'+esc(plan.impactChecked)+' eligible candidates in the full waiver pool · '+esc(plan.displayImpactCoverage)+' displayed with 9-CAT impact · ESPN through '+esc(plan.historyThrough)+' · Yahoo observed '+esc(new Date(plan.impactObservedAt).toLocaleString())+'.</p>':'';
+ panel.innerHTML='<p>'+esc(plan.evaluated)+' of '+esc(plan.totalWaivers)+' waiver players evaluated · '+esc(plan.rankable)+' with verified dates · Top '+esc(plan.rows.length)+' shown · '+esc(plan.remainingAdds)+' weekly adds remaining.</p>'+
+ '<p class="small">Extra starts rank first. Among candidates with the same start count, projected contribution to trailing or tied categories decides the order. Turnovers count against you. Each candidate is evaluated individually after the listed waiver date.</p>'+impact+
+ (table?'<div class="table-wrap"><table><thead><tr><th>Player</th><th>Yahoo status</th><th>Extra starts</th><th>Eligible game dates</th><th>9-CAT matchup impact</th></tr></thead><tbody>'+table+'</tbody></table></div>':'');
+}
 function renderFreeAgents(){
- const body=document.querySelector('#fa-body'),limit=Number(document.querySelector('#fa-rank').value),sort=document.querySelector('#fa-sort').value;
+ const body=document.querySelector('#fa-body');
+ if(streamingSnapshot){
+  const {freeAgents,waivers,plan}=streamingSnapshot;
+  renderStreamingPlan(plan);
+  renderWaiverPlan(plan?.waiverPlan);
+  const status=document.querySelector('#fa-status');
+  status.textContent=freeAgents.count===0
+   ? 'Yahoo verified 0 free agents. No streaming pickups are available.'
+   : freeAgents.count+' Yahoo free agents verified.';
+  status.append(' '+waivers.count+' players are on waivers. Observed '+new Date(freeAgents.observedAt).toLocaleString()+'.');
+  body.innerHTML=freeAgents.players.map(player=>'<tr><td>'+playerLink(player)+'</td><td colspan="28">—</td><td>Free agent</td></tr>').join('')
+   || '<tr><td colspan="30">No verified free agents.</td></tr>';
+  document.querySelector('#waiver-status').textContent=waivers.count+' verified Yahoo waiver players · '+new Date(waivers.observedAt).toLocaleString();
+  document.querySelector('#waiver-body').innerHTML=waivers.players.map(player=>'<tr><td>'+playerLink(player)+'</td><td>'+esc(player.yahooRosterStatus)+'</td></tr>').join('');
+  document.querySelector('#waiver-results').hidden=waivers.count===0;
+  return;
+ }
+ const limit=Number(document.querySelector('#fa-rank').value),sort=document.querySelector('#fa-sort').value;
  const filtered=freeAgentPlayers.filter(p=>{const rank=faRank(p);return !limit||rank!==null&&rank<=limit}).sort((a,b)=>{
   if(sort==='name')return a.name.localeCompare(b.name);
-  if(sort==='mpg')return (Number.isFinite(b.mpg)?b.mpg:-1)-(Number.isFinite(a.mpg)?a.mpg:-1)||a.name.localeCompare(b.name);
+  if(sort.startsWith('stat:'))return comparePlayerStat(a,b,sort.slice(5));
   if(sort==='positions')return faPositionCount(b)-faPositionCount(a)||(faRank(a)??Infinity)-(faRank(b)??Infinity)||a.name.localeCompare(b.name);
   const byRank=(faRank(a)??Infinity)-(faRank(b)??Infinity);
   return byRank||(sort==='rankThenPositions'?faPositionCount(b)-faPositionCount(a):0)||a.name.localeCompare(b.name);
  });
- body.innerHTML=filtered.map(p=>{const depth=faDepthFor(p),rank=faRank(p);return '<tr><td><button type="button" class="player-profile-link" data-player-id="'+esc(p.yahooId)+'">'+esc(p.name)+'</button></td><td>'+esc(p.nbaTeam||'—')+'</td><td>'+(depth.length?depth.map(x=>'<span class="pill violet" style="display:inline-block;margin:2px">'+esc(x.position)+' #'+esc(x.rank)+'</span>').join(''):'<span class="muted">Not verified</span>')+'</td><td>'+(rank===null?'—':'#'+rank)+'</td><td>'+faPositionCount(p)+'</td><td>'+(Number.isFinite(p.mpg)?p.mpg.toFixed(1):'—')+'</td><td>Free agent</td></tr>'}).join('')||'<tr><td colspan="7">No verified players match these filters.</td></tr>';
+ body.innerHTML=filtered.map(p=>{const depth=faDepthFor(p),rank=faRank(p);return '<tr><td>'+playerLink(p)+'</td><td>'+esc(p.nbaTeam||'—')+'</td><td>'+(depth.length?depth.map(x=>'<span class="pill violet" style="display:inline-block;margin:2px">'+esc(x.position)+' #'+esc(x.rank)+'</span>').join(''):'<span class="muted">Not verified</span>')+'</td><td>'+(rank===null?'—':'#'+rank)+'</td><td>'+faPositionCount(p)+'</td>'+statCells(p)+perfCells(p)+'<td>Free agent</td></tr>'}).join('')||'<tr><td colspan="30">No verified players match these filters.</td></tr>';
  const ranks=filtered.map(faRank).filter(x=>x!==null);
  const best=ranks.length?Math.min(...ranks):null;
- document.querySelector('#fa-status').textContent=filtered.length+' shown / '+freeAgentPlayers.length+' Yahoo free agents loaded · Best available rank: '+(best===null?'not verified':'#'+best)+' · '+faDepthCache.size+' NBA teams checked'+(faDepthErrors.length?' · '+faDepthErrors.length+' depth feeds unavailable':'')+' · Depth source: ESPN';
+ document.querySelector('#fa-status').textContent=filtered.length+' shown / '+freeAgentPlayers.length+' Yahoo free agents loaded ('+(faDataComplete?'complete':'incomplete')+') · '+(faLoadError?'Paging: '+faLoadError+' · ':'')+'MPG available: '+freeAgentPlayers.filter(p=>Number.isFinite(p.mpg)).length+' · Best available rank: '+(best===null?'not verified':'#'+best)+' · '+faDepthCache.size+' NBA teams checked'+(faDepthErrors.length?' · '+faDepthErrors.length+' depth feeds unavailable':'')+' · Depth source: ESPN';
 }
-async function loadFreeAgents(){
- if(freeAgentsLoading)return;
- freeAgentsLoading=true;
+async function loadFreeAgents(includeImpact=false){
+ if(freeAgentsLoading){if(includeImpact)pendingWaiverImpact=true;return;}
+ freeAgentsLoading=true;faDataComplete=false;faLoadError=null;
  const status=document.querySelector('#fa-status');
- status.textContent='Checking Yahoo league availability…';
+ const pageSize=25,maxPages=40,batchSize=3;
+ status.textContent='Checking Yahoo league free agents…';
+ const waiverStatus=document.querySelector('#waiver-status');
+ waiverStatus.textContent='Checking Yahoo waivers…';
+ document.querySelector('#waiver-plan').textContent='Checking estimated extra starts…';
+ document.querySelector('#waiver-results').hidden=true;
+ document.querySelector('#waiver-body').textContent='';
+ streamingSnapshot=null;
+ renderStreamingPlan(null);
+ freeAgentPlayers=[];faDepthErrors=[];
  try{
-  const r=await fetch('/api/auto-data?live=1&freeAgents=1',{credentials:'same-origin',cache:'no-store'});
-  const data=await r.json();if(!r.ok||data.mode!=='YAHOO_FREE_AGENTS')throw Error(data.error||'Yahoo API HTTP '+r.status);
-  freeAgentPlayers=data.players||[];faDepthErrors=[];
-  status.textContent='Yahoo free agents loaded. Checking NBA depth charts…';
+  const snapshotResponse=await fetch('/api/auto-data?sc3Streaming=1'+(includeImpact?'&waiverImpact=1':''),{credentials:'same-origin',cache:'no-store'});
+  if(snapshotResponse.status!==404){
+   if(!snapshotResponse.ok)throw Error('Verified SC3 snapshot unavailable (HTTP '+snapshotResponse.status+')');
+   const snapshot=await snapshotResponse.json();
+   if(snapshot.mode!=='SC3_STREAMING_AVAILABILITY'||!Array.isArray(snapshot.freeAgents?.players)||!Array.isArray(snapshot.waivers?.players))
+    throw Error('Invalid SC3 availability response');
+   streamingSnapshot=snapshot;
+   renderFreeAgents();
+   return;
+  }
+  waiverStatus.textContent='Verified Yahoo waiver snapshots are unavailable in this environment.';
+  renderWaiverPlan(null);
+  let finished=false;
+  for(let page=0;page<maxPages&&!finished;page+=batchSize){
+   const requests=Array.from({length:Math.min(batchSize,maxPages-page)},(_,i)=>page+i);
+   const results=await Promise.allSettled(requests.map(async i=>{
+    const r=await fetch('/api/auto-data?live=1&freeAgents=1&start='+(i*pageSize),{credentials:'same-origin',cache:'no-store'});
+    const d=await r.json();
+    if(!r.ok||d.mode!=='YAHOO_FREE_AGENTS'||!Array.isArray(d.players))throw Error(d.error||'Yahoo API HTTP '+r.status);
+    return {page:i,players:d.players};
+   }));
+   for(let i=0;i<results.length;i++){
+    const result=results[i];
+    if(result.status!=='fulfilled'){faLoadError=String(result.reason?.message||'Yahoo paging error');finished=true;break}
+    freeAgentPlayers.push(...result.value.players);
+    if(result.value.players.length<pageSize){faDataComplete=true;finished=true;break}
+   }
+   freeAgentPlayers=[...new Map(freeAgentPlayers.map(p=>[String(p.yahooId),p])).values()];
+   status.textContent=freeAgentPlayers.length+' Yahoo free agents loaded…'+(faLoadError?' Pagination incomplete: '+faLoadError:'');
+  }
+  if(!faDataComplete&&!faLoadError)faLoadError='Reached pagination safety limit (1000 entries)';
+  if(!freeAgentPlayers.length){
+   if(!faDataComplete)throw Error(faLoadError||'Yahoo availability incomplete');
+   renderFreeAgents();status.textContent='Yahoo returned 0 free agents.';return;
+  }
+  status.textContent='Loaded '+freeAgentPlayers.length+' free agents. Checking NBA depth charts…';
   const teams=[...new Set(freeAgentPlayers.map(p=>p.nbaTeam).filter(Boolean))];
   await Promise.all(teams.map(async team=>{
    try{const response=await fetch('/api/auto-data?depthTeam='+encodeURIComponent(team),{cache:'no-store'});const d=await response.json();if(!response.ok||!Array.isArray(d.rows))throw Error('Depth unavailable');faDepthCache.set(team,d)}
    catch{faDepthErrors.push(team);faDepthCache.delete(team)}
   }));
-  renderFreeAgents();
- }catch(e){status.textContent='Yahoo free-agent verification failed: '+e.message;document.querySelector('#fa-body').innerHTML='';}
- finally{freeAgentsLoading=false}
-}
-for(const id of ['fa-position','fa-rank','fa-sort'])document.getElementById(id).addEventListener('change',renderFreeAgents);
-document.querySelector('#fa-refresh').addEventListener('click',loadFreeAgents);
-let players=[];let allLeaguePlayers=[];
-function renderRoster(filter=''){const p=players.filter(x=>x.name.toLowerCase().includes(filter.toLowerCase()));const rows=p.map(x=>'<tr><td><button class="player-profile-link" data-player-id="'+esc(x.yahooId)+'">'+esc(x.name)+'</button></td><td>'+esc(x.slot)+'</td><td>'+(x.status?'<span class="pill orange">'+esc(x.status)+'</span>':'<span class="muted">—</span>')+'</td><td><span class="pill gray">DATA NEEDED</span></td></tr>').join('');document.querySelector('#roster-body').innerHTML=rows||'<tr><td colspan="4">No matches</td></tr>'}
-function forecastValue(value){return value===null||value===undefined||value===''?'Not available':esc(value)}
-function showPlayerProfile(id){
- const p=freeAgentPlayers.find(x=>String(x.yahooId)===String(id))||allLeaguePlayers.find(x=>String(x.yahooId)===String(id))||players.find(x=>String(x.yahooId)===String(id));if(!p)return;
- const f=p.forecast||{},depth=Array.isArray(p.depthChart)?p.depthChart:[];
- const positions=Array.isArray(p.eligiblePositions)?p.eligiblePositions.map(x=>typeof x==='string'?x:x.position).filter(Boolean):[];
- const rows=depth.length?depth.map(x=>'<tr><td>'+esc(x.position)+'</td><td>'+forecastValue(x.rank)+'</td><td>'+esc(x.source||'Unknown')+'</td></tr>').join(''):(positions.length?positions:['PG','SG','SF','PF','C']).map(pos=>'<tr><td>'+esc(pos)+'</td><td>Not available</td><td>Unverified</td></tr>').join('');
- document.querySelector('#player-profile-content').innerHTML='<h2><a href="https://basketball.fantasysports.yahoo.com/nba/85892/player/'+encodeURIComponent(String(p.yahooId))+'" target="_blank" rel="noopener noreferrer" title="Open '+esc(p.name)+' on Yahoo Fantasy" style="color:inherit;text-decoration:underline;text-decoration-color:var(--violet);text-underline-offset:5px">'+esc(p.name)+'</a></h2><p class="muted">'+esc(p.nbaTeam||'NBA team unavailable')+' · Yahoo ID '+esc(p.yahooId)+' · '+esc(p.slot||'')+'</p><h3>Forecast</h3><div class="profile-metrics"><div>Percent Started<strong>'+forecastValue(f.percentStarted)+'</strong></div><div>Next 7 Day Rank<strong>'+forecastValue(f.next7DayRank)+'</strong></div><div>Next 14 Day Rank<strong>'+forecastValue(f.next14DayRank)+'</strong></div><div>Rest of Season Rank<strong>'+forecastValue(f.restOfSeasonRank)+'</strong></div></div><h3>All Positions · Depth Chart</h3><p class="muted">Depth ranks are displayed only when verified by a source. Yahoo eligible positions do not establish depth order.</p><table><thead><tr><th>Position</th><th>Depth rank</th><th>Source</th></tr></thead><tbody>'+rows+'</tbody></table><p class="muted">Forecast fields without a verified feed remain unavailable, not zero.</p>';
- const dialog=document.querySelector('#player-profile-dialog');dialog.showModal();
- if(p.nbaTeam){
-  const target=document.querySelector('#player-profile-content');
-  const msg=document.createElement('p');msg.className='muted';msg.textContent='Checking ESPN supplemental depth chart…';target.appendChild(msg);
-  fetch('/api/auto-data?depthTeam='+encodeURIComponent(p.nbaTeam),{cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||'Unavailable');return d}).then(d=>{
-   if(!dialog.open||!target.isConnected)return;
-   const normalize=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z]/g,'');
-   const matches=d.rows.filter(x=>normalize(x.name)===normalize(p.name));
-   const tbody=target.querySelector('tbody');
-   if(matches.length){tbody.innerHTML=matches.sort((a,b)=>a.position.localeCompare(b.position)).map(x=>'<tr><td>'+esc(x.position)+'</td><td>'+esc(x.rank)+'</td><td>ESPN · '+esc(d.observedAt.slice(0,10))+'</td></tr>').join('');msg.textContent='ESPN depth chart verified for '+matches.length+' position(s). Yahoo remains primary for fantasy eligibility.'}
-   else msg.textContent='No verified ESPN depth-chart ranking matched this player; Yahoo eligible positions shown without inferred ranking.';
-  }).catch(()=>{if(msg.isConnected)msg.textContent='ESPN depth chart unavailable; no ranking inferred.'});
+  await loadPerformance(freeAgentPlayers);renderFreeAgents();
+ }catch(e){faLoadError=e.message;status.textContent='Yahoo free-agent verification failed: '+e.message;waiverStatus.textContent='Verified Yahoo waiver data unavailable.';renderWaiverPlan(null);document.querySelector('#fa-body').innerHTML='';}
+ finally{
+  freeAgentsLoading=false;
+  if(pendingWaiverImpact){pendingWaiverImpact=false;loadFreeAgents(true);}
  }
 }
-document.addEventListener('click',e=>{const el=e.target.closest('[data-player-id]');if(el)showPlayerProfile(el.dataset.playerId)});
+for(const id of ['fa-position','fa-rank','fa-sort'])document.getElementById(id).addEventListener('change',renderFreeAgents);
+document.querySelector('#fa-refresh').addEventListener('click',()=>loadFreeAgents());
+const PLAYER_STAT_KEYS=["GP","MPG","FG%","FT%","3PM","PTS","REB","AST","STL","BLK","TO","FGM","FGA","FTM","FTA","3PA","3P%","OREB","DREB","PF","DD","TD"];
+function playerStat(p,key){return p.stats?.values?.[key]??(key==='MPG'?p.mpg:null);}
+function statDisplay(value,key){return typeof value!=='number'||!Number.isFinite(value)?'—':key.endsWith('%')?(value*100).toFixed(1)+'%':String(Math.round(value*100)/100)}
+function statCells(p){return PLAYER_STAT_KEYS.map(k=>'<td>'+esc(statDisplay(playerStat(p,k),k))+'</td>').join('')}
+function comparePlayerStat(a,b,key){const x=playerStat(a,key),y=playerStat(b,key);if(!Number.isFinite(x))return Number.isFinite(y)?1:a.name.localeCompare(b.name);if(!Number.isFinite(y))return -1;return (key==='TO'?x-y:y-x)||a.name.localeCompare(b.name)}
+async function fillStats(pool){
+ const ids=[...new Set(pool.filter(p=>!p.stats&&/^\d+$/.test(String(p.yahooId))).map(p=>String(p.yahooId)))];
+ const byId=new Map();for(let i=0;i<ids.length;i+=25){try{const r=await fetch('/api/auto-data?live=1&playerStats=1&ids='+encodeURIComponent(ids.slice(i,i+25).join(',')),{credentials:'same-origin',cache:'no-store'});if(!r.ok)continue;const d=await r.json();for(const p of d.players||[])if(p.stats)byId.set(String(p.yahooId),p.stats)}catch{}}
+ for(const p of pool)if(byId.has(String(p.yahooId))){p.stats=byId.get(String(p.yahooId));p.mpg=p.stats.values?.MPG??null}
+}
 
+const performanceByYahoo=new Map();
+async function loadPerformance(pool){
+ const ids=[...new Set(pool.map(p=>String(p.yahooId)).filter(x=>/^\d+$/.test(x)))];
+ for(const id of ids)performanceByYahoo.delete(id);
+ for(let i=0;i<ids.length;i+=25){try{
+ const res=await fetch('/api/auto-data?live=1&performance=1&ids='+encodeURIComponent(ids.slice(i,i+25).join(',')),{credentials:'same-origin',cache:'no-store'});
+ if(!res.ok)continue;const d=await res.json();if(d.mode!=='YAHOO_LINKED_PERFORMANCE')continue;
+ for(const row of d.players||[]){if(row.performance)performanceByYahoo.set(String(row.yahooId),{...row.performance,historyEnd:d.historyEnd,fresh:d.fresh,expectedEnd:d.expectedEnd});else performanceByYahoo.delete(String(row.yahooId))}
+ }catch{}}
+}
+function perfOf(p){return performanceByYahoo.get(String(p.yahooId))}
+function perfCells(p){const v=perfOf(p);return '<td>'+esc(v?.z?.rank??'—')+'</td><td>'+esc(v?.signal?.type?.replaceAll('_',' ')||'Unverified')+'</td>'}
+let players=[];let allLeaguePlayers=[];
+function renderRoster(filter=''){const p=players.filter(x=>x.name.toLowerCase().includes(filter.toLowerCase()));const rows=p.map(x=>'<tr><td>'+playerLink(x)+'</td><td>'+esc(x.slot)+'</td><td>'+(x.status?'<span class="pill orange">'+esc(x.status)+'</span>':'<span class="muted">—</span>')+'</td><td><span class="pill gray">DATA NEEDED</span></td>'+perfCells(x)+statCells(x)+'</tr>').join('');document.querySelector('#roster-body').innerHTML=rows||'<tr><td colspan="28">No matches</td></tr>'}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function loadRoster(){
  let d,source='Yahoo API';
  try{
   d=await getLeagueData();
   if(!d.rosterPlayers?.length)throw Error('Authenticated Yahoo roster not available');
-  players=d.rosterPlayers;
-  const status=leagueHealth(d).map(x=>x.name+': '+(x.available?'live':'unavailable')).join(' · ');
+  players=d.rosterPlayers;await fillStats(players);await loadPerformance(players);
+  const status=leagueHealth(d).map(x=>x.name+': '+(x.available?(x.stale?'stale':'snapshot'):'unavailable')).join(' · ');
   document.querySelector('#league-data-health').textContent=status;
   document.querySelector('#league-teams').textContent=d.leagueTeams?.length?d.leagueTeams.map(t=>t.name||t.key).join(' · '):'Team list not verified';
-  document.querySelector('.sidebar-note .label').innerHTML='<span class="status-dot" style="background:var(--green)"></span>Data: Yahoo API Live';
-  document.querySelector('.sidebar-note .small').textContent='Authenticated roster · '+new Date(d.observedAt).toLocaleString();
-  document.querySelector('.banner').textContent='YAHOO API PRIMARY · League 85892 read-only source · '+status+'. Missing fields are not inferred from ESPN.';
- }catch(e){
-  source='Public Yahoo fallback';
-  const r=await fetch('/api/auto-data',{cache:'no-store'});if(!r.ok)throw Error('Public Yahoo roster unavailable');
-  d=await r.json();players=d.teams?.find(x=>x.id===5)?.players||[];
-  if(!players.length)throw Error('No verified roster available');
-  document.querySelector('.sidebar-note .label').innerHTML='<span class="status-dot"></span>Data: Public Fallback';
-  document.querySelector('.sidebar-note .small').textContent='Yahoo API not available in this browser session.';
-  document.querySelector('.banner').textContent='PUBLIC YAHOO FALLBACK · Authenticated Yahoo API roster unavailable. Data is not API-verified. Acquisition/FAB and IL counters are historical screenshots, not live data.';
+  document.querySelector('.sidebar-note .label').innerHTML='<span class="status-dot" style="background:var(--green)"></span>Data: Yahoo API Snapshot';
+  document.querySelector('.sidebar-note .small').textContent='Verified snapshot · '+new Date(d.observedAt).toLocaleString();
+  document.querySelector('.banner').textContent='YAHOO API SNAPSHOT · League 85892 read-only source · '+status+'. Missing fields are not inferred from ESPN.';
+ }catch(e){players=[];renderRoster();throw Error('Verified Yahoo snapshot unavailable: '+e.message);
  }
  document.querySelector('#team-count').textContent=players.length;renderRoster();
  const il=players.filter(p=>/^(IL|IL\+|IR|IR\+)$/.test(p.slot||''));document.querySelector('#live-il-count').textContent=source==='Yahoo API'?String(il.length):'—';
  document.querySelector('#live-actions').innerHTML=source==='Yahoo API'?'<div class="listline"><div class="label">Verified roster: '+players.length+' players</div></div><div class="listline"><div class="label">Yahoo injury flags: '+players.filter(p=>p.status&&p.status!=='A').length+'</div></div><div class="listline"><div class="label">Current IL placements: '+il.length+'</div></div>':'<div class="notice">Authenticated roster unavailable; no live action recommendations.</div>';
- document.querySelector('#overview-roster').innerHTML=players.slice(0,6).map(p=>'<div class="listline"><div class="avatar">'+esc(p.slot)+'</div><div class="label">'+esc(p.name)+'</div><span class="muted rowend">'+esc(p.nbaTeam||source)+'</span></div>').join('');
- document.querySelector('#injury-roster').innerHTML=source==='Yahoo API'?(players.filter(p=>p.status&&p.status!=='A').map(p=>'<div class="listline"><div class="label">'+esc(p.name)+'</div><span class="pill orange rowend">'+esc(p.status)+'</span></div>').join('')||'<div class="empty">No current Yahoo injury flags.</div>'):'<div class="empty">Current Yahoo injury status unavailable.</div>';
+ document.querySelector('#overview-roster').innerHTML=players.slice(0,6).map(p=>'<div class="listline"><div class="avatar">'+esc(p.slot)+'</div><div class="label">'+playerLink(p)+'</div><span class="muted rowend">'+esc(p.nbaTeam||source)+'</span></div>').join('');
+ document.querySelector('#injury-roster').innerHTML=source==='Yahoo API'?(players.filter(p=>p.status&&p.status!=='A').map(p=>'<div class="listline"><div class="label">'+playerLink(p)+'</div><span class="pill orange rowend">'+esc(p.status)+'</span></div>').join('')||'<div class="empty">No current Yahoo injury flags.</div>'):'<div class="empty">Current Yahoo injury status unavailable.</div>';
 }
 loadRoster().catch(err=>{document.querySelector('.sidebar-note .label').textContent='Data: Unavailable';document.querySelector('#overview-roster').textContent='Roster unavailable: '+err.message;document.querySelector('#injury-roster').textContent='Current Yahoo injury status unavailable.'});
 document.querySelector('#roster-search').addEventListener('input',e=>renderRoster(e.target.value));
@@ -130,16 +236,25 @@ async function loadAllLeaguePlayers(){
  const status=document.querySelector('#league-rosters-status'),body=document.querySelector('#league-rosters-body');
  status.textContent='Loading all league team rosters from Yahoo API…';
  try{
-  const r=await fetch('/api/auto-data?live=1&allRosters=1',{credentials:'same-origin',cache:'no-store'});
+  const r=await fetch('/api/auto-data?sc3LeagueRosters=1',{credentials:'same-origin',cache:'no-store'});
   const d=await r.json();if(!r.ok||d.mode!=='YAHOO_ALL_ROSTERS')throw Error(d.error||'Yahoo API unavailable');
   allLeaguePlayers=d.teams.flatMap(t=>t.players.map(p=>({...p,fantasyTeam:t.name||t.key})));
+  const acquisition=document.querySelector('#acquisition-summary');
+  const a=d.acquisitions;
+  acquisition.textContent=a
+   ? a.remaining+' of '+a.limit+' weekly adds remaining · '+(a.fab===null?'FAB unavailable':'$'+a.fab+' FAB')+' · '+d.ilCount+' players in IL · Yahoo observed '+new Date(a.observedAt).toLocaleString()
+   : 'Current Yahoo add budget and FAB unavailable.';
   status.textContent=d.teamCount+' teams · '+d.playerCount+' roster entries · '+new Date(d.observedAt).toLocaleString()+(d.errors.length?' · '+d.errors.length+' teams unavailable':'');
-  body.innerHTML=allLeaguePlayers.map(p=>'<tr><td><button class="player-profile-link" data-player-id="'+esc(p.yahooId)+'">'+esc(p.name)+'</button></td><td>'+esc(p.fantasyTeam)+'</td><td>'+esc(p.nbaTeam||'—')+'</td><td>'+esc((p.eligiblePositions||[]).join(', ')||'Unavailable')+'</td></tr>').join('')||'<tr><td colspan="4">No verified roster players.</td></tr>';
+  body.innerHTML=allLeaguePlayers.map(p=>'<tr><td>'+playerLink(p)+'</td><td>'+esc(p.fantasyTeam)+'</td><td>'+esc(p.nbaTeam||'—')+'</td><td>'+esc((p.eligiblePositions||[]).join(', ')||'Unavailable')+'</td>'+statCells(p)+'</tr>').join('')||'<tr><td colspan="26">No verified roster players.</td></tr>';
  }catch(e){status.textContent='Yahoo all-rosters unavailable: '+e.message;body.innerHTML='';}
 }
 document.querySelector('#league-rosters-refresh').addEventListener('click',loadAllLeaguePlayers);
 loadAllLeaguePlayers();
 
-Promise.allSettled([fetch('/api/auto-data').then(r=>{if(!r.ok)throw Error('Yahoo roster unavailable');return r.json()}),fetch('/api/matchup').then(r=>{if(!r.ok)throw Error('ESPN box scores unavailable');return r.json()})]).then(([a,b])=>{if(a.status!=='fulfilled')throw Error('Live Yahoo roster unavailable');const own=a.value.teams?.find(t=>t.id===5)?.players||[];if(!own.length)throw Error('No current roster');const old=b.status==='fulfilled'?b.value.ourPlayers||[]:[];const byName=new Map(old.map(p=>[p.name.toLowerCase(),p]));document.querySelector('#drop-results').innerHTML=own.map(p=>{const recent=byName.get(p.name.toLowerCase());const count=recent?.games||0;return '<div class="listline"><div><div class="label">'+esc(p.name)+'</div><div class="small">'+esc(p.nbaTeam||'?')+' · '+(count?'ESPN observed: '+count+' NBA game(s), '+recent.boxScore.PTS+' PTS, '+recent.boxScore.REB+' REB, '+recent.boxScore.AST+' AST':'ESPN game history not yet matched')+'</div></div><span class="pill gray rowend">'+(count<3?'SAMPLE '+count+'/3':'BASELINE NEEDED')+'</span></div>'}).join('')}).catch(e=>{document.querySelector('#drop-results').textContent=e.message});
+async function renderDropFromVerifiedRoster(){
+ try{const d=await getLeagueData();const own=d.rosterPlayers||[];if(!own.length)throw Error('Verified roster unavailable');await loadPerformance(own);document.querySelector('#drop-results').innerHTML=own.map(p=>{const v=perfOf(p),recent=v?.windows?.[3],count=recent?.games||0;return '<div class="listline"><div><div class="label">'+playerLink(p)+'</div><div class="small">'+esc(p.nbaTeam||'—')+' · '+(recent?.complete?'Verified ESPN last 3: '+esc(statDisplay(recent.values?.PTS,'PTS'))+' PTS/game · through '+esc(v.historyEnd):'Verified player history unavailable')+'</div></div><span class="pill gray rowend">'+(count<3?'SAMPLE '+count+'/3':'REVIEW ONLY')+'</span></div>'}).join('');}catch(e){document.querySelector('#drop-results').textContent=e.message;}
+}
+renderDropFromVerifiedRoster();
+
 const initial=location.hash.slice(1);if(names[initial])go(initial);
-</script><dialog id="player-profile-dialog" aria-label="Player forecast and depth chart"><button type="button" onclick="document.querySelector('#player-profile-dialog').close()" class="button" style="float:right">Close</button><div id="player-profile-content"></div></dialog><style>.player-profile-link{background:none;border:0;padding:0;color:var(--text);font-weight:700;text-align:left;text-decoration:underline;text-decoration-color:var(--violet)}#player-profile-dialog{width:min(700px,94vw);max-height:85vh;overflow:auto;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:16px;padding:25px}#player-profile-dialog::backdrop{background:#000b}.profile-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}.profile-metrics>div{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:13px;color:var(--muted)}.profile-metrics strong{display:block;color:var(--text);font-size:19px}#player-profile-dialog table{width:100%;border-collapse:collapse}#player-profile-dialog th,#player-profile-dialog td{padding:10px;border-bottom:1px solid var(--line);text-align:left}</style><script>(async()=>{const button=document.getElementById("yahoo-login-button"),state=document.getElementById("yahoo-login-state");try{const r=await fetch("/api/auth/yahoo/status",{credentials:"same-origin",cache:"no-store"});const d=await r.json();if(r.ok&&d.connected){button.textContent="Yahoo Connected";button.setAttribute("aria-label","Yahoo account connected. Reconnect if needed");state.textContent="";}else{button.textContent="Sign in with Yahoo";state.textContent="";}}catch{button.textContent="Sign in with Yahoo";}})();</script></body></html>
+</script><style>.player-profile-link{background:none;border:0;padding:0;color:var(--text);font-weight:700;text-align:left;text-decoration:underline;text-decoration-color:var(--violet)}#player-profile-dialog{width:min(700px,94vw);max-height:85vh;overflow:auto;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:16px;padding:25px}#player-profile-dialog::backdrop{background:#000b}.profile-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}.profile-metrics>div{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:13px;color:var(--muted)}.profile-metrics strong{display:block;color:var(--text);font-size:19px}#player-profile-dialog table{width:100%;border-collapse:collapse}#player-profile-dialog th,#player-profile-dialog td{padding:10px;border-bottom:1px solid var(--line);text-align:left}</style><script>(async()=>{const button=document.getElementById("yahoo-login-button"),state=document.getElementById("yahoo-login-state");try{const r=await fetch("/api/auth/yahoo/status",{credentials:"same-origin",cache:"no-store"});const d=await r.json();if(r.ok&&d.connected){button.textContent=d.bridge?"Yahoo Snapshot Connected":"Yahoo Connected";button.setAttribute("aria-label",d.bridge?"Read-only Yahoo snapshots from existing connection":"Yahoo account connected. Reconnect if needed");if(d.bridge){button.removeAttribute("href");button.setAttribute("aria-disabled","true");button.addEventListener("click",e=>e.preventDefault());}state.textContent="";}else{button.textContent="Sign in with Yahoo";state.textContent="";}}catch{button.textContent="Sign in with Yahoo";}})();</script></body></html>
