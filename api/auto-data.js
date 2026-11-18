@@ -127,6 +127,15 @@ async function sc3CloudHealth(req,res){
 }
 
 export default async function handler(req,res){
+ if(req.query?.sc3Streaming==='1'){
+  if(req.method!=='GET')return response(res,405,{error:'Method not allowed'});
+  const {bridgeEnabled}=await import('../sc3-yahoo-bridge.mjs');
+  if(!bridgeEnabled())return response(res,404,{error:'Not found'});
+  try{
+   const {readStreamingAvailability}=await import('../sc3-streaming.mjs');
+   return response(res,200,await readStreamingAvailability());
+  }catch{return response(res,503,{error:'Verified Yahoo availability unavailable'});}
+ }
  if(req.query?.sc3DailySync==='1'){
   res.setHeader('Cache-Control','private, no-store');
   if(process.env.VERCEL_ENV!=='preview'||process.env.SC3_SHARED_DB!=='1')return res.status(404).json({error:'Not found'});
