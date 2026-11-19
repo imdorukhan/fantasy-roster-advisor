@@ -1,6 +1,8 @@
 {
   "dependencies": {
-    "pg": "8.23.1"
+    "@sparticuz/chromium": "153.0.0",
+    "pg": "8.23.1",
+    "puppeteer-core": "25.18.1"
   },
   "type": "module"
 }

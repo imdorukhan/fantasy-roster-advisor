@@ -70,6 +70,6 @@ export async function collect(filter, onPage = () => {}, {fetcher = fetch, now =
   }
   throw Error('Yahoo pagination limit reached');
 }
-if (process.argv[1] && (process.argv[1] === '-' || import.meta.url === pathToFileURL(process.argv[1]).href)) {
+if (process.argv[1] && ((process.argv[1] === '-' && import.meta.url.endsWith('/[eval1]')) || import.meta.url === pathToFileURL(process.argv[1]).href)) {
   for (const filter of ['FA','W']) console.log(JSON.stringify(await collect(filter, page => console.log(JSON.stringify(page)))));
 }
