@@ -1,8 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/auto-data?cron=1",
-      "schedule": "15 12 * * *"
+      "path": "/api/auto-data?sc3YahooSync=1",
+      "schedule": "30 16 * * *"
     }
   ]
 }

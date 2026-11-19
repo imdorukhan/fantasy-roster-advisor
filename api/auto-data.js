@@ -5,8 +5,9 @@ import {dataHealth} from '../decision-core.mjs';
 import {requireSc3Read} from '../sc3-read-access.mjs';
 import {sc3ProductionEnabled} from '../sc3-yahoo-bridge.mjs';
 import {officialMatchupFromScoreboard} from '../yahoo-scoreboard.mjs';
-import {cookies,configured,tokenRequest} from './auth/yahoo/_lib.js';
-import {loadSession,saveSession,storeConfigured,loadLeagueSnapshots,saveLeagueSnapshots,loadBackgroundYahooSession,updateBackgroundYahooSession} from './auth/yahoo/_store.js';
+import {cookies,configured} from './auth/yahoo/_lib.js';
+import {yahooSessionClient} from './auth/yahoo/_refresh.js';
+import {loadSessionRecord,storeConfigured,loadLeagueSnapshots,saveLeagueSnapshots,loadBackgroundYahooSession} from './auth/yahoo/_store.js';
 // Automated, public-source-only roster and NBA schedule reader.
 // No Yahoo OAuth, cookies, credentials, side effects or fantasy transactions.
 const YAHOO='https://basketball.fantasysports.yahoo.com/nba/85892/';
@@ -128,7 +129,24 @@ async function sc3CloudHealth(req,res){
  }
 }
 
+export const config={maxDuration:300};
 export default async function handler(req,res){
+ if(req.query?.sc3YahooSync==='1'){
+  const {fullSync}=await import('../sc3-yahoo-full-sync.mjs');
+  return fullSync(req,res,{
+   loadSession:loadBackgroundYahooSession,
+   createClient:owner=>yahooSessionClient(owner,{read:(token,path)=>read(token,path,{require200:true})}),
+   findTeams,findPlayers
+  });
+ }
+ if(req.query?.yahooCloudCheck==='1'){
+  const {yahooCloudCheck}=await import('../yahoo-cloud-check.mjs');
+  return yahooCloudCheck(req,res,{
+   loadSession:loadBackgroundYahooSession,
+   createClient:owner=>yahooSessionClient(owner,{read:(token,path)=>read(token,path,{require200:true})}),
+   findTeams,findPlayers
+  });
+ }
  if(req.query?.sc3Player==='1'){
   if(!await requireSc3Read(req,res))return;
   const id=req.query?.id, dropId=req.query?.dropId;
@@ -201,13 +219,8 @@ async function backgroundLeagueSync(req,res){
  try{
   const owner=await loadBackgroundYahooSession();
   if(!owner?.tokens?.refresh_token)return res.status(503).json({error:'Owner Yahoo authorization unavailable'});
-  let session=owner.tokens;
-  if(!session.access_token||Date.now()+120000>=session.expires_at){
-   const t=await tokenRequest({grant_type:'refresh_token',refresh_token:session.refresh_token});
-   if(!t.access_token)throw Error('Yahoo token refresh unavailable');
-   session={access_token:t.access_token,refresh_token:t.refresh_token||session.refresh_token,expires_at:Date.now()+(Number(t.expires_in)||3600)*1000};
-   await updateBackgroundYahooSession(owner.hash,session);
-  }
+  const client=yahooSessionClient(owner,{read});
+  await client.ready();
   const leagueKey='478.l.85892';
   const endpoints={
    settings:'league/'+leagueKey+'/settings?format=json',
@@ -216,30 +229,32 @@ async function backgroundLeagueSync(req,res){
    scoreboard:'league/'+leagueKey+'/scoreboard?format=json',
    roster:'team/'+leagueKey+'.t.5/roster?format=json'
   };
-  const settled=await Promise.allSettled(Object.entries(endpoints).map(async ([name,path])=>[name,await read(session.access_token,path)]));
+  const settled=await Promise.allSettled(Object.entries(endpoints).map(async ([name,path])=>[name,await client.read(path)]));
   const sections={},failed=[];
   settled.forEach((item,i)=>{if(item.status==='fulfilled')sections[item.value[0]]=item.value[1];else failed.push(Object.keys(endpoints)[i])});
   if(!Object.keys(sections).length)return res.status(502).json({status:'failed',failed});
   const written=await saveLeagueSnapshots(85892,sections);
   return res.status(failed.length?207:200).json({status:failed.length?'partial':'ok',savedSections:written,failed,observedAt:new Date().toISOString()});
- }catch(e){console.error('Background Yahoo sync failed:',e.message);return res.status(503).json({error:'Background sync unavailable'})}
+ }catch(e){console.error('Background Yahoo sync failed:',safeRefreshCode(e));return res.status(503).json({error:'Background sync unavailable',category:safeRefreshCode(e)})}
 }
 
+const refreshCodes=new Set(['owner_authorization_unavailable','refresh_store_unavailable','refresh_busy','refresh_outcome_uncertain','invalid_refresh_response','refresh_save_failed','session_changed_during_refresh']);
+const safeRefreshCode=e=>refreshCodes.has(e?.code)?e.code:'yahoo_unavailable';
 const BASE='https://fantasysports.yahooapis.com/fantasy/v2/';
 const response=(res,status,body)=>{res.setHeader('Cache-Control','private, no-store');return res.status(status).json(body)};
-async function read(token,path){
+export async function read(token,path,{require200=false}={}){
  const r=await fetch(BASE+path,{headers:{Authorization:'Bearer '+token,Accept:'application/json'},signal:AbortSignal.timeout(12000)});
- if(!r.ok)throw Object.assign(Error('Yahoo Fantasy API rejected request'),{status:r.status});
+ if(!r.ok||(require200&&r.status!==200))throw Object.assign(Error('Yahoo Fantasy API rejected request'),{status:r.status});
  const j=await r.json();if(!j.fantasy_content)throw Error('Invalid Yahoo Fantasy response');return j.fantasy_content;
 }
-async function enrichPlayerStats(token,gameKey,players,coverage='average_season'){
+async function enrichPlayerStats(gameKey,players,coverage,client){
  const uniqueIds=[...new Set(players.map(p=>String(p.yahooId)).filter(x=>/^\d+$/.test(x)))];
  try{
-  const result=await loadPlayerStats({read:path=>read(token,path),gameKey,playerIds:uniqueIds,coverage});
+  const result=await loadPlayerStats({read:path=>client.read(path),gameKey,playerIds:uniqueIds,coverage});
   return {players:players.map(p=>{const record=result.records.get(String(p.yahooId));return {...p,stats:record||null,mpg:record?.values?.MPG??null}}),coverage:{requested:result.requested,returned:result.returned,errors:result.errors,window:coverage}};
  }catch(e){return {players:players.map(p=>({...p,stats:null,mpg:null})),coverage:{requested:uniqueIds.length,returned:0,errors:[{status:e.status||null}],window:coverage}}}
 }
-function findTeams(node,out=[],depth=0){
+export function findTeams(node,out=[],depth=0){
  if(!node||typeof node!=='object'||depth>18)return out;
  if(Array.isArray(node)){
   const key=node.find(x=>x&&typeof x==='object'&&typeof x.team_key==='string')?.team_key;
@@ -268,7 +283,7 @@ function selectedSlot(value){
  if(value.selected_position)return selectedSlot(value.selected_position);
  return null;
 }
-function findPlayers(node,out=[],depth=0,inheritedSlot=null){
+export function findPlayers(node,out=[],depth=0,inheritedSlot=null){
  if(!node||typeof node!=='object'||depth>22)return out;
  if(Array.isArray(node)){
   // Yahoo represents a player as [metadataArray, {selected_position:[...]}].
@@ -338,15 +353,11 @@ async function liveHandler(req,res){
  if(req.method!=='GET')return response(res,405,{error:'Method not allowed'});
  if(!configured()||!storeConfigured())return response(res,503,{mode:'UNAVAILABLE',error:'OAuth not configured'});
  const sid=cookies(req).yahoo_session;
- let session;try{session=await loadSession(sid)}catch{return response(res,503,{mode:'UNAVAILABLE',error:'Session database unavailable'})}
- if(!session?.refresh_token)return response(res,401,{mode:'NOT_CONNECTED',error:'Yahoo login required'});
+ let owner;try{owner=await loadSessionRecord(sid)}catch{return response(res,503,{mode:'UNAVAILABLE',error:'Session database unavailable'})}
+ if(!owner?.tokens?.refresh_token)return response(res,401,{mode:'NOT_CONNECTED',error:'Yahoo login required'});
  try{
-  if(!session.access_token||Date.now()+60000>=session.expires_at){
-   const t=await tokenRequest({grant_type:'refresh_token',refresh_token:session.refresh_token});
-   if(!t.access_token)throw Error('Yahoo token refresh failed');
-   session={access_token:t.access_token,refresh_token:t.refresh_token||session.refresh_token,expires_at:Date.now()+(Number(t.expires_in)||3600)*1000};
-   await saveSession(sid,session);
-  }
+  const client=yahooSessionClient(owner,{read});
+  await client.ready();
   if(req.query?.health==='1'){
    const cached=await loadLeagueSnapshots(85892);
    const sections=['settings','teams','standings','scoreboard','roster'];
@@ -354,7 +365,7 @@ async function liveHandler(req,res){
    const report=dataHealth(sections.map(name=>({name,observedAt:cached[name]?.observed_at||null,maxAgeMs:30*60*60*1000})));
    return response(res,200,{mode:'YAHOO_SYSTEM_HEALTH',leagueId:85892,checkedAt,status:report.healthy?'healthy':'degraded',sections:report.checks.map(x=>({section:x.source,status:x.status,observedAt:cached[x.source]?.observed_at||null,ageMs:x.ageMs})),readOnly:true});
   }
-  const teams=await read(session.access_token,'users;use_login=1/games;game_keys=nba/teams?format=json');
+  const teams=await client.read('users;use_login=1/games;game_keys=nba/teams?format=json');
   const matches=findTeams(teams).filter(x=>/\.l\.85892\.t\.5$/.test(x.key));
   const unique=[...new Map(matches.map(x=>[x.key,x])).values()];
   if(unique.length!==1)return response(res,409,{mode:'UNAVAILABLE',error:'League 85892 team 5 was not found in the authorized Yahoo account',teamMatches:unique.length});
@@ -363,7 +374,7 @@ async function liveHandler(req,res){
    const start=Number(req.query.start??0);
    const {yahooPoolPath}=await import('../yahoo-player-pool.mjs');
    if(!Number.isInteger(start)||start<0||start>2500)return response(res,400,{error:'Invalid page offset'});
-   const raw=await read(session.access_token,yahooPoolPath(leagueKey,start));
+   const raw=await client.read(yahooPoolPath(leagueKey,start));
    const players=findPlayers(raw);
    return response(res,200,{mode:'YAHOO_PLAYER_POOL_PAGE',start,count:players.length,players,readOnly:true});
   }
@@ -382,16 +393,16 @@ async function liveHandler(req,res){
    if(!ids.length||ids.length>25)return response(res,400,{error:'Supply 1–25 Yahoo player IDs'});
    const window=String(req.query.window||'average_season');
    if(!['average_season','season','lastweek','lastmonth'].includes(window))return response(res,400,{error:'Unsupported stats window'});
-   const result=await enrichPlayerStats(session.access_token,unique[0].key.split('.')[0],ids.map(yahooId=>({yahooId})),window);
+   const result=await enrichPlayerStats(unique[0].key.split('.')[0],ids.map(yahooId=>({yahooId})),window,client);
    return response(res,200,{mode:'YAHOO_PLAYER_STATS',...result,readOnly:true});
   }
   if(req.query?.allRosters==='1'){
    const leagueKey=unique[0].key.split('.t.')[0];
-   const teamsRaw=await read(session.access_token,'league/'+leagueKey+'/teams?format=json');
+   const teamsRaw=await client.read('league/'+leagueKey+'/teams?format=json');
    const leagueTeams=[...new Map(findTeams(teamsRaw).filter(t=>t.key.startsWith(leagueKey+'.t.')).map(t=>[t.key,t])).values()];
    if(!leagueTeams.length)return response(res,502,{mode:'YAHOO_ALL_ROSTERS_UNAVAILABLE',error:'No league teams parsed'});
    const results=await Promise.allSettled(leagueTeams.map(async team=>{
-    const raw=await read(session.access_token,'team/'+team.key+'/roster?format=json');
+    const raw=await client.read('team/'+team.key+'/roster?format=json');
     return {...team,players:[...new Map(findPlayers(raw).map(p=>[p.yahooId,p])).values()]};
    }));
    const teamsOut=[],errors=[];
@@ -405,7 +416,7 @@ async function liveHandler(req,res){
    let observedAt=saved?.scoreboard?.observed_at||null;
    const age=observedAt?Date.now()-Date.parse(observedAt):Infinity;
    if(!raw||!Number.isFinite(age)||age<0||age>2*60*1000){
-    raw=await read(session.access_token,'league/'+leagueKey+'/scoreboard?format=json');
+    raw=await client.read('league/'+leagueKey+'/scoreboard?format=json');
     observedAt=new Date().toISOString();
     try{await saveLeagueSnapshots(85892,{scoreboard:raw})}catch{/* Return real-time data even when snapshot storage fails. */}
    }
@@ -432,7 +443,7 @@ async function liveHandler(req,res){
    if(fresh&&!refresh){
     for(const [k,v] of Object.entries(stored)){sources[k]=v.payload;timestamps[k]=v.observed_at}
    }else{
-    const entries=await Promise.allSettled(Object.entries(endpoints).map(async ([name,path])=>[name,await read(session.access_token,path)]));
+    const entries=await Promise.allSettled(Object.entries(endpoints).map(async ([name,path])=>[name,await client.read(path)]));
     const updated={};
     entries.forEach((entry,i)=>{
      const name=Object.keys(endpoints)[i];
@@ -448,7 +459,7 @@ async function liveHandler(req,res){
    return response(res,200,{mode:'YAHOO_LEAGUE_DATA',leagueId:85892,teamId:5,teamKey:unique[0].key,observedAt:new Date().toISOString(),source:'Yahoo Fantasy Sports API via Supabase',readOnly:true,sections:sources,sectionTimestamps:timestamps,staleSections,dbBacked:Object.keys(stored).length>0,rosterPlayers:sources.roster?[...new Map(findPlayers(sources.roster).map(p=>[p.yahooId,p])).values()]:[],leagueTeams:sources.teams?[...new Map(findTeams(sources.teams).map(t=>[t.key,t])).values()]:[],errors});
   }
   if(req.query?.matchup==='1'){
-   const data=await read(session.access_token,'team/'+encodeURIComponent(unique[0].key)+'/matchups?format=json');
+   const data=await client.read('team/'+encodeURIComponent(unique[0].key)+'/matchups?format=json');
    const matches=[];
    function walk(node,depth=0){
     if(!node||typeof node!=='object'||depth>24)return;
@@ -471,7 +482,7 @@ async function liveHandler(req,res){
    const start=Math.max(0,Math.min(2000,Number.parseInt(String(req.query.start||'0'),10)||0));
    const limit=25;
    const url='league/'+leagueKey+'/players;status=FA;sort=AR;start='+start+';count='+limit+'?format=json';
-   const result=await read(session.access_token,url);
+   const result=await client.read(url);
    const found=findPlayers(result);
    // Yahoo's league players response uses the same metadata arrays as rosters.
    const byId=[...new Map(found.map(p=>[p.yahooId,p])).values()];
@@ -491,10 +502,10 @@ async function liveHandler(req,res){
    // MPG is a per-game number: use Yahoo average_season statistics, not
    // league scoring settings (many 9-CAT leagues do not score minutes).
    // Resolve the minute stat id from Yahoo game stat categories; never guess.
-   const enriched=await enrichPlayerStats(session.access_token,leagueKey.split('.')[0],free);
+   const enriched=await enrichPlayerStats(leagueKey.split('.')[0],free,'average_season',client);
    return response(res,200,{mode:'YAHOO_FREE_AGENTS',leagueId:85892,observedAt:new Date().toISOString(),start,count:free.length,requested:limit,statsCoverage:enriched.coverage,players:enriched.players,notes:['Yahoo status FA = free agent only. Waiver status W is not included.','No player add/drop action is performed.','Sort AR is Yahoo average rank, not a personalized matchup projection.']});
   }
-  const roster=await read(session.access_token,'team/'+encodeURIComponent(unique[0].key)+'/roster?format=json');
+  const roster=await client.read('team/'+encodeURIComponent(unique[0].key)+'/roster?format=json');
   if(req.query?.sample==='10094'){
    const raw=rawPlayerSample(roster,'10094');
    if(!raw)return response(res,404,{error:'Player 10094 not found in Yahoo roster'});
@@ -503,5 +514,5 @@ async function liveHandler(req,res){
   const players=[...new Map(findPlayers(roster).map(x=>[x.yahooId,x])).values()];
   if(players.length<1)return response(res,502,{mode:'UNAVAILABLE',error:'Yahoo roster returned no recognizable players'});
   return response(res,200,{mode:'YAHOO_API_LIVE',observedAt:new Date().toISOString(),leagueId:85892,teamId:5,teamKey:unique[0].key,teamName:unique[0].name,players,source:'Yahoo Fantasy Sports API',readOnly:true});
- }catch(e){return response(res,e.status===401?401:502,{mode:'UNAVAILABLE',error:'Yahoo API read failed',upstreamStatus:e.status||null})}
+ }catch(e){return response(res,e.status===401?401:502,{mode:'UNAVAILABLE',error:'Yahoo API read failed',upstreamStatus:e.status||null,category:safeRefreshCode(e)})}
 }
