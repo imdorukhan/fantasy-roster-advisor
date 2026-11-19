@@ -39,27 +39,37 @@ export function parsePage(html, filter) {
   if (!next.length && !/>\s*Next 25\s*<\/li>/i.test(html)) throw Error('Missing Yahoo pagination marker');
   return {players,next:next[0]??null};
 }
-export async function collect(filter, onPage = () => {}) {
+export async function collect(filter, onPage = () => {}, {fetcher = fetch, now = () => new Date(), signal} = {}) {
   if (filter !== 'FA' && filter !== 'W') throw Error('Invalid Yahoo ownership filter');
   let url = new URL(base); url.searchParams.set('status',filter);
-  const startedAt = new Date().toISOString();
+  const startedAt = now().toISOString();
   const ids = new Set();
+  let scope, pageCount = 0;
   for (let offset=0; offset<=2500; offset+=25) {
-    const response = await fetch(url,{signal:AbortSignal.timeout(12000)});
-    if (!response.ok || response.url !== url.href) throw Error('Yahoo player page unavailable: HTTP '+response.status);
+    const response = await fetcher(url,{redirect:'error', signal:signal ? AbortSignal.any([signal, AbortSignal.timeout(12000)]) : AbortSignal.timeout(12000)});
+    if (response.status !== 200 || response.url !== url.href) throw Error('Yahoo player page unavailable');
     const {players,next} = parsePage(await response.text(),filter);
     for (const p of players) {
       if (ids.has(p.yahooId)) throw Error('Repeated Yahoo player ID');
       ids.add(p.yahooId);
     }
-    onPage({filter,offset,http:response.status,observedAt:new Date().toISOString(),players,complete:!next});
-    if (!next) return {filter,startedAt,count:ids.size};
+    const observedAt = now().toISOString();
+    pageCount++;
+    onPage({filter,offset,http:response.status,observedAt,players,complete:!next});
+    if (!next) return {filter,startedAt,observedAt,count:ids.size,pageCount,complete:true,sourceUrl:base.href+'?status='+filter,paginationScope:scope??'single_page'};
     url = new URL(next,base);
     if (url.origin !== base.origin || url.pathname !== base.pathname || url.searchParams.get('status') !== filter ||
       url.searchParams.get('count') !== String(offset+25)) throw Error('Unexpected Yahoo next link');
+    // Yahoo can add its effective default sort to the first Next link. Freeze
+    // that exact query scope thereafter so later pages cannot change filters/sort.
+    const params = new URLSearchParams(url.searchParams);
+    if ([...new Set(params.keys())].some(key => params.getAll(key).length !== 1)) throw Error('Ambiguous Yahoo pagination');
+    params.delete('count'); params.sort();
+    if (scope !== undefined && scope !== params.toString()) throw Error('Yahoo pagination scope changed');
+    scope = params.toString();
   }
   throw Error('Yahoo pagination limit reached');
 }
-if (!process.argv[1] || process.argv[1] === '-' || import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && ((process.argv[1] === '-' && import.meta.url.endsWith('/[eval1]')) || import.meta.url === pathToFileURL(process.argv[1]).href)) {
   for (const filter of ['FA','W']) console.log(JSON.stringify(await collect(filter, page => console.log(JSON.stringify(page)))));
 }
