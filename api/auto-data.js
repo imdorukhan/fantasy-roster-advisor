@@ -129,7 +129,16 @@ async function sc3CloudHealth(req,res){
  }
 }
 
+export const config={maxDuration:300};
 export default async function handler(req,res){
+ if(req.query?.sc3YahooSync==='1'){
+  const {fullSync}=await import('../sc3-yahoo-full-sync.mjs');
+  return fullSync(req,res,{
+   loadSession:loadBackgroundYahooSession,
+   createClient:owner=>yahooSessionClient(owner,{read:(token,path)=>read(token,path,{require200:true})}),
+   findTeams,findPlayers
+  });
+ }
  if(req.query?.yahooCloudCheck==='1'){
   const {yahooCloudCheck}=await import('../yahoo-cloud-check.mjs');
   return yahooCloudCheck(req,res,{

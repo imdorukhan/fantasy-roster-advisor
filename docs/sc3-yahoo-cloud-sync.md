@@ -1,7 +1,7 @@
 # Full Yahoo cloud synchronization (prepared, not enabled)
 
 Target: Yahoo league **85892**, Supabase **bmsfbcuausbfzheufjtc**, private **sc3** schema.
-This branch prepares `/api/sc3-yahoo-sync`. It does not deploy production,
+This branch reuses the existing API function (no additional Hobby function slot) and prepares `/api/auto-data?sc3YahooSync=1`. It does not deploy production,
 install schema, change OAuth settings, register a cron, or change existing automations.
 The earlier Windows Yahoo daily automation is paused. This is not evidence of a
 successful replacement schedule or a completed live full sync.
@@ -74,7 +74,7 @@ failure report but does not undo an already committed complete batch.
    put the secret in the URL. OAuth renewal can still occur during a dry run.
 5. After reviewing that live result, separately activate
    `SC3_YAHOO_FULL_SYNC_WRITE=1` and validate a real transaction/read-back.
-6. Only then register the recurring caller for `/api/sc3-yahoo-sync`, verify the
+6. Only then register the recurring caller for `/api/auto-data?sc3YahooSync=1`, verify the
    actual scheduled result, and retire redundant old callers. This PR deliberately
    leaves `vercel.json` and existing schedules unchanged, including the temporary
    earlier diagnostic cron pending its separate verification/cleanup.

@@ -2,8 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {collect} from './scripts/collect-yahoo-ownership.mjs';
 import {collectBatch,fullSync,validateBatch,saveBatch,verifyBatch,sections} from './sc3-yahoo-full-sync.mjs';
-import {findTeams,findPlayers} from './api/auto-data.js';
-import handler from './api/sc3-yahoo-sync.js';
+import handler,{findTeams,findPlayers} from './api/auto-data.js';
 
 const secret='fixture-private-cron-secret-more-than-32-characters';
 const instant=Date.parse('2026-11-18T22:00:00Z');
@@ -66,7 +65,7 @@ test('route authorization and disabled gates precede any session or source acces
   }
   const f=fixture(),res=response();f.deps.env.SC3_YAHOO_FULL_SYNC_ENABLED='0';f.deps.loadSession=()=>assert.fail('Session read');
   await fullSync(req(),res,f.deps);assert.equal(res.code,404);
-  const actual=response();await handler({method:'GET',headers:{}},actual);assert.equal(actual.code,401);
+  const actual=response();await handler({method:'GET',query:{sc3YahooSync:'1'},headers:{}},actual);assert.equal(actual.code,401);
 });
 
 test('invalid coverage, duplicate IDs, group overlap and unsafe metadata reject the whole batch',async()=>{
