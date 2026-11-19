@@ -1,4 +1,7 @@
-# Full Yahoo cloud synchronization (prepared, not enabled)
+# Full Yahoo cloud synchronization
+
+Activation on 2026-11-19: the production configuration registers only the full-sync cron at `30 16 * * *` UTC (08:30 Pacific in winter, 09:30 in summer; Hobby has hourly precision). The legacy five-section cron and temporary access diagnostic are removed. Production enable/write flags are configured for the new deployment. The existing Yahoo automation becomes a read-only results monitor at 09:35 America/Los_Angeles. The earlier preparation/activation procedure below documents the prerequisites and original staging sequence.
+
 
 Target: Yahoo league **85892**, Supabase **bmsfbcuausbfzheufjtc**, private **sc3** schema.
 This branch reuses the existing API function (no additional Hobby function slot) and prepares `/api/auto-data?sc3YahooSync=1`. It does not deploy production,

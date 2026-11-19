@@ -195,10 +195,9 @@ test('a classified upstream failure has one safe, correlated summary log', async
   assert.doesNotMatch(fixtureData.logs[0], /Authorization|Bearer|private-upstream-echo/);
 });
 
-test('the diagnostic has its own daily cron while the league sync schedule remains registered', () => {
+test('the full SC3 Yahoo sync replaces the temporary diagnostic and legacy cron', () => {
   const config = JSON.parse(readFileSync(new URL('./vercel.json', import.meta.url), 'utf8'));
   assert.deepEqual(config.crons, [
-    {path: '/api/auto-data?cron=1', schedule: '15 12 * * *'},
-    {path: '/api/auto-data?yahooCloudCheck=1', schedule: '35 0 * * *'}
+    {path: '/api/auto-data?sc3YahooSync=1', schedule: '30 16 * * *'}
   ]);
 });
