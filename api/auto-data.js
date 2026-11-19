@@ -233,7 +233,7 @@ const refreshCodes=new Set(['owner_authorization_unavailable','refresh_store_una
 const safeRefreshCode=e=>refreshCodes.has(e?.code)?e.code:'yahoo_unavailable';
 const BASE='https://fantasysports.yahooapis.com/fantasy/v2/';
 const response=(res,status,body)=>{res.setHeader('Cache-Control','private, no-store');return res.status(status).json(body)};
-async function read(token,path,{require200=false}={}){
+export async function read(token,path,{require200=false}={}){
  const r=await fetch(BASE+path,{headers:{Authorization:'Bearer '+token,Accept:'application/json'},signal:AbortSignal.timeout(12000)});
  if(!r.ok||(require200&&r.status!==200))throw Object.assign(Error('Yahoo Fantasy API rejected request'),{status:r.status});
  const j=await r.json();if(!j.fantasy_content)throw Error('Invalid Yahoo Fantasy response');return j.fantasy_content;
@@ -245,7 +245,7 @@ async function enrichPlayerStats(gameKey,players,coverage,client){
   return {players:players.map(p=>{const record=result.records.get(String(p.yahooId));return {...p,stats:record||null,mpg:record?.values?.MPG??null}}),coverage:{requested:result.requested,returned:result.returned,errors:result.errors,window:coverage}};
  }catch(e){return {players:players.map(p=>({...p,stats:null,mpg:null})),coverage:{requested:uniqueIds.length,returned:0,errors:[{status:e.status||null}],window:coverage}}}
 }
-function findTeams(node,out=[],depth=0){
+export function findTeams(node,out=[],depth=0){
  if(!node||typeof node!=='object'||depth>18)return out;
  if(Array.isArray(node)){
   const key=node.find(x=>x&&typeof x==='object'&&typeof x.team_key==='string')?.team_key;
@@ -274,7 +274,7 @@ function selectedSlot(value){
  if(value.selected_position)return selectedSlot(value.selected_position);
  return null;
 }
-function findPlayers(node,out=[],depth=0,inheritedSlot=null){
+export function findPlayers(node,out=[],depth=0,inheritedSlot=null){
  if(!node||typeof node!=='object'||depth>22)return out;
  if(Array.isArray(node)){
   // Yahoo represents a player as [metadataArray, {selected_position:[...]}].
