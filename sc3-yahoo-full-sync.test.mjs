@@ -5,7 +5,7 @@ import {collectBatch,fullSync,validateBatch,saveBatch,verifyBatch,sections} from
 import handler,{findTeams,findPlayers} from './api/auto-data.js';
 
 const secret='fixture-private-cron-secret-more-than-32-characters';
-const instant=Date.parse('2026-11-18T22:00:00Z');
+const instant=Date.parse('2026-11-18T22:00:00.237Z');
 const copy=x=>structuredClone(x);
 const position='<span class="Fz-xxs">BOS - PG, SG</span>';
 const row=(id,status='W (Nov 19)')=>`<tr><td><a class="name" data-ys-playerid="${id}">O&#39;Neal ${id}</a>${position}</td><td></td><td></td><td></td><td>${status}</td></tr>`;

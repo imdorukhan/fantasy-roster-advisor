@@ -110,7 +110,7 @@ export async function saveBatch(batch,{transaction=withScopedTransaction,now=Dat
   return transaction(async c=>{
     await c.query('select pg_advisory_xact_lock(85892, 3)');
     const prior=(await c.query('select section,payload,observed_at from sc3.yahoo_league_snapshots where league_id=85892 and section=any($1::text[]) for update',[sections])).rows;
-    if(prior.some(p=>Date.parse(batch.find(r=>r.section===p.section).observed_at)<=Date.parse(p.observed_at)))throw fail('older_observation');
+    if(prior.some(p=>new Date(batch.find(r=>r.section===p.section).observed_at).getTime()<=new Date(p.observed_at).getTime()))throw fail('older_observation');
     const changed=batch.filter(r=>fingerprint(r.payload,r.section)!==fingerprint(prior.find(p=>p.section===r.section)?.payload,r.section)).map(r=>r.section);
     const result=await c.query(`with snapshots as (
       insert into sc3.yahoo_league_snapshots(league_id,section,payload,observed_at,source)
@@ -133,7 +133,7 @@ export async function verifyBatch(expected,{transaction=withScopedTransaction,no
       exists(select 1 from sc3.yahoo_league_snapshot_history h where h.league_id=s.league_id and h.section=s.section and h.observed_at=s.observed_at and h.payload=s.payload) as history_match
       from sc3.yahoo_league_snapshots s where s.league_id=85892 and s.section=any($1::text[])`,[sections])).rows;
     validateBatch(rows.map(r=>({...r,observed_at:new Date(r.observed_at).toISOString()})),now());
-    if(rows.some(r=>!r.history_match || !expected.some(e=>e.section===r.section && Date.parse(e.observed_at)===Date.parse(r.observed_at) && JSON.stringify(canonical(e.payload))===JSON.stringify(canonical(r.payload)) && e.source===r.source)))throw fail('snapshot_readback_failed');
+    if(rows.some(r=>!r.history_match || !expected.some(e=>e.section===r.section && new Date(e.observed_at).getTime()===new Date(r.observed_at).getTime() && JSON.stringify(canonical(e.payload))===JSON.stringify(canonical(r.payload)) && e.source===r.source)))throw fail('snapshot_readback_failed');
     const data=Object.fromEntries(rows.map(r=>[r.section,r.payload]));
     return {teamCount:data.all_rosters.teamCount,playerCount:data.all_rosters.playerCount,freeAgents:data.free_agents.count,waivers:data.waivers.count,overlap:0,historyMatches:rows.length};
   },{readOnly:true});
