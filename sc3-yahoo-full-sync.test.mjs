@@ -174,6 +174,14 @@ test('full Yahoo atomic save, concurrency and read-back on PostgreSQL',{skip:!ur
     assert.equal((await pool.query("select count(*)::int as n from sc3.yahoo_league_snapshots where observed_at=$1",[new Date(instant+2000)])).rows[0].n,8);
     await pool.query('drop trigger block_history on sc3.yahoo_league_snapshot_history');
   });
+  await t.test('a missing RETURNING row rolls back the entire batch and history',async()=>{
+    const before=(await pool.query('select count(*)::int as n from sc3.yahoo_league_snapshot_history')).rows[0].n;
+    await pool.query("create function sc3.skip_waivers() returns trigger language plpgsql as $$begin if new.section='waivers' then return null; end if; return new; end$$; create trigger skip_waivers before insert or update on sc3.yahoo_league_snapshots for each row execute function sc3.skip_waivers();");
+    await assert.rejects(saveBatch(at(3000),opts),{code:'snapshot_write_failed'});
+    assert.equal((await pool.query('select count(*)::int as n from sc3.yahoo_league_snapshot_history')).rows[0].n,before);
+    assert.equal((await pool.query("select count(*)::int as n from sc3.yahoo_league_snapshots where observed_at=$1",[new Date(instant+2000)])).rows[0].n,8);
+    await pool.query('drop trigger skip_waivers on sc3.yahoo_league_snapshots');
+  });
   await t.test('concurrent writers preserve one whole latest batch',async()=>{
     await Promise.allSettled([saveBatch(at(4000),opts),saveBatch(at(5000),opts)]);
     assert.equal((await pool.query('select count(distinct observed_at)::int as n from sc3.yahoo_league_snapshots')).rows[0].n,1);
