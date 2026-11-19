@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/auto-data?yahooCloudCheck=1",
-      "schedule": "35 12 * * *"
+      "schedule": "35 0 * * *"
     }
   ]
 }
