@@ -198,7 +198,7 @@ export default async function handler(req,res){
  if(req.query?.depthTeam){
   const team=String(req.query.depthTeam).toUpperCase();
   if(!/^[A-Z]{2,3}$/.test(team))return res.status(400).json({error:'Invalid NBA team'});
-  try{if(process.env.VERCEL_ENV==='preview'&&process.env.SC3_SHARED_DB==='1'){const {readDepth}=await import('../sc3-depth-store.mjs');const data=await readDepth(team);res.setHeader('Cache-Control','private, no-store');return res.status(200).json(data)}const data=await espnDepth(team);res.setHeader('Cache-Control','public, s-maxage=3600');return res.status(200).json(data)}
+  try{if((process.env.VERCEL_ENV==='preview'||sc3ProductionEnabled())&&process.env.SC3_SHARED_DB==='1'){const {readDepth}=await import('../sc3-depth-store.mjs');const data=await readDepth(team);res.setHeader('Cache-Control','private, no-store');return res.status(200).json(data)}const data=await espnDepth(team);res.setHeader('Cache-Control','public, s-maxage=3600');return res.status(200).json(data)}
   catch(e){return res.status(502).json({error:'ESPN depth chart unavailable',detail:e.message})}
  }
  if(req.query?.live==='1'&&req.query?.officialMatchup==='1'&&sc3ProductionEnabled()){
