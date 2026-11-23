@@ -83,3 +83,28 @@ The original matrix above is a point-in-time baseline. The following later work 
 4. Confirm two unresolved Yahoo→ESPN player identities independently; do not guess a mapping.
 5. Injury-return news, prediction confidence/accuracy ledger, trade/punt/playoff forecasts, and alerts are not fully production-ready. Separate verified-source and owner acceptance is required.
 6. Promotion/rollback requires an explicit production release decision.
+
+## Strategy, forecasts and alerts audit — continuation (2026-11-23)
+
+**Scope:** Feature-branch source audit, isolated Node regressions, authenticated-connector protected Preview API reads, and local Chrome fixtures. No owner-authenticated browser acceptance was performed. No production updates, paid provision, OAuth/token/cookie reads, Yahoo fantasy transactions, or data writes.
+
+| Area | Confirmed defect and repair | Commit | Remaining gate |
+| --- | --- | --- | --- |
+| Player Evaluation | Impossible FG/FT makes greater than attempts could produce FG% greater than 100%; incomplete net add/drop operands yielded NaN. Both fail closed. | `71b0f640b8f246ed87a7d39e78cbb609cc3abe17` | Live Yahoo/ESPN source consistency for all players; existing player profile API HTTP 200, but no 9-CAT projections without official score |
+| Trade Impact | Baseline projections with impossible field-goal totals and outgoing projected stats exceeding roster totals were accepted. Validated before/after and shooting volumes. | `4501c8243a7229a7ff98aa3d94f69e25ae465147` | Pure read-only calculation only, **not** a live proposed trade or integrated calibrated matchup forecast |
+| Punt Strategy | Any nine category names could be treated as nine official categories. Now requires exactly FG%, FT%, 3PM, PTS, REB, AST, STL, BLK, TO; returns no calibrated probability or actionable advice. | `447aed81b91ba7997ae274787ba71ae09a10b1e0` | Current Yahoo 9-CAT scores and verified, calibrated player-category scenarios |
+| Playoff Planner | Duplicate ESPN rows inflated schedule counts; impossible dates and repeated IDs were accepted. Calendar scenarios now deduplicate and label their schedule *unverified*. | `49ff72376c8f3e9699378da54649a2796e49b88f` | Official Yahoo playoff weeks, complete future NBA schedules, lineup availability and fantasy matchup rules |
+| Injury forecast accuracy | Invalid normalized dates were accepted and later settled revisions could be cherry-picked when the earliest episode forecast remained unsettled. Requires episode identity and scores the first recorded forecast only after verified outcome evidence. | `8892ea6a1b2790816b29c18ce0b8e64a4f56acf0` | External timestamped medical/news source verification, prospective ledger and real completed returns |
+| Alert filtering | Old roster ownership, stale/undated news, duplicate events and conflicts across ownership scopes could produce candidate alerts. Now explicitly requires live Yahoo ownership, dated HTTPS source, unique candidate and human approval; delivery disabled. | `324dff811fe4169d414467d5c0f3e93dc6e7681b` | No running alert delivery/notification service was implemented or activated; owner acceptance and monitoring design still required |
+
+### Latest verification
+
+- **188 Node tests: 185 passing, 0 failing, 3 skipped.** Regression tests were intentionally observed failing before each fix.
+- **Six isolated Chrome smoke scripts: six passed.** These exercise sign-in-required states and synthetic matched data; they are not equivalent to a real owner-signed-in browser session.
+- Protected Preview at commit `324dff811fe4169d414467d5c0f3e93dc6e7681b` was **READY**. Root, Matchup Intelligence and Optimizer pages returned HTTP 200 via authorized Vercel connection.
+- Yahoo health: HTTP 200 healthy; NBA health: HTTP 200 fresh, zero missing days; SC3 player evaluation: HTTP 200; League Rosters: HTTP 200, 14 teams; Streaming: HTTP 200, 538 waivers and 0 verified free agents; Matchup Lineups: HTTP 200 with 7/7 dates.
+- Official Week 6 Yahoo matchup: **HTTP 422, `scoreVerified=false`**, because official 9-CAT category totals remain unpublished. Do not calculate current win probability or unlock score-based trade/punt projections from this.
+- Anonymous protected Preview private API request: **HTTP 302** authentication redirect; do not relax this.
+- Production 2.0 deployment remained **`dpl_83LCXQgJ1R9sGoSciyxKAYG2eL9c`** at the verification point.
+
+**Release remains blocked** on owner-authenticated UI acceptance, official complete Yahoo week 9-CAT data, a non-empty verified FA pool for live ranking acceptance, verified source-linked injury-return reports, prediction calibration, and an explicit production-release decision.
