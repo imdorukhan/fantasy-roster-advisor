@@ -3,6 +3,7 @@ import {leagueToday} from './yahoo-scoreboard.mjs';
 import {withScopedTransaction} from './sc3-postgres.mjs';
 import {buildPerformance} from './player-performance.mjs';
 import {verifyMissingYahooPlayers} from './sc3-projection-sources.mjs';
+import {resolveVerifiedIdentity} from './sc3-identity-provenance.mjs';
 import {buildStreamingPlan} from './sc3-streaming-plan.mjs';
 import {readMatchupLineups} from './sc3-matchup-lineups.mjs';
 
@@ -135,7 +136,9 @@ export async function readPlayerEvaluation(id,{now=new Date(),fetcher=fetch,drop
  const found=resolvePlayer(rows,id,now);
  if(!found)return null;
  const {player,ownership,teamKey,fantasyTeam,observedAt}=found;
- const espnId=identity??(await verifyMissingYahooPlayers([player],catalog,fetcher))[0]?.espnId;
+ const matches=identity?[]:await verifyMissingYahooPlayers([player],catalog,fetcher);
+ const identityVerification=resolveVerifiedIdentity(id,identity,matches);
+ const espnId=identityVerification.espnId;
  const history=await readPlayerHistory(espnId,start);
  const analytics=history?.games.length?buildPerformance(history.games,{asOf:now.toISOString(),historyComplete:true}).players?.[0]:null;
  if(analytics)delete analytics.z; // A single player's history cannot produce a league rank.
@@ -148,7 +151,7 @@ export async function readPlayerEvaluation(id,{now=new Date(),fetcher=fetch,drop
    select position,rank,nba_team,injury_marker,observed_at::text from sc3.nba_depth_chart
    where espn_id=$1 order by position,rank
  `,[espnId])).rows).catch(()=>[]):[];
- const profile={...player,ownership,fantasyTeam:fantasyTeam??null,own,observedAt,espnId:espnId??null,depth,analytics,historyThrough:history?.latest??null};
+ const profile={...player,ownership,fantasyTeam:fantasyTeam??null,own,observedAt,espnId:espnId??null,identityVerification,depth,analytics,historyThrough:history?.latest??null};
  const season=await readSeasonSchedule(player,rows.settings,now,fetcher).catch(()=>null);
  const seasonImpact=season&&analytics?.season?.complete&&analytics.season.games>=3
   ? {...season,sampleGames:analytics.season.games,production:projectedProduction(analytics.season.values,season.scheduledGames)}

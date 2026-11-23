@@ -16,7 +16,12 @@ function profileBody(data){
  const a=p.analytics;
  const sections=[];
  sections.push('<p>'+esc([p.nbaTeam,p.fantasyTeam,p.slot,p.yahooRosterStatus??p.ownership].filter(Boolean).join(' · '))+' · Yahoo observed '+esc(sourceTime(p.observedAt))+'</p>');
- const details=[['Yahoo ID',p.yahooId],['ESPN ID',p.espnId],['Yahoo injury flag',p.status],['Eligible positions',p.eligiblePositions?.map(pos=>typeof pos==='string'?pos:pos.position).filter(Boolean).join(', ')],['Yahoo rank',p.yahooRank],['Percent owned',p.percentOwned],
+ const identityStatus=p.identityVerification?.source==='SC3_VERIFIED_LINK'
+  ?'Verified and stored in SC3'
+  :p.identityVerification?.source==='YAHOO_PUBLIC_PROFILE_AND_ESPN_CATALOG'
+   ?'Verified via public Yahoo profile + ESPN; not stored in SC3'
+   :'ESPN identity not independently verified';
+ const details=[['Yahoo ID',p.yahooId],['ESPN ID',p.espnId],['ESPN identity source',identityStatus],['Yahoo injury flag',p.status],['Eligible positions',p.eligiblePositions?.map(pos=>typeof pos==='string'?pos:pos.position).filter(Boolean).join(', ')],['Yahoo rank',p.yahooRank],['Percent owned',p.percentOwned],
   ['Percent started',p.forecast?.percentStarted],['Next 7-day rank',p.forecast?.next7DayRank],['Next 14-day rank',p.forecast?.next14DayRank],['Rest-of-season rank',p.forecast?.restOfSeasonRank]];
  sections.push('<details open><summary>Player information</summary>'+table(['Field','Value'],details)+'</details>');
  if(a){
