@@ -139,3 +139,19 @@ Continuation after `2576c94`; the full independent evidence and remaining releas
 **Verification:** 206 Node tests (203 passed, 0 failed, 3 skipped), 6/6 isolated Chrome smoke scripts, clean syntax and diff checks; newest feature Preview READY. Yahoo official week 6 remains 422 stats pending, lineups 7/7 complete, NBA 200 fresh, Yahoo health 200 healthy, Yahoo per-player stats 0/2 incomplete, player 10452 identity verified at runtime but *not persisted*. No owner-authenticated browser acceptance has occurred. Production 2.0 unchanged.
 
 **Blocking the next release:** Owner login and protected UI acceptance, official fully observed 9-CAT, owner-authorized complete Yahoo per-player stats, durable approved identity mapping, real chronologically held-out model dataset, Yahoo-confirmed playoff settings and explicitly opted-in injury alert delivery. None of these were simulated as successfully completed.
+
+## Additional P1 and Alerts offline acceptance — 2026-11-23
+
+The detailed evidence, exact remaining gates, and review-only source contracts are in [SC3 source calibration and alert gates](./sc3-source-calibration-alert-gates-2026-11-23.md).
+
+- `bad7c48`: The Yahoo per-player stats loader now distinguishes *player ID returned* (`complete`) from *all verified 9-CAT values and shooting attempts ready* (`nineCatReady`), exposing missing/invalid fields by Yahoo ID; no fake player stats.
+- `893e436`: Conflicting duplicate Yahoo player-stat rows fail closed rather than silently overwrite a value.
+- `faed942`: [Exact player 10452→ESPN 5214640 persistence approval packet](./sc3-10452-link-approval-2026-11-23.md) prepared. Read-only checks found no existing mappings and unique constraints on both IDs. **DB has not been written.**
+- `c8c1972`: Pure, consent-gated [outbox planner](./sc3-alert-outbox-design-2026-11-23.md) deduplicates review proposals across stored states and subscribers. **No delivery service/cron/storage writer was activated**.
+- `a27bb6a`: Held-out calibration audit rejects impossible calendar dates, avoiding silent JavaScript normalization.
+- `2301116`: Delivery design and atomic, crash-safe idempotency release requirements documented.
+- `27338d3`: Source readiness and acceptance evidence refreshed in the detailed report.
+
+**Validation:** 215 Node tests, **212 passed, 0 failed, 3 skipped**; six isolated browser smoke scripts passed. Latest protected Preview READY; Yahoo/NBA health HTTP 200, official Week 6 9-CAT HTTP 422 pending, lineups HTTP 200 7/7, Yahoo player stat 0/2 incomplete, league 14 teams/206 players, 0 verified free agents/538 waivers. SC3 identity link 10452 remains unpersisted; public-profile fallback does not change DB. Production 2.0 deployment unchanged.
+
+**Not yet accepted:** owner-signed-in real UI, current published 9-CAT totals, real live Yahoo player-stat completeness, owner-approved mapping insert, calibrated Trade/Punt/Playoff probabilities, official playoff future schedule, recipient-confirmed and opted-in alert delivery. No automatic fantasy transactions are permitted.
