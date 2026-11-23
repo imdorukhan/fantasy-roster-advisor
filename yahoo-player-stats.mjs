@@ -1,4 +1,5 @@
 // Deterministic Yahoo Fantasy NBA stat normalization. Read-only.
+import {assessYahooNineCat} from './yahoo-stat-readiness.mjs';
 export function statCategoryId(root,labels){
  const accepted=new Set(labels.map(x=>String(x).trim().toLowerCase()));
  let found=null;
@@ -126,5 +127,15 @@ export async function loadPlayerStats({read,gameKey,playerIds,coverage='average_
  }catch(e){errors.push({count:batch.length,status:e.status||null,reason:'Yahoo stat batch unavailable'});}
  }
  const missingIds=ids.filter(id=>!records.has(id));
- return {records,requested:ids.length,returned:records.size,missingIds,complete:errors.length===0&&missingIds.length===0,errors};
+ const complete=errors.length===0&&missingIds.length===0;
+ const missingNineCatById={},invalidNineCatById={};
+ let nineCatReady=complete&&ids.length>0;
+ for(const id of ids){
+  const audit=assessYahooNineCat(records.get(id)?.values);
+  missingNineCatById[id]=audit.missing;
+  invalidNineCatById[id]=audit.invalid;
+  if(!audit.ready)nineCatReady=false;
+ }
+ return {records,requested:ids.length,returned:records.size,missingIds,complete,
+  nineCatReady,missingNineCatById,invalidNineCatById,errors};
 }

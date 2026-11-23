@@ -256,7 +256,10 @@ async function enrichPlayerStats(gameKey,players,coverage,client){
  const uniqueIds=[...new Set(players.map(p=>String(p.yahooId)).filter(x=>/^\d+$/.test(x)))];
  try{
   const result=await loadPlayerStats({read:path=>client.read(path),gameKey,playerIds:uniqueIds,coverage});
-  return {players:players.map(p=>{const record=result.records.get(String(p.yahooId));return {...p,stats:record||null,mpg:record?.values?.MPG??null}}),coverage:{requested:result.requested,returned:result.returned,errors:result.errors,window:coverage}};
+  return {players:players.map(p=>{const record=result.records.get(String(p.yahooId));return {...p,stats:record||null,mpg:record?.values?.MPG??null}}),
+   coverage:{requested:result.requested,returned:result.returned,complete:result.complete,missingIds:result.missingIds,
+    nineCatReady:result.nineCatReady,missingNineCatById:result.missingNineCatById,
+    invalidNineCatById:result.invalidNineCatById,errors:result.errors,window:coverage}};
  }catch(e){return {players:players.map(p=>({...p,stats:null,mpg:null})),coverage:{requested:uniqueIds.length,returned:0,errors:[{status:e.status||null}],window:coverage}}}
 }
 export function findTeams(node,out=[],depth=0){
