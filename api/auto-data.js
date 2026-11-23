@@ -96,11 +96,9 @@ async function espnDepth(abbr){
  const value={source:'ESPN NBA depth chart',observedAt:new Date().toISOString(),nbaTeam:abbr,rows:[...new Map(rows.map(x=>[x.name.toLowerCase()+'|'+x.position,x])).values()]};
  depthCache.set(abbr,{at:Date.now(),value});return value;
 }
-// Preview-only read-only health check: aggregate public NBA data, no Yahoo session data.
+// Owner-gated read-only health check for protected preview and opted-in production.
 async function sc3CloudHealth(req,res){
- res.setHeader('Cache-Control','private, no-store');
- if(process.env.VERCEL_ENV!=='preview'||process.env.SC3_SHARED_DB!=='1')return res.status(404).json({error:'Not found'});
- if(req.method!=='GET')return res.status(405).json({error:'Method not allowed'});
+ if(!await requireSc3Read(req,res))return;
  let stage='imports';
  try{
   const {readPerformance}=await import('../performance-store.mjs');
