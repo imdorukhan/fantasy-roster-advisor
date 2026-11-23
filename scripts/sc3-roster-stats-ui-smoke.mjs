@@ -29,7 +29,7 @@ const server=createServer(async(req,res)=>{
    code=200;
    data={mode:'YAHOO_LINKED_PERFORMANCE',historyEnd:'2026-11-22',expectedEnd:'2026-11-22',fresh:true,
     source:'ESPN completed regular-season box scores',
-    players:[{yahooId:'10001',performance:{season,z:{rank:1},signal:{type:'STABLE'}}},{yahooId:'10002',performance:null}]};
+    players:[{yahooId:'10001',performance:{season,windows:{3:{complete:true,games:3,values:{PTS:25}}},z:{rank:1},signal:{type:'STABLE'}}},{yahooId:'10002',performance:null}]};
   }else if(url.searchParams.get('playerStats')==='1'){
    code=200;data={mode:'YAHOO_PLAYER_STATS',players:players.map(p=>({yahooId:p.yahooId,stats:null}))};
   }else if(url.searchParams.get('sc3Streaming')==='1'){
@@ -45,7 +45,7 @@ const server=createServer(async(req,res)=>{
   res.writeHead(code,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(data));return;
  }
  const path=url.pathname==='/'?'index.html':url.pathname.slice(1);
- if(!['index.html','player-dialog.mjs','league-data.js','sc3-roster-stat-source.mjs'].includes(path)){
+ if(!['index.html','player-dialog.mjs','league-data.js','sc3-roster-stat-source.mjs','sc3-keepcut-evidence.mjs'].includes(path)){
   res.writeHead(404);res.end();return;
  }
  const bytes=await readFile(join(root,path));
@@ -104,6 +104,17 @@ try{
  await page.click('#injury-refresh');
  await page.waitForFunction(()=>document.querySelector('#injury-source-status')?.textContent.includes('No return dates verified'),{timeout:8000});
  assert.ok(leagueReads>=2,'Refresh injury indicators re-reads the verified Yahoo roster');
+ await page.click('[data-view="drop"]');
+ await page.waitForFunction(()=>document.querySelector('#drop-results')?.textContent.includes('Verified ESPN last 3'),{timeout:8000});
+ const drop=await page.$eval('#drop-results',e=>e.textContent);
+ assert.match(drop,/Verified ESPN last 3: 25 PTS\/game/);
+ assert.match(drop,/Yahoo injury\/IL flag: GTD/);
+ assert.match(drop,/SAMPLE 0\/3/);
+ assert.doesNotMatch(drop,/DROP NOW|WAIVE NOW/i);
+ await page.click('[data-view="waiver"]');
+ await page.waitForFunction(()=>document.querySelector('#waiver-status')?.textContent.includes('verified Yahoo waiver'),{timeout:8000});
+ await page.click('[data-view="sources"]');
+ await page.waitForFunction(()=>document.querySelector('#system-health-panel')?.textContent.includes('sign-in required'),{timeout:8000});
  assert.deepEqual(errors,[]);
  console.log('PASS: roster ESPN provenance, FA depth filters, two-source injury indicators, refresh, no JS errors');
 } finally {await browser.close();await new Promise(ok=>server.close(ok));}

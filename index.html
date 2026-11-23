@@ -30,6 +30,7 @@
 import {playerLink} from "./player-dialog.mjs";
 import {getLeagueData,leagueHealth} from './league-data.js';
 import {rosterStatSource} from './sc3-roster-stat-source.mjs';
+import {keepCutEvidence} from './sc3-keepcut-evidence.mjs';
 const names={overview:['Fantasy Command Center','Your team intelligence, all in one place.'],roster:['My Roster','Who is on Salary CAPtain, by position.'],drop:['Keep or Cut','Identify performance decline without overreacting to three games.'],injury:['Injury Return Radar','Track recovery news and possible pickup opportunities.'],waiver:['Waiver Planner','Manage weekly acquisition budget and pending claims.'],freeagents:['Streaming Optimizer','Check which Yahoo free agents are available to stream.'],sources:['Source Accuracy Lab','Learn which injury return forecasts become reliable over time.']};
 function go(v){if(!names[v])return;document.querySelectorAll('.view').forEach(e=>e.classList.toggle('hidden',e.id!==v));document.querySelectorAll('.nav button').forEach(e=>e.classList.toggle('active',e.dataset.view===v));document.querySelector('#page-title').textContent=names[v][0];document.querySelector('#page-desc').textContent=names[v][1];if(v==='freeagents')loadFreeAgents();if(v==='waiver')loadFreeAgents(true);if(v==='sources')loadSystemHealth();location.hash=v;window.scrollTo({top:0,behavior:'smooth'})}
 document.querySelectorAll('[data-view]').forEach(el=>el.addEventListener('click',()=>go(el.dataset.view)));document.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>go(el.dataset.go)));
@@ -314,7 +315,21 @@ document.querySelector('#league-rosters-refresh').addEventListener('click',loadA
 loadAllLeaguePlayers();
 
 async function renderDropFromVerifiedRoster(){
- try{const d=await getLeagueData();const own=d.rosterPlayers||[];if(!own.length)throw Error('Verified roster unavailable');await loadPerformance(own);document.querySelector('#drop-results').innerHTML=own.map(p=>{const v=perfOf(p),recent=v?.windows?.[3],count=recent?.games||0;return '<div class="listline"><div><div class="label">'+playerLink(p)+'</div><div class="small">'+esc(p.nbaTeam||'—')+' · '+(recent?.complete?'Verified ESPN last 3: '+esc(statDisplay(recent.values?.PTS,'PTS'))+' PTS/game · through '+esc(v.historyEnd):'Verified player history unavailable')+'</div></div><span class="pill gray rowend">'+(count<3?'SAMPLE '+count+'/3':'REVIEW ONLY')+'</span></div>'}).join('');}catch(e){document.querySelector('#drop-results').textContent=e.message;}
+ try{
+  const d=await getLeagueData(),own=d.rosterPlayers||[];
+  if(!own.length)throw Error('Verified roster unavailable');
+  await loadPerformance(own);
+  document.querySelector('#drop-results').innerHTML=own.map(p=>{
+   const evidence=keepCutEvidence(p,perfOf(p));
+   const sample=evidence.current
+    ? 'Verified ESPN last 3: '+esc(statDisplay(evidence.recentPoints,'PTS'))+' PTS/game · through '+esc(evidence.historyThrough)
+    : evidence.label==='HISTORY STALE'
+      ? 'ESPN history exists but latest required NBA day is not verified'
+      : 'Verified recent three-game history unavailable';
+   const injury=evidence.injured?' · Yahoo injury/IL flag: '+esc(evidence.injuryFlag||p.slot):'';
+   return '<div class="listline"><div><div class="label">'+playerLink(p)+'</div><div class="small">'+esc(p.nbaTeam||'—')+' · '+sample+injury+'</div></div><span class="pill gray rowend">'+esc(evidence.label)+'</span></div>';
+  }).join('');
+ }catch(e){document.querySelector('#drop-results').textContent=e.message;}
 }
 renderDropFromVerifiedRoster();
 
