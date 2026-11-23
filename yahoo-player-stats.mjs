@@ -121,7 +121,10 @@ export async function loadPlayerStats({read,gameKey,playerIds,coverage='average_
  const payload=await read('players;player_keys='+batch.map(id=>gameKey+'.p.'+id).join(',')+'/stats;type='+coverage+'?format=json');
  const parsed=playerStatRecords(payload,catalog,{coverage});
  for(const [id,record] of parsed)if(batch.includes(id))records.set(id,record);
- }catch(e){errors.push({count:batch.length,status:e.status||null});}
+ const omitted=batch.filter(id=>!parsed.has(id));
+ if(omitted.length)errors.push({count:omitted.length,status:null,reason:'Incomplete Yahoo stat batch'});
+ }catch(e){errors.push({count:batch.length,status:e.status||null,reason:'Yahoo stat batch unavailable'});}
  }
- return {records,requested:ids.length,returned:records.size,errors};
+ const missingIds=ids.filter(id=>!records.has(id));
+ return {records,requested:ids.length,returned:records.size,missingIds,complete:errors.length===0&&missingIds.length===0,errors};
 }

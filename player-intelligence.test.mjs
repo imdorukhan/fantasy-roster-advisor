@@ -11,3 +11,14 @@ const summary={boxscore:{players:[{team:{abbreviation:'BOS'},statistics:[{labels
 test('ESPN completed appearances, DNP excluded, weighted shooting and incomplete sample',()=>{const rows=parseBoxScore(summary,event);assert.equal(rows.length,1);assert.equal(rows[0].stats.MIN,30.5);assert.equal(parseBoxScore(summary,{...event,status:{type:{completed:false}}}).length,0);const w=gameWindows(rows,{asOf:new Date('2026-11-17')});assert.equal(w[1].values['FG%'],.5);assert.equal(w[3].complete,false);assert.equal(performanceTrend(w,{PTS:15})[1].delta.PTS,5);assert.equal(performanceTrend(w,{PTS:15})[3].delta.PTS,null)});
 test('ingestion preserves errors and deduplicates event ids',async()=>{const d=await ingestGameLogs({dates:['20261116','20261116'],fetcher:async u=>({ok:true,json:async()=>u.includes('scoreboard')?{events:[event,event]}:summary})});assert.equal(d.completedEvents,1);assert.equal(d.rows.length,1);assert.equal(d.complete,true)});
 test('z scores invert turnovers and gate missing pool',()=>{const players=Array.from({length:30},(_,i)=>({id:i,values:{FGM:3+i/10,FGA:10,FTM:2+i/20,FTA:4,'3PM':i/10,PTS:10+i,REB:2+i/2,AST:1+i/3,STL:i/20,BLK:i/30,TO:1+i/10}}));const z=zScores(players,{expectedPoolSize:30});assert.equal(z.available,true);assert.ok(z.rows.find(p=>p.id==='0').categories.TO>0);assert.equal(zScores(players,{expectedPoolSize:100}).available,false);assert.equal(zScores(players,{expectedPoolSize:30,punt:['TO']}).rows.length,30)});
+
+test('Yahoo batched player stats reports silent omitted IDs as incomplete, not a successful full source',async()=>{
+ const catalog={stats:[{stat:{stat_id:12,name:'Points',display_name:'PTS'}}]};
+ const payload={players:{0:{player:[[{player_id:'42'}],{player_stats:{coverage_type:'average_season',stats:[{stat:{stat_id:12,value:'21.5'}}]}}]}}};
+ const r=await loadPlayerStats({gameKey:'478',playerIds:['42','43'],batchSize:2,read:async path=>path.includes('stat_categories')?catalog:payload});
+ assert.equal(r.requested,2);
+ assert.equal(r.returned,1);
+ assert.equal(r.complete,false);
+ assert.deepEqual(r.missingIds,['43']);
+ assert.ok(r.errors.some(x=>x.reason==='Incomplete Yahoo stat batch'));
+});
