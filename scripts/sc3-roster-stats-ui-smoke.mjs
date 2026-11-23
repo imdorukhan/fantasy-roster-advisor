@@ -26,6 +26,14 @@ const server=createServer(async(req,res)=>{
     players:[{yahooId:'10001',performance:{season,z:{rank:1},signal:{type:'STABLE'}}},{yahooId:'10002',performance:null}]};
   }else if(url.searchParams.get('playerStats')==='1'){
    code=200;data={mode:'YAHOO_PLAYER_STATS',players:players.map(p=>({yahooId:p.yahooId,stats:null}))};
+  }else if(url.searchParams.get('sc3Streaming')==='1'){
+   code=200;data={mode:'SC3_STREAMING_AVAILABILITY',leagueId:85892,readOnly:true,
+    freeAgents:{count:2,observedAt:stamp,players:[
+     {yahooId:'20001',name:'Zeta Guard',nbaTeam:'GSW',eligiblePositions:['PG'],availability:'FREE_AGENT'},
+     {yahooId:'20002',name:'Alpha Center',nbaTeam:'LAL',eligiblePositions:['C'],availability:'FREE_AGENT'}]},
+    waivers:{count:0,observedAt:stamp,players:[]},
+    plan:{available:false,reason:'Schedule not checked'}
+   };
   }
   res.writeHead(code,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(data));return;
  }
@@ -56,6 +64,21 @@ try{
  const filtered=await page.$$eval('#roster-body tr',els=>els.map(e=>e.innerText));
  assert.equal(filtered.length,1);
  assert.match(filtered[0],/Unmapped Player/);
+ await page.click('[data-view="freeagents"]');
+ await page.waitForFunction(()=>document.querySelector('#fa-body')?.textContent.includes('Zeta Guard'),{timeout:8000});
+ await page.select('#fa-sort','name');
+ const sorted=await page.$$eval('#fa-body tr',els=>els.map(e=>e.textContent.trim()));
+ assert.equal(sorted.length,2);
+ assert.match(sorted[0],/Alpha Center/,'Name sort must apply to verified SC3 free agents');
+ await page.select('#fa-position','PG');
+ const guard=await page.$$eval('#fa-body tr',els=>els.map(e=>e.textContent.trim()));
+ assert.equal(guard.length,1,'Yahoo eligible position must filter verified free agents');
+ assert.match(guard[0],/Zeta Guard/);
+ await page.select('#fa-rank','1');
+ const ranked=await page.$$eval('#fa-body tr',els=>els.map(e=>e.textContent.trim()));
+ assert.equal(ranked.length,1);
+ assert.match(ranked[0],/No verified free agents match the current filters/);
+ assert.match(await page.$eval('#fa-status',e=>e.textContent),/No players with a verified ESPN depth rank/);
  assert.deepEqual(errors,[]);
  console.log('PASS: roster ESPN source label, verified season averages, unavailable unmapped player, search filter, no JS errors');
 } finally {await browser.close();await new Promise(ok=>server.close(ok));}
