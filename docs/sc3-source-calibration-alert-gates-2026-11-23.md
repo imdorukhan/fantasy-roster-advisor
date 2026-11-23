@@ -122,3 +122,35 @@ Current branch-only repairs and independent checks:
 - Local `node --test`: **206 tests / 203 pass / 0 fail / 3 skipped**; six isolated Chrome fixture smoke tests pass, syntax and diff checks clean. These are **not** live owner-authenticated browser acceptance.
 - Production deployment ID remained `dpl_83LCXQgJ1R9sGoSciyxKAYG2eL9c`. No production changes, token/cookie access or renewal, fantasy transactions, database writes, or paid resources.
 
+
+## 2026-11-23 — Owner-free P1 source readiness and outbox design follow-up
+
+**Only committed code and documentation were changed.** No Supabase or public-table writes, OAuth/token/cookie access, Yahoo fantasy transaction, Production 2.0 modification, notification delivery, paid provisioning or scheduler creation.
+
+### Focused changes and acceptance
+
+| Commit | Acceptance |
+| --- | --- |
+| `bad7c48d42eb7d9c7def8b1f213bfc5141cb3371` | Yahoo player-stat loader reports `nineCatReady`, per-player missing/invalid canonical 9-CAT and shooting-volume keys; returned player IDs are **not** equivalent to model-ready performance evidence. Regression covers incomplete, complete and inconsistent percentage/attempt rows. No model activated. |
+| `893e4361f55d39ecc5987f0426789fcca9a7486f` | Duplicate Yahoo player-stat ID rows in one batch cannot silently overwrite each other; ambiguous player source is discarded and a structured batch error returned. Regression first failed, then passed. |
+| `faed942c119ca7964b868d1162c0b9b10116ddca` | [Approval-gated 10452→5214640 identity persistence packet](./sc3-10452-link-approval-2026-11-23.md). Read-only schema preflight confirmed both IDs unused, ESPN catalog name/MIL/DOB/jersey matching, unique Yahoo and ESPN indexes. **No INSERT executed**; owner approval required before exact one-row transaction. |
+| `c8c197203c82931772f0c0c0e7de82351c925564` | [Pure offline alert outbox planner](./sc3-alert-outbox-design-2026-11-23.md) uses consent, scoped hashed subscriber/event keys, prior persisted-state suppression, failed-event hold and review-only output. `deliveryEnabled=false`; **no sender, storage writer or cron**. |
+| `a27bb6adaf83081b5973341870986ba7f47b03ee` | 9-CAT heldout audit now rejects nonexistent ISO dates that JavaScript `Date.parse` silently normalizes, closing a temporal calibration leakage loophole. |
+| `230111677abd44a0df9144662714a496c0c9f276` | [Proposed opt-in, atomically persisted outbox architecture](./sc3-alert-outbox-design-2026-11-23.md) documents state transitions, crash/retry caveats and required future approvals. |
+
+### Live coverage and remaining gates
+
+- Last protected Preview reported **READY** at commit `230111677abd44a0df9144662714a496c0c9f276`.
+- Yahoo health **HTTP 200 healthy** and NBA health **HTTP 200 fresh**, no missing dates.
+- Current official Week 6 9-CAT **HTTP 422 stats pending**, `scoreVerified=false`. Lineups **HTTP 200 7/7 days** but not score-calibrated.
+- `live=1&playerStats=1&ids=10452,10094` returned HTTP 200 but `coverage.complete=false`, `requested=2`, `returned=0`, `missingIds=[10452,10094]`; ESPN linked performance is independently fresh, **not a Yahoo player-stat substitute**.
+- League Rosters **14 teams/206 players**, Streaming **0 verified FA/538 waivers**.
+- SC3 persisted mapping for Yahoo ID **10452** / ESPN ID **5214640** remains absent (0 conflicts on both IDs). Runtime public-profile matching has `persisted=false`.
+- Isolated Node suite **215 tests, 212 passed, 0 failed, 3 skipped**; 6/6 Chrome fixture smoke tests pass; JS syntax and diff checks clean. **Owner-authenticated real browser testing remains undone.**
+- Production deployment remained `dpl_83LCXQgJ1R9sGoSciyxKAYG2eL9c`; no promotion was performed.
+
+### Gate status
+
+**P0 blocked:** complete official Yahoo 9-CAT current-week scores and actual owner-authenticated browser acceptance.  
+**P1 blocked:** genuine owner-authorized Yahoo live player-stat source, non-empty real verified FA samples, and separately approved 10452 one-row SC3 mapping.  
+**P2/P3 blocked:** genuine pre-outcome historical calibration, official verified Yahoo playoff rules/future NBA schedule, and opt-in persistent alert/outbox service with provider idempotency. The new dry-run planner is **not** that service.
