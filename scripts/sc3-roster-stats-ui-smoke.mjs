@@ -29,9 +29,10 @@ const server=createServer(async(req,res)=>{
   }else if(url.searchParams.get('sc3Streaming')==='1'){
    code=200;data={mode:'SC3_STREAMING_AVAILABILITY',leagueId:85892,readOnly:true,
     freeAgents:{count:2,observedAt:stamp,players:[
-     {yahooId:'20001',name:'Zeta Guard',nbaTeam:'GSW',eligiblePositions:['PG'],availability:'FREE_AGENT'},
-     {yahooId:'20002',name:'Alpha Center',nbaTeam:'LAL',eligiblePositions:['C'],availability:'FREE_AGENT'}]},
+     {yahooId:'20001',name:'Zeta Guard',nbaTeam:'GSW',eligiblePositions:['PG'],availability:'FREE_AGENT',depthRanks:[{position:'PG',rank:1,observedAt:stamp}]},
+     {yahooId:'20002',name:'Alpha Center',nbaTeam:'LAL',eligiblePositions:['C'],availability:'FREE_AGENT',depthRanks:[{position:'C',rank:3,observedAt:stamp}]}]},
     waivers:{count:0,observedAt:stamp,players:[]},
+    depthCoverage:{verifiedPlayers:2,totalPlayers:2,queryAvailable:true},
     plan:{available:false,reason:'Schedule not checked'}
    };
   }
@@ -77,8 +78,18 @@ try{
  await page.select('#fa-rank','1');
  const ranked=await page.$$eval('#fa-body tr',els=>els.map(e=>e.textContent.trim()));
  assert.equal(ranked.length,1);
- assert.match(ranked[0],/No verified free agents match the current filters/);
+ assert.match(ranked[0],/Zeta Guard/);
+ assert.match(ranked[0],/Verified ESPN: PG #1/);
+ await page.select('#fa-position','C');
+ const noMatch=await page.$$eval('#fa-body tr',els=>els.map(e=>e.textContent.trim()));
+ assert.equal(noMatch.length,1);
+ assert.match(noMatch[0],/No verified free agents match the current filters/);
  assert.match(await page.$eval('#fa-status',e=>e.textContent),/No players with a verified ESPN depth rank/);
+ await page.select('#fa-rank','3');
+ const centers=await page.$$eval('#fa-body tr',els=>els.map(e=>e.textContent.trim()));
+ assert.match(centers[0],/Alpha Center/);
+ assert.match(centers[0],/Verified ESPN: C #3/);
+ assert.match(await page.$eval('#fa-status',e=>e.textContent),/Verified Yahoo–ESPN depth links: 2\/2/);
  assert.deepEqual(errors,[]);
  console.log('PASS: roster ESPN source label, verified season averages, unavailable unmapped player, search filter, no JS errors');
 } finally {await browser.close();await new Promise(ok=>server.close(ok));}

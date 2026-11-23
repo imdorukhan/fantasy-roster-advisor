@@ -1,5 +1,6 @@
 import {withScopedTransaction} from './sc3-postgres.mjs';
 import {buildStreamingPlan} from './sc3-streaming-plan.mjs';
+import {attachVerifiedDepth} from './sc3-verified-depth.mjs';
 
 const leagueId = 85892;
 const maxAgeMs = 30 * 60 * 60 * 1000;
@@ -46,7 +47,24 @@ export async function readStreamingAvailability({includeWaiverImpact=false}={}) 
        (section in ('settings', 'roster', 'scoreboard') and source = 'Yahoo Fantasy Sports API')
      )`, [leagueId]
   )).rows);
-  const result = streamingAvailability(rows);
-  const yahooRows = Object.fromEntries(rows.map(row => [row.section, row]));
-  return {...result, plan: await buildStreamingPlan(result, yahooRows,{includeWaiverImpact})};
+  const verified=streamingAvailability(rows);
+  let depthRows=[], depthQueryAvailable=true;
+  if(verified.freeAgents.count>0){
+    try{
+      const ids=verified.freeAgents.players.map(p=>p.yahooId);
+      depthRows=await withScopedTransaction(async c=>(await c.query(
+        `select i.yahoo_id,i.espn_id,i.status,d.nba_team,d.position,d.rank,
+                d.observed_at::text,d.injury_marker
+         from sc3.sc3_player_identity i
+         join sc3.nba_depth_chart d on d.espn_id=i.espn_id
+         where i.status='verified' and i.yahoo_id=any($1::text[])
+         order by i.yahoo_id,d.position,d.rank`,
+        [ids]
+      )).rows);
+    }catch{depthQueryAvailable=false;}
+  }
+  const ranked=attachVerifiedDepth(verified,depthRows);
+  const result={...ranked,depthCoverage:{...ranked.depthCoverage,queryAvailable:depthQueryAvailable}};
+  const yahooRows=Object.fromEntries(rows.map(row=>[row.section,row]));
+  return {...result,plan:await buildStreamingPlan(result,yahooRows,{includeWaiverImpact})};
 }
