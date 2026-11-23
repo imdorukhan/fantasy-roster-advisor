@@ -1,7 +1,7 @@
 import {enrichWaiverImpact} from './sc3-waiver-impact.mjs';
 import {readWaiverOpportunities,rankWaiverOpportunities} from './sc3-waiver-plan.mjs';
 import {streamingCalendar} from './decision-core.mjs';
-import {leagueToday, officialMatchupFromScoreboard} from './yahoo-scoreboard.mjs';
+import {leagueToday, officialMatchupFromScoreboard, currentMatchupIdentityFromScoreboard} from './yahoo-scoreboard.mjs';
 import {collect} from './scripts/collect-yahoo-ownership.mjs';
 
 const rosterUrl = 'https://basketball.fantasysports.yahoo.com/nba/85892/5';
@@ -18,7 +18,9 @@ function fresh(row, now) {
 export function yahooWindow(rows, now) {
   const {settings, roster, scoreboard} = rows;
   if (![settings, roster, scoreboard].every(row => fresh(row, now))) throw Error('Yahoo matchup, settings or roster snapshot is missing or stale');
-  const matchup = officialMatchupFromScoreboard(scoreboard.payload, {observedAt: scoreboard.observed_at, now});
+  // The current week and opponent are verifiable before Yahoo posts any 9-CAT totals.
+  // Acquisition limits and schedule-only planning must not depend on published scores.
+  const matchup = currentMatchupIdentityFromScoreboard(scoreboard.payload, {observedAt: scoreboard.observed_at, now});
   const config = settings.payload?.league?.[1]?.settings?.[0];
   const teamMeta = roster.payload?.team?.[0];
   if (!Array.isArray(teamMeta) || !teamMeta.some(part => part?.team_key === '478.l.85892.t.5')) throw Error('Yahoo roster team could not be verified');
@@ -162,8 +164,17 @@ export async function buildStreamingPlan(availability, yahooRows, {now=new Date(
     const result = rankStreamingFits(metadata,daily.map(({date,openSlots,schedule})=>({date,openSlots,teams:schedule.teams})),acquisitions);
     let waiverPlan=await readWaiverOpportunities(availability.waivers,daily,starters,acquisitions,fetcher,{rankAll:includeWaiverImpact})
       .catch(()=>({error:'Current Yahoo waiver candidates unavailable'}));
-    if(includeWaiverImpact&&!waiverPlan.error)waiverPlan=await enrichWaiverImpact(waiverPlan,matchup,{now,fetcher})
-      .catch(()=>({...waiverPlan,impactStatus:'Verified NBA candidate statistics unavailable',impactCoverage:0}));
+    if(includeWaiverImpact&&!waiverPlan.error){
+      // Category-impact forecasts require complete, cross-checked official 9-CAT totals.
+      // Calendar opportunities and weekly acquisition limits do not.
+      let scored;
+      try { scored=officialMatchupFromScoreboard(yahooRows.scoreboard.payload,{observedAt:yahooRows.scoreboard.observed_at,now}); }
+      catch { /* Current Yahoo categories may not have been published yet. */ }
+      waiverPlan=scored
+        ? await enrichWaiverImpact(waiverPlan,scored,{now,fetcher})
+          .catch(()=>({...waiverPlan,impactStatus:'Verified NBA candidate statistics unavailable',impactCoverage:0}))
+        : {...waiverPlan,impactStatus:'Official Yahoo 9-CAT totals not yet verified',impactCoverage:0};
+    }
     if(waiverPlan.rows)waiverPlan.rows=waiverPlan.rows.slice(0,25);
     return {...result,week,acquisitions,days:coverage,waiverPlan};
   } catch {

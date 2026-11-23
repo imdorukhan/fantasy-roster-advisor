@@ -30,3 +30,32 @@ test('ESPN schedule uses Pacific date and excludes started or non-scheduled game
   assert.equal(upcomingTeams(feed,date,new Date('2026-11-20T01:00Z')).teams.size,0);
   assert.throws(()=>upcomingTeams(feed,'2026-11-20',new Date('2026-11-20T00:00Z')));
 });
+
+import {yahooWindow} from './sc3-streaming-plan.mjs';
+
+test('week six acquisition budget is readable before Yahoo publishes 9-CAT totals',()=>{
+ const timestamp='2026-11-23T12:00:00.000Z';
+ const team=key=>({team:[[{team_key:key},{name:key}],{team_stats:{stats:[]},team_points:{total:'0'}}]});
+ const rows={
+  scoreboard:{observed_at:timestamp,payload:{league:[{},{scoreboard:{'0':{matchups:{'0':{matchup:{
+   week:'6',week_start:'2026-11-23',week_end:'2026-11-29',
+   '0':{teams:{'0':team('478.l.85892.t.5'),'1':team('478.l.85892.t.2')}},
+   stat_winners:[]
+  }}}}}}]}},
+  roster:{observed_at:timestamp,payload:{team:[[{team_key:'478.l.85892.t.5'},{roster_adds:{value:'0',coverage_type:'week',coverage_value:6}}]]}},
+  settings:{observed_at:timestamp,payload:{league:[{},{settings:[{max_weekly_adds:'7',roster_positions:[{roster_position:{position:'PG',count:1,is_starting_position:1}}]}]}]}}
+ };
+ const window=yahooWindow(rows,new Date('2026-11-23T13:00:00.000Z'));
+ assert.equal(window.week,6);
+ assert.equal(window.matchup.opponent.id,2);
+ assert.equal(window.matchup.scoreVerified,false);
+ assert.equal(window.acquisitions.remaining,7);
+ assert.equal(window.start,'2026-11-23');
+ assert.equal(window.end,'2026-11-29');
+ const wrongAdds=structuredClone(rows);
+ wrongAdds.roster.payload.team[0][1].roster_adds.coverage_value=5;
+ assert.throws(()=>yahooWindow(wrongAdds,new Date('2026-11-23T13:00:00.000Z')),/weekly acquisitions/);
+ const duplicates=structuredClone(rows);
+ duplicates.scoreboard.payload.league[1].scoreboard['0'].matchups['1']=structuredClone(duplicates.scoreboard.payload.league[1].scoreboard['0'].matchups['0']);
+ assert.throws(()=>yahooWindow(duplicates,new Date('2026-11-23T13:00:00.000Z')),/Exactly one official current Yahoo matchup required/);
+});
