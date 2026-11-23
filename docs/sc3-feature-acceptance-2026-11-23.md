@@ -108,3 +108,19 @@ The original matrix above is a point-in-time baseline. The following later work 
 - Production 2.0 deployment remained **`dpl_83LCXQgJ1R9sGoSciyxKAYG2eL9c`** at the verification point.
 
 **Release remains blocked** on owner-authenticated UI acceptance, official complete Yahoo week 9-CAT data, a non-empty verified FA pool for live ranking acceptance, verified source-linked injury-return reports, prediction calibration, and an explicit production-release decision.
+
+## Source-integrity and calibration follow-up — 2026-11-23
+
+See the detailed, evidence-separated audit: [SC3 source contracts, calibration and alert gates](./sc3-source-calibration-alert-gates-2026-11-23.md).
+
+**Additional separate feature-branch commits:**
+- `c37020443765c0a7f78369a20a3cd635a938f896`: a duplicated Yahoo ID can no longer be marked verified against two different ESPN identities. Current own roster has **14/15** verified identity links; Yahoo player **10452** remains unresolved; no guess was written.
+- `bec8142f81569d74674e5024aa555a050bd14fdf`: Yahoo player-stat batches expose missing IDs and `complete=false` when an upstream HTTP 200 silently omits a requested player.
+- `382723a5bd5d7560f6a7941544c3fe5dbd964f48`: Punt Z-score pools reject duplicate player IDs, invalid/duplicate categories and physically impossible `3PM > FGM` observations.
+- `fa4b44642a78c4a0cdb21251cd360301eea2e0a2`: local injury forecast ledger can write safely to a nested custom path; no cloud notification was activated.
+- `0efa509b026ad0d57b35e25ee0c0ea560e9c8afd`: sourced injury forecasts and verified outcomes require HTTPS evidence URLs before local ledger scoring; URL syntax alone is **not** independent verification.
+- `415d0d63cb9acd7caedc60d50461470b36b81653`: explicit release-blocker and architecture document (link above).
+
+**Read-only source verification:** Yahoo health 200 healthy; NBA health 200 fresh/zero missing dates; official Yahoo Week 6 score still 422 with `scoreVerified=false`; full lineup dates 7/7; league 14 teams/206 players; 0 verified FA and 538 waiver players. The SC3 database contains 249 verified Yahoo–ESPN identity links overall and 1,012 ESPN depth rows. These checks do **not** authorize promotion.
+
+**Still not accepted:** owner-signed-in real browser flow, live complete Yahoo 9-CAT, all roster identity links, calibrated Trade/Punt probabilities, Yahoo-verified playoff date coverage, verified NBA injury-return forecasts and opted-in alert delivery. Do not change Production 2.0.
