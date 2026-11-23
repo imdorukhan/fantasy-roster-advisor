@@ -36,3 +36,14 @@ test('net add/drop subtracts outgoing counting stats and shooting attempts',()=>
  assert.equal(rosterChangeDate('2026-11-18','W (Nov 19)'),'2026-11-20');
  assert.equal(rosterChangeDate('2026-11-18','W (Nov 15)'),null);
 });
+
+test('player projections reject impossible shooting percentages, rather than displaying over 100%',()=>{
+ assert.equal(projectedProduction({...average,FGM:12,FGA:8},2),null);
+ assert.equal(projectedProduction({...average,FTM:3,FTA:2},2),null);
+ assert.equal(projectedProduction({...average,'3PM':5,FGM:4},2),null);
+});
+test('net projections reject incomplete shooting input instead of producing NaN deltas',()=>{
+ const good=projectedProduction(average,2);
+ assert.equal(netProduction(good,{...good,FTA:undefined}),null);
+ assert.equal(netProduction(good,{...good,FGA:-1}),null);
+});

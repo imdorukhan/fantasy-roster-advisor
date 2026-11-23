@@ -16,7 +16,8 @@ function fresh(row,now){
  return Number.isFinite(age)&&age>=0&&age<=30*3600_000;
 }
 export function projectedProduction(averages,count){
- if(!Number.isInteger(count)||count<0||[...counting,...shotKeys].some(key=>!Number.isFinite(averages?.[key])||averages[key]<0))return null;
+ if(!Number.isInteger(count)||count<0||[...counting,...shotKeys].some(key=>!Number.isFinite(averages?.[key])||averages[key]<0)||
+    averages.FGM>averages.FGA||averages.FTM>averages.FTA||averages['3PM']>averages.FGM)return null;
  const stats=Object.fromEntries([...counting,...shotKeys].map(key=>[key,averages[key]*count]));
  return {...stats,'FG%':stats.FGA>0?stats.FGM/stats.FGA:null,'FT%':stats.FTA>0?stats.FTM/stats.FTA:null};
 }
@@ -41,8 +42,11 @@ export function matchupWithPlayer(baseline,addition){
 }
 
 export function netProduction(incoming,outgoing){
- if(!incoming||!outgoing)return null;
- return Object.fromEntries([...counting,...shotKeys].map(k=>[k,incoming[k]-outgoing[k]]));
+ const keys=[...counting,...shotKeys];
+ const valid=values=>values&&keys.every(k=>Number.isFinite(values[k])&&values[k]>=0)&&
+  values.FGM<=values.FGA&&values.FTM<=values.FTA&&values['3PM']<=values.FGM;
+ if(!valid(incoming)||!valid(outgoing))return null;
+ return Object.fromEntries(keys.map(k=>[k,incoming[k]-outgoing[k]]));
 }
 function nextDay(day){
  return new Date(Date.parse(day+'T12:00:00Z')+86400_000).toISOString().slice(0,10);
