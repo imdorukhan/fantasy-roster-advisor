@@ -1,3 +1,23 @@
-import {cookies,cookie,tokenRequest,configured} from './_lib.js';
-import {loadSession,saveSession,storeConfigured} from './_store.js';
-export default async function handler(req,res){res.setHeader('Cache-Control','no-store');if(req.method!=='POST'){res.setHeader('Allow','POST');return res.status(405).end()}if(req.headers.origin!=='https://salarycaptain.vercel.app')return res.status(403).json({error:'Invalid origin'});if(!configured()||!storeConfigured())return res.status(503).json({error:'OAuth not configured'});try{const id=cookies(req).yahoo_session,s=await loadSession(id);if(!s?.refresh_token)return res.status(401).json({error:'Not connected'});const t=await tokenRequest({grant_type:'refresh_token',refresh_token:s.refresh_token});if(!t.access_token)throw Error('No access token');await saveSession(id,{access_token:t.access_token,refresh_token:t.refresh_token||s.refresh_token,expires_at:Date.now()+(Number(t.expires_in)||3600)*1000});return res.status(200).json({connected:true,refreshed:true})}catch{return res.status(503).json({error:'Refresh failed; retry or reconnect'})}}
+import {cookies,configured,authConfig} from './_lib.js';
+import {loadSessionRecord,storeConfigured} from './_store.js';
+import {yahooSessionClient} from './_refresh.js';
+import {YahooSessionError} from '../../../yahoo-session-client.mjs';
+
+export default async function handler(req,res) {
+ res.setHeader('Cache-Control','no-store');
+ if(req.method!=='POST'){res.setHeader('Allow','POST');return res.status(405).end()}
+ let origin;
+ try{origin=authConfig().origin}catch{return res.status(503).json({error:'OAuth not configured'})}
+ if(req.headers.origin!==origin)return res.status(403).json({error:'Invalid origin'});
+ if(!configured()||!storeConfigured())return res.status(503).json({error:'OAuth not configured'});
+ try {
+  const owner=await loadSessionRecord(cookies(req).yahoo_session);
+  if(!owner?.tokens?.refresh_token)return res.status(401).json({error:'Not connected'});
+  const client=yahooSessionClient(owner);
+  await client.ready({force:true});
+  return res.status(200).json({connected:true,refreshed:true});
+ }catch(error){
+  const category=error instanceof YahooSessionError?error.code:'refresh_unavailable';
+  return res.status(503).json({error:'Refresh unavailable',category});
+ }
+}

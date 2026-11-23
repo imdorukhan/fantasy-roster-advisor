@@ -7,5 +7,5 @@ const probs=Object.fromEntries(['FG%','FT%','3PM','PTS','REB','AST','STL','BLK',
 assert.equal(puntSimulation({categoryWinProbabilities:probs,puntCategory:'TO'}).retainedExpectedWins,4.8);
 assert.equal(playoffScheduleValue({players:stars,schedule:[{playerId:'1',date:'2027-03-20'}],dates:['2027-03-20']})[0].games,1);
 assert.equal(forecastError({predictions:[{id:'x',predicted:10}],outcomes:{x:8}}).meanAbsoluteError,2);
-assert.equal(alertCandidates({myRoster:[stars[1]],verifiedFreeAgents:[stars[0]],news:[{playerId:'1',important:true,verifiedSource:true,message:'Status changed'},{playerId:'unknown',important:true,verifiedSource:true}]}).length,1);
+assert.equal(alertCandidates({myRoster:[stars[1]],verifiedFreeAgents:[stars[0]],now:'2026-11-23T12:00:00Z',news:[{playerId:'1',important:true,verifiedSource:true,sourceUrl:'https://www.nba.com/news/status',observedAt:'2026-11-23T11:00:00Z',message:'Status changed'},{playerId:'unknown',important:true,verifiedSource:true}]}).length,1);
 console.log('PASS: breakout, FAB budget guard, punt, playoff schedule, model error, owned/FA alerts.');

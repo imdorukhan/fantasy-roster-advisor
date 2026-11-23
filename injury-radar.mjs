@@ -1,11 +1,9 @@
-import {getUserSnapshot} from './ownership.mjs';
 import {sourceReliability} from './source-reliability.mjs';
 const norm=s=>String(s||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toLowerCase();
 const day=n=>typeof n==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(n)&&!Number.isNaN(Date.parse(n+'T00:00:00Z'));
 const delta=(a,b)=>Math.round((Date.parse(a+'T00:00:00Z')-Date.parse(b+'T00:00:00Z'))/86400000);
 export function evaluateInjuryRadar({players,reports,today,daysAhead=14,minFantasyValue=60,history=[]}){
  if(!day(today)||!Array.isArray(players)||!Array.isArray(reports))throw Error('Invalid inputs');
- const ownSnapshot=new Set(getUserSnapshot().players.map(p=>norm(p.name)));
  const grouped=new Map();
  for(const r of reports){
   if(!r?.player||!r.source||!r.url||!day(r.observedAt))continue;
@@ -16,8 +14,12 @@ export function evaluateInjuryRadar({players,reports,today,daysAhead=14,minFanta
  const trust=sourceReliability(history);
  const output=[];
  for(const p of players){
-  const own=p.ownership==='MY_TEAM'||p.availability==='MY_TEAM'||(ownSnapshot.has(norm(p.name))&&p.liveYahooVerified!==true&&p.ownership!=='OTHER_TEAM'&&p.availability!=='OWNED_OTHER');
-  const free=p.availability==='FA'&&p.liveYahooVerified===true&&!own;
+  // Historical October rosters are not proof of current ownership.
+  // Fail closed when live ownership is missing or contradicts the declared scope.
+  const verified=p.liveYahooVerified===true;
+  const conflicting=p.ownership==='OTHER_TEAM'||p.availability==='OWNED_OTHER';
+  const own=verified&&!conflicting&&(p.ownership==='MY_TEAM'||p.availability==='MY_TEAM');
+  const free=verified&&!conflicting&&p.availability==='FA'&&!own;
   // Unknown, waiver-only, and everyone else's roster are outside the alert scope.
   if(!own&&!free)continue;
   const reportsFor=(grouped.get(norm(p.name))||[]).filter(r=>delta(today,r.observedAt)>=0&&delta(today,r.observedAt)<=3);
