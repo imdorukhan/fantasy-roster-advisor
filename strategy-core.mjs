@@ -29,7 +29,18 @@ export function puntSimulation({categoryWinProbabilities,puntCategory}){
 }
 export function playoffScheduleValue({players,schedule,dates}){
  if(!Array.isArray(players)||!Array.isArray(schedule)||!Array.isArray(dates))throw Error('Invalid playoff window');
- return players.map(p=>({name:p.name,games:schedule.filter(g=>g.playerId===p.id&&dates.includes(g.date)).length})).sort((a,b)=>b.games-a.games);
+ const validDay=d=>typeof d==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(d)&&
+  Number.isFinite(Date.parse(d+'T00:00:00Z'))&&new Date(d+'T00:00:00Z').toISOString().slice(0,10)===d;
+ if(!dates.length||dates.some(d=>!validDay(d))||new Set(dates).size!==dates.length)throw Error('Valid playoff dates required');
+ if(players.some(p=>!p||!p.id)||new Set(players.map(p=>String(p.id))).size!==players.length)throw Error('Unique player IDs required');
+ if(schedule.some(g=>!g||!g.playerId||!validDay(g.date)))throw Error('Valid schedule rows required');
+ const dateSet=new Set(dates);
+ return players.map(p=>{
+  const games=new Set(schedule.filter(g=>String(g.playerId)===String(p.id)&&dateSet.has(g.date)&&g.cancelled!==true)
+   .map(g=>String(g.eventId??'')?g.date+'|'+String(g.eventId):g.date));
+  return {name:p.name,games:games.size,scheduleVerified:false,actionable:false,
+   method:'Supplied schedule scenario only; official Yahoo playoff weeks and complete NBA coverage are not independently verified'};
+ }).sort((a,b)=>b.games-a.games||String(a.name).localeCompare(String(b.name)));
 }
 export function forecastError({predictions,outcomes}){
  const seen=new Set();const rows=[];
