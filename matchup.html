@@ -29,7 +29,7 @@
 </main>
 <script type="module">
 import {playerLink} from "./player-dialog.mjs";
-import {categoryComparison,categorySwing,freshness} from './decision-core.mjs';
+import {categoryComparison,categorySwing,freshness,officialMatchupView} from './decision-core.mjs';
 import {classifyMatchupSources} from './matchup-source-health.mjs';
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -40,12 +40,17 @@ async function refresh(){
  const button=$('refresh');button.disabled=true;
  try{
   const results=await Promise.allSettled([get('/api/auto-data?live=1&officialMatchup=1'),get('/api/yahoo-matchup'),get('/api/public-matchup')]);
-  const official=results[0].status==='fulfilled'&&results[0].value.weekVerified?results[0].value:null;
-  const matchup=official||(results[1].status==='fulfilled'?results[1].value:null);
+  const officialCandidate=results[0].status==='fulfilled'?results[0].value:null;
+  const official=officialMatchupView(officialCandidate).usable?officialCandidate:null;
+  const publicMatchup=results[1].status==='fulfilled'?results[1].value:null;
+  const matchup=official||publicMatchup;
   const observed=results[2].status==='fulfilled'?results[2].value:null;
-  const live=freshness(matchup?.observedAt,{maxAgeMs:300000});
+  // The official endpoint verifies the current Yahoo week and allows up to 30 hours.
+  // Public page scraping remains limited to five minutes; never conflate their freshness.
+  const live=official?{valid:true}:freshness(publicMatchup?.observedAt,{maxAgeMs:300000});
   const officialError=results[0].status==='rejected'?results[0].reason:null;
-  const state=classifyMatchupSources({officialVerified:Boolean(official),officialHttpStatus:officialError?.status,publicFresh:Boolean(matchup&&live.valid)});
+  const publicFresh=freshness(publicMatchup?.observedAt,{maxAgeMs:300000}).valid;
+  const state=classifyMatchupSources({officialVerified:Boolean(official),officialHttpStatus:officialError?.status,publicFresh});
   if(matchup&&live.valid&&matchup.ourTeam?.id===5&&matchup.categories?.length===9){
    const normalized=categoryComparison(matchup.ourTeam.stats,matchup.opponent.stats);
    if(!normalized.verified)throw Error('Invalid categories');
