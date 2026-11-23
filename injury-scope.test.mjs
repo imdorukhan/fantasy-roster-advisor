@@ -7,7 +7,7 @@ h=recordForecast(h,{forecastId:'a2',source:'espn',player:'Example FA',injuryEpis
 const r=sourceReliability(h);
 assert.equal(r.espn.sampleSize,1);assert.equal(r.espn.meanAbsoluteErrorDays,2);assert.equal(r.espn.accuracyWithin3Days,1);assert(r.espn.confidence<1);
 assert.throws(()=>settleForecast(h,'a1',{actualReturn:'2026-10-27',actualEvidence:'url',verifiedAt:'2026-10-28'}));
-const players=[{name:'Victor Wembanyama',ownership:'MY_TEAM',availability:'OWNED',fantasyValue:95},{name:'Free Star',availability:'FA',liveYahooVerified:true,fantasyValue:90,valueMethodVerified:true},{name:'Unknown',availability:'UNKNOWN'},{name:'Other Star',ownership:'OTHER_TEAM',availability:'OWNED'},{name:'Questionable FA',availability:'FA',liveYahooVerified:false}];
+const players=[{name:'Victor Wembanyama',ownership:'MY_TEAM',availability:'OWNED',liveYahooVerified:true,fantasyValue:95},{name:'Free Star',availability:'FA',liveYahooVerified:true,fantasyValue:90,valueMethodVerified:true},{name:'Unknown',availability:'UNKNOWN'},{name:'Other Star',ownership:'OTHER_TEAM',availability:'OWNED'},{name:'Questionable FA',availability:'FA',liveYahooVerified:false}];
 const reports=players.map(p=>({player:p.name,source:'official_nba',url:'https://nba.com',observedAt:'2026-10-22',estimatedReturnDate:'2026-10-25'}));
 const alerts=evaluateInjuryRadar({players,reports,today:'2026-10-22',history:h});
 assert.deepEqual(alerts.map(a=>a.player).sort(),['Free Star','Victor Wembanyama']);
@@ -15,3 +15,11 @@ assert.equal(alerts.find(a=>a.player==='Victor Wembanyama').recommendation,'MY_T
 assert.equal(alerts.find(a=>a.player==='Free Star').recommendation,'PICKUP_REVIEW');
 assert(alerts.every(a=>a.requiresApproval&&!a.executable));
 console.log('PASS: own-team + verified FA only; no other-team alerts; settled-source error, duplicate episode guard, shrunk confidence.');
+
+const staleOwnership=evaluateInjuryRadar({
+ players:[{name:'Victor Wembanyama',ownership:'MY_TEAM',liveYahooVerified:false},
+          {name:'Victor Wembanyama',availability:'UNKNOWN'},
+          {name:'Free Star',availability:'FA',liveYahooVerified:false}],
+ reports,today:'2026-10-22',history:h
+});
+assert.equal(staleOwnership.length,0,'Historical roster names and unverified ownership cannot trigger live injury alerts');
