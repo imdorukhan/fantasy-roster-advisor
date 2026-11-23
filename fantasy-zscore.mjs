@@ -4,9 +4,13 @@ const finite=x=>typeof x==='number'&&Number.isFinite(x)&&x>=0;
 const mean=a=>a.reduce((s,x)=>s+x,0)/a.length;
 export function zScores(players,{minPool=30,expectedPoolSize,minimumCoverage=.9,punt=[]}={}){
  if(!Array.isArray(players)||!Number.isInteger(expectedPoolSize)||expectedPoolSize<minPool||!Number.isFinite(minimumCoverage)||minimumCoverage<=0||minimumCoverage>1)return {available:false,reason:'Explicit comparison pool required'};
+ if(!Array.isArray(punt)||new Set(punt).size!==punt.length||punt.some(k=>!CATEGORIES.includes(k)))return {available:false,reason:'Punt category list must use unique official 9-CAT keys'};
  const required=['FGM','FGA','FTM','FTA','3PM','PTS','REB','AST','STL','BLK','TO'];
- const unique=new Map(players.filter(p=>p?.id!==null&&p?.id!==undefined).map(p=>[String(p.id),p]));
- const eligible=[...unique.values()].filter(p=>required.every(k=>finite(p.values?.[k]))&&p.values.FGM<=p.values.FGA&&p.values.FTM<=p.values.FTA);
+ const identifiable=players.filter(p=>p?.id!==null&&p?.id!==undefined);
+ const ids=identifiable.map(p=>String(p.id));
+ if(new Set(ids).size!==ids.length)return {available:false,reason:'Duplicate player identities in comparison pool'};
+ const eligible=identifiable.filter(p=>required.every(k=>finite(p.values?.[k]))&&
+   p.values.FGM<=p.values.FGA&&p.values.FTM<=p.values.FTA&&p.values['3PM']<=p.values.FGM);
  if(eligible.length<minPool||eligible.length>expectedPoolSize||eligible.length/expectedPoolSize<minimumCoverage)return {available:false,reason:'Insufficient verified pool coverage',eligible:eligible.length,expectedPoolSize};
  const fgAttempts=eligible.reduce((s,p)=>s+p.values.FGA,0),ftAttempts=eligible.reduce((s,p)=>s+p.values.FTA,0);
  if(!fgAttempts||!ftAttempts)return {available:false,reason:'Missing shooting volume'};
