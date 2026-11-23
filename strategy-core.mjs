@@ -47,25 +47,37 @@ export function forecastError({predictions,outcomes}){
  for(const p of predictions||[]){if(!p.id||seen.has(p.id)||!numeric(p.predicted))continue;seen.add(p.id);const a=outcomes?.[p.id];if(!numeric(a))continue;rows.push({id:p.id,absoluteError:tidy(Math.abs(p.predicted-a))})}
  return {samples:rows.length,meanAbsoluteError:rows.length?tidy(rows.reduce((s,x)=>s+x.absoluteError,0)/rows.length):null,provisional:rows.length<20};
 }
-export function alertCandidates({myRoster=[],verifiedFreeAgents=[],news=[],now=Date.now()}={}){
- if(!Array.isArray(myRoster)||!Array.isArray(verifiedFreeAgents)||!Array.isArray(news))throw Error('Verified alert inputs required');
+export function alertCandidates({myRoster=[],verifiedFreeAgents=[],news=[],now=Date.now(),deliveredEventKeys=[]}={}){
+ if(!Array.isArray(myRoster)||!Array.isArray(verifiedFreeAgents)||!Array.isArray(news)||!Array.isArray(deliveredEventKeys))throw Error('Verified alert inputs required');
  const instant=typeof now==='number'?now:Date.parse(now);
  if(!Number.isFinite(instant))throw Error('Valid alert check time required');
  const own=new Set(myRoster.filter(p=>p?.liveYahooVerified===true&&(p.ownership==='MY_TEAM'||p.availability==='MY_TEAM')).map(p=>String(p.id)));
  const fa=new Set(verifiedFreeAgents.filter(p=>p?.liveYahooVerified===true&&p.availability==='FA').map(p=>String(p.id)));
- const seen=new Set(),results=[];
+ const seen=new Set(deliveredEventKeys.map(String)),results=[];
+ const sourceUrlValid=raw=>{
+  try{
+   const url=new URL(raw);
+   return url.protocol==='https:'&&Boolean(url.hostname)&&!url.username&&!url.password&&url.pathname!=='/';
+  }catch{return false;}
+ };
  for(const n of news){
   const id=String(n?.playerId??''),age=instant-Date.parse(n?.observedAt);
   const inOwn=own.has(id),inFa=fa.has(id);
   if(!id||inOwn===inFa||n?.important!==true||n.verifiedSource!==true||
      typeof n.message!=='string'||!n.message.trim()||n.message.length>300||
      !Number.isFinite(age)||age< -60_000||age>72*3600000||
-     typeof n.sourceUrl!=='string'||!/^https:\/\/[^\s/]+\//.test(n.sourceUrl))continue;
-  const key=id+'|'+n.sourceUrl+'|'+n.message.trim().toLowerCase();
+     !sourceUrlValid(n.sourceUrl))continue;
+  const episode=typeof n.injuryEpisodeId==='string'&&/^[a-z0-9_-]{1,128}$/i.test(n.injuryEpisodeId)
+   ?n.injuryEpisodeId:null;
+  const injuryStatus=typeof n.injuryStatus==='string'&&/^[a-z0-9_-]{1,30}$/i.test(n.injuryStatus)
+   ?n.injuryStatus.toUpperCase():null;
+  // A new article, URL or timestamp is not a new injury state.
+  const key=episode&&injuryStatus?id+'|'+episode+'|'+injuryStatus
+   :id+'|'+n.sourceUrl+'|'+n.message.trim().toLowerCase();
   if(seen.has(key))continue;
   seen.add(key);
   results.push({playerId:id,scope:inOwn?'MY_TEAM':'VERIFIED_FA',
-   message:n.message,sourceUrl:n.sourceUrl,observedAt:n.observedAt,
+   message:n.message,sourceUrl:n.sourceUrl,observedAt:n.observedAt,eventKey:key,
    requiresApproval:true,executable:false,deliveryEnabled:false});
  }
  return results;
