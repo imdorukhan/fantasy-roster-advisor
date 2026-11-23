@@ -5,6 +5,7 @@ import {dataHealth} from '../decision-core.mjs';
 import {requireSc3Read} from '../sc3-read-access.mjs';
 import {sc3ProductionEnabled} from '../sc3-yahoo-bridge.mjs';
 import {officialMatchupFromScoreboard} from '../yahoo-scoreboard.mjs';
+import {safeMatchupFailure} from '../sc3-matchup-error.mjs';
 import {cookies,configured} from './auth/yahoo/_lib.js';
 import {yahooSessionClient} from './auth/yahoo/_refresh.js';
 import {loadSessionRecord,storeConfigured,loadLeagueSnapshots,saveLeagueSnapshots,loadBackgroundYahooSession} from './auth/yahoo/_store.js';
@@ -175,7 +176,7 @@ export default async function handler(req,res){
   try{
    const {readMatchupLineups}=await import('../sc3-matchup-lineups.mjs');
    return response(res,200,await readMatchupLineups({includeProjection:req.query?.projection==='1'}));
-  }catch{return response(res,503,{error:'Verified Yahoo and ESPN matchup lineups unavailable'});}
+  }catch(error){const result=safeMatchupFailure(error);return response(res,result.status,result.body);}
  }
  if(req.query?.sc3Streaming==='1'){
   if(!await requireSc3Read(req,res))return;
