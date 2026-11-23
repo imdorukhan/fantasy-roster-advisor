@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {officialMatchupFromScoreboard,YAHOO_STAT_IDS} from './yahoo-scoreboard.mjs';
+import {officialMatchupFromScoreboard,currentMatchupIdentityFromScoreboard,YAHOO_STAT_IDS} from './yahoo-scoreboard.mjs';
 import {categoryComparison} from './decision-core.mjs';
 const ours={'FG%':.50,'FT%':.875,'3PM':3,PTS:44,REB:15,AST:13,STL:7,BLK:4,TO:3};
 const opponent={'FG%':.48,'FT%':.850,'3PM':5,PTS:50,REB:20,AST:12,STL:4,BLK:2,TO:7};
@@ -33,4 +33,48 @@ test('require Yahoo winner cross-check and reject fabricated points',()=>{
 test('reject partial or missing category values',()=>{
  const bad=sample();bad.league[1].scoreboard[0].matchups[0].matchup['0'].teams['0'].team[1].team_stats.stats.pop();
  assert.throws(()=>officialMatchupFromScoreboard(bad,opts));
+});
+
+function weekSixUnscored(){
+ const raw=sample();
+ const m=raw.league[1].scoreboard[0].matchups[0].matchup;
+ m.week='6';m.week_start='2026-11-23';m.week_end='2026-11-29';m.status='midevent';
+ m['0'].teams['1'].team[0].find(x=>x.team_key).team_key='478.l.85892.t.2';
+ m['0'].teams['1'].team[0].find(x=>x.name).name='Week Six Opponent';
+ for(const id of ['0','1']){
+  const team=m['0'].teams[id].team[1];
+  team.team_stats.week='6';
+  for(const row of team.team_stats.stats)row.stat.value='';
+  team.team_points.total='0';
+ }
+ m.stat_winners=Object.values(YAHOO_STAT_IDS).map(id=>({stat_winner:{stat_id:id}}));
+ return raw;
+}
+const weekSixOptions={observedAt:'2026-11-23T11:02:21Z',now:new Date('2026-11-23T12:00:00Z')};
+test('week six exists on Monday even when Yahoo has not published any 9-CAT totals',()=>{
+ const raw=weekSixUnscored();
+ // The actual 2026-11-23 league 85892 snapshot has Week 6, team #5 versus #2,
+ // all nine weekly stat values empty, and no nine-category winners.
+ assert.throws(()=>officialMatchupFromScoreboard(raw,weekSixOptions),/Yahoo current-week category totals not published/);
+});
+
+test('week 6 opponent and dates are verifiable without inventing Yahoo scores',()=>{
+ const identity=currentMatchupIdentityFromScoreboard(weekSixUnscored(),weekSixOptions);
+ assert.equal(identity.week,6);
+ assert.equal(identity.weekStart,'2026-11-23');
+ assert.equal(identity.weekEnd,'2026-11-29');
+ assert.equal(identity.ourTeam.id,5);
+ assert.equal(identity.opponent.id,2);
+ assert.equal(identity.opponent.name,'Week Six Opponent');
+ assert.equal(identity.weekVerified,true);
+ assert.equal(identity.scoreVerified,false);
+ assert.equal(identity.readOnly,true);
+ assert.equal('score' in identity,false);
+});
+test('opponent selection requires exactly one valid current-week fixture',()=>{
+ const repeated=weekSixUnscored();
+ repeated.league[1].scoreboard[0].matchups[1]={matchup:structuredClone(repeated.league[1].scoreboard[0].matchups[0].matchup)};
+ assert.throws(()=>currentMatchupIdentityFromScoreboard(repeated,weekSixOptions),/Exactly one official current Yahoo matchup required/);
+ const stale=weekSixUnscored();
+ assert.throws(()=>currentMatchupIdentityFromScoreboard(stale,{...weekSixOptions,observedAt:'2026-11-30T11:59:00Z',now:new Date('2026-11-30T12:00:00Z')}),/current Yahoo matchup required/);
 });

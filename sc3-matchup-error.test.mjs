@@ -17,3 +17,11 @@ test('unexpected database and network failures remain generic without leaking de
  assert.equal(x.status,503);
  assert.doesNotMatch(JSON.stringify(x),/do-not-display/);
 });
+
+test('current matchup is identified but unscored, so lineup endpoint returns safe 422',()=>{
+ const x=safeMatchupFailure(Error('Yahoo current-week category totals not published'));
+ assert.equal(x.status,422);
+ assert.equal(x.body.mode,'YAHOO_CURRENT_WEEK_STATS_PENDING');
+ assert.equal(x.body.readOnly,true);
+ assert.equal('score' in x.body,false);
+});
