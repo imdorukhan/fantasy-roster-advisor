@@ -89,3 +89,36 @@ Relevant official source entry point: https://official.nba.com/ . NBA game-day r
 The feature branch is the only write target. Run `node --test`, isolated Chrome 401/422 and UI flows, and read-only authorized Preview API checks after each code change. Preserve anonymous Preview protection, verify current production deployment ID, and require separate release permission. Latest local test suite after this audit's source fixes: **196 total, 193 pass, 0 fail, 3 skipped**. Owner-signed-in end-to-end tests have **not** been run.
 
 Changes in this audit were intentionally limited to identity ambiguity, Yahoo player-stat missing coverage, Z-score pool integrity, local forecast-ledger path behavior and HTTPS evidence URL validation. They do not claim that missing external source integrations are complete.
+
+## P0/P1 verified source and readiness follow-up — November 23, 2026, afternoon PT
+
+Current branch-only repairs and independent checks:
+
+| Commit | Verified issue and narrowly scoped repair |
+| --- | --- |
+| `9c34d4b1746e30009d2e9bec019d4886b4e1cf20` | Yahoo official FG%/FT% category figures could disagree with published made/attempt pairs yet still pass. Added percentage/rate consistency checks; incomplete/contradictory shot pairs are rejected. If shot totals are absent the official score can still be read, but attempt-sensitive future projections must not treat that as shooting-volume evidence. |
+| `9f396fbd2250cbeff977e8d1372b034ffeb40ae4` | Existing snapshot bridge returned `YAHOO_PLAYER_STATS` HTTP 200 with empty records but no explicit coverage completeness. It now returns `status=unavailable`, `coverage.complete=false`, full requested `missingIds`, and 0 returned; ESPN stats remain a separate labeled source. |
+| `f4ba7517a6f852aa8139fc7da9e5e4c48a06ce82` | SC3 player profile did not distinguish persisted ESPN identity links from temporary corroborated public-profile matches. Introduced `profile.identityVerification` with persisted flag and source-specific label, displayed in player dialogue. No source ID was automatically stored. |
+| `bbbe9a780054f1626debdfa331882967c1d671cd` | Injury alert candidate creation could duplicate the same episode/status across changing URLs and accept deceptive HTTPS URLs containing userinfo. Added episode/status event key and caller-provided prior-delivery suppression, with URL credential rejection. **No delivery enabled.** |
+| `17a6541cb169a10932ce855b7fdaf8e0d2e32dad` | Introduced an offline held-out 9-CAT audit requiring original pre-week predictions, feature snapshots before issue time, post-week verified outcomes, exact nine categories per fixture and no duplicate IDs. Computes Brier score/log loss for **descriptive review only**, always `calibrated=false` / `actionable=false`. Test's synthetic 8-week/72-category QA sample is not a real calibration dataset or release qualification. |
+
+### Independently checked missing Yahoo–ESPN identity
+
+- Authorized Preview, `/api/auto-data?sc3Player=1&id=10452`, returned `espnId=5214640`, `identityVerification.source=YAHOO_PUBLIC_PROFILE_AND_ESPN_CATALOG` and `persisted=false`.
+- Public Yahoo profile `https://sports.yahoo.com/nba/players/10452/` supports name **Kasparas Jakučionis**, Milwaukee and DOB **2006-05-29**. Official NBA profile `https://www.nba.com/player/1642857/kasparas-jakucionis/profile` confirms #25, Milwaukee and DOB; existing read-only `sc3.espn_player_identity` row for ESPN ID `5214640` matches name, team and DOB.
+- Existing `sc3.sc3_player_identity` has **no persisted row for Yahoo 10452 or ESPN 5214640**. Public/runtime verification is available and clearly labeled, but a database insert is out of scope without a separately approved data-write workflow.
+- This evidence does not prove that every other unmapped player is resolved.
+
+### Remaining model / notification gates
+
+- Latest observed Yahoo week 6 remains `HTTP 422`, `scoreVerified=false`; do not substitute previous week or convert absent values to zero. Matchup daily schedule/lineups remain separately available.
+- Yahoo live per-player stats bridge for sampled 10452 and 10094 returns 0/2: **not** a complete source. Owner-authorized actual Yahoo player stat integration and live owner UI acceptance remain open.
+- Alerts' `deliveredEventKeys` is an **input to a pure candidate evaluator**, not a persistent dispatch log. It requires a future authorized, idempotent delivery service and user opt-in; no automatic notifications are active.
+- The calibration audit does **not** fit a model, confer a probability, or authorize Trade/Punt/Playoff moves. Production-calibrated historical records and temporal out-of-sample validation remain unavailable.
+
+### Final verification
+
+- Protected Preview commit `17a6541cb169a10932ce855b7fdaf8e0d2e32dad`: READY, Yahoo health HTTP 200 healthy, NBA health HTTP 200 fresh/0 missing days, Matchup Lineups HTTP 200 7/7, official Yahoo score HTTP 422 pending, player 10452 evaluation HTTP 200 with transient identity provenance, League Rosters 14 teams/206 players, streaming 0 verified FA/538 waivers.
+- Local `node --test`: **206 tests / 203 pass / 0 fail / 3 skipped**; six isolated Chrome fixture smoke tests pass, syntax and diff checks clean. These are **not** live owner-authenticated browser acceptance.
+- Production deployment ID remained `dpl_83LCXQgJ1R9sGoSciyxKAYG2eL9c`. No production changes, token/cookie access or renewal, fantasy transactions, database writes, or paid resources.
+
