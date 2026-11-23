@@ -78,7 +78,7 @@ export function alertCandidates({myRoster=[],verifiedFreeAgents=[],news=[],now=D
   seen.add(key);
   results.push({playerId:id,scope:inOwn?'MY_TEAM':'VERIFIED_FA',
    message:n.message,sourceUrl:n.sourceUrl,observedAt:n.observedAt,eventKey:key,
-   requiresApproval:true,executable:false,deliveryEnabled:false});
+   sourceVerified:true,requiresApproval:true,executable:false,deliveryEnabled:false});
  }
  return results;
 }
