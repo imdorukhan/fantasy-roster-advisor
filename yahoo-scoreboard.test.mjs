@@ -78,3 +78,26 @@ test('opponent selection requires exactly one valid current-week fixture',()=>{
  const stale=weekSixUnscored();
  assert.throws(()=>currentMatchupIdentityFromScoreboard(stale,{...weekSixOptions,observedAt:'2026-11-30T11:59:00Z',now:new Date('2026-11-30T12:00:00Z')}),/current Yahoo matchup required/);
 });
+
+test('official 9-CAT shooting percentages must agree with published makes and attempts',()=>{
+ const withShooting=sample();
+ const fixture=withShooting.league[1].scoreboard[0].matchups[0].matchup['0'].teams;
+ for(const [index,fg,ft] of [['0','10/20','7/8'],['1','12/25','17/20']]){
+  const stats=fixture[index].team[1].team_stats.stats;
+  stats.push({stat:{stat_id:'9004003',value:fg}},{stat:{stat_id:'9007006',value:ft}});
+ }
+ const accepted=officialMatchupFromScoreboard(withShooting,opts);
+ assert.equal(accepted.ourTeam.shooting.FGM,10);
+ const badFg=structuredClone(withShooting);
+ const own=badFg.league[1].scoreboard[0].matchups[0].matchup['0'].teams['0'].team[1].team_stats.stats;
+ own.find(r=>r.stat.stat_id==='9004003').stat.value='10/30';
+ assert.throws(()=>officialMatchupFromScoreboard(badFg,opts),/shooting.*percentage|FG%.*/i);
+ const badFt=structuredClone(withShooting);
+ const other=badFt.league[1].scoreboard[0].matchups[0].matchup['0'].teams['1'].team[1].team_stats.stats;
+ other.find(r=>r.stat.stat_id==='9007006').stat.value='17/40';
+ assert.throws(()=>officialMatchupFromScoreboard(badFt,opts),/shooting.*percentage|FT%.*/i);
+ const partial=structuredClone(withShooting);
+ partial.league[1].scoreboard[0].matchups[0].matchup['0'].teams['1'].team[1].team_stats.stats=
+  partial.league[1].scoreboard[0].matchups[0].matchup['0'].teams['1'].team[1].team_stats.stats.filter(r=>r.stat.stat_id!=='9007006');
+ assert.throws(()=>officialMatchupFromScoreboard(partial,opts),/shooting/);
+});

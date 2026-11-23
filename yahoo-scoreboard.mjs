@@ -37,6 +37,17 @@ function teamsFor(matchup){
    return Number.isSafeInteger(made)&&Number.isSafeInteger(attempted)&&made<=attempted?[made,attempted]:null;
   }
   const fg=shotPair('9004003'),ft=shotPair('9007006');
+  const haveFg=statMap.has('9004003'),haveFt=statMap.has('9007006');
+  if(haveFg!==haveFt||(haveFg&&(!fg||!ft)))throw Error('Incomplete official Yahoo shooting attempts');
+  // Yahoo score percentages and optional made/attempts must describe the same
+  // shots. Otherwise a source mix-up can fabricate category-impact math.
+  if(fg&&ft){
+   const rates=[['FG%',fg],['FT%',ft]];
+   for(const [cat,[made,attempted]] of rates){
+    const rate=attempted?made/attempted:0;
+    if(Math.abs(rate-normalized[cat])>0.00051)throw Error('Yahoo shooting percentage mismatch: '+cat);
+   }
+  }
   const shooting=fg&&ft?{FGM:fg[0],FGA:fg[1],FTM:ft[0],FTA:ft[1]}:null;
   return {key,id:Number(key.split('.t.').at(-1)),name:name||key,stats:normalized,shooting,remainingGames:value.team_remaining_games?.total?.remaining_games??null,completedGames:value.team_remaining_games?.total?.completed_games??null,scoredPoints:Number(value.team_points?.total)};
  });
