@@ -22,3 +22,14 @@ test('Yahoo batched player stats reports silent omitted IDs as incomplete, not a
  assert.deepEqual(r.missingIds,['43']);
  assert.ok(r.errors.some(x=>x.reason==='Incomplete Yahoo stat batch'));
 });
+
+test('duplicate Yahoo player entries with conflicting stat values never count as verified full coverage',async()=>{
+ const categories={stat_categories:{stats:[{stat:{stat_id:12,name:'Points',display_name:'PTS'}}]}};
+ const item=(pts)=>({player:[[{player_id:'42'}],{player_stats:{coverage_type:'average_season',stats:[{stat:{stat_id:12,value:String(pts)}}]}}]});
+ const payload={players:{0:item('21.5'),1:item('99.0')}};
+ const result=await loadPlayerStats({gameKey:'478',playerIds:['42'],read:async path=>path.includes('stat_categories')?categories:payload});
+ assert.equal(result.complete,false);
+ assert.equal(result.returned,0);
+ assert.deepEqual(result.missingIds,['42']);
+ assert.ok(result.errors.length>0);
+});

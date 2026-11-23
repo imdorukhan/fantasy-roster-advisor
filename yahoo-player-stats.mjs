@@ -90,8 +90,8 @@ function normalizeStat(raw,canonical){
  }
  return typeof raw==='string'&&/^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(raw.trim())?raw.trim():null;
 }
-export function playerStatRecords(root,catalog,{coverage='average_season',observedAt=new Date().toISOString()}={}){
- const out=new Map();
+export function playerStatRecords(root,catalog,{coverage='average_season',observedAt=new Date().toISOString(),onConflict=null}={}){
+ const out=new Map(),ambiguous=new Set();
  function walk(v,d=0){if(!v||typeof v!=='object'||d>25)return;
  if(Array.isArray(v.player)&&Array.isArray(v.player[0])){
  const meta=v.player[0],id=meta.find(x=>x?.player_id!==undefined)?.player_id;
@@ -104,7 +104,9 @@ export function playerStatRecords(root,catalog,{coverage='average_season',observ
  rawStats.push({id:statId,label:def?.label||'Yahoo stat '+statId,value,raw:stat.value??null});
  if(def?.canonical&&value!==null)values[def.canonical]=value;
  }
- out.set(String(id),{coverage,observedAt,source:'Yahoo Fantasy Sports API',values,rawStats});
+ const key=String(id);
+ if(out.has(key)){out.delete(key);ambiguous.add(key);onConflict?.(key);}
+ else if(!ambiguous.has(key))out.set(key,{coverage,observedAt,source:'Yahoo Fantasy Sports API',values,rawStats});
  }}
  Object.values(v).forEach(x=>walk(x,d+1));}
  walk(root);return out;
@@ -120,9 +122,11 @@ export async function loadPlayerStats({read,gameKey,playerIds,coverage='average_
  const batch=ids.slice(i,i+size);
  try{
  const payload=await read('players;player_keys='+batch.map(id=>gameKey+'.p.'+id).join(',')+'/stats;type='+coverage+'?format=json');
- const parsed=playerStatRecords(payload,catalog,{coverage});
+ const duplicates=new Set();
+ const parsed=playerStatRecords(payload,catalog,{coverage,onConflict:id=>duplicates.add(id)});
  for(const [id,record] of parsed)if(batch.includes(id))records.set(id,record);
  const omitted=batch.filter(id=>!parsed.has(id));
+ if(duplicates.size)errors.push({count:duplicates.size,status:null,reason:'Conflicting duplicate Yahoo player stats'});
  if(omitted.length)errors.push({count:omitted.length,status:null,reason:'Incomplete Yahoo stat batch'});
  }catch(e){errors.push({count:batch.length,status:e.status||null,reason:'Yahoo stat batch unavailable'});}
  }
