@@ -78,10 +78,15 @@ export function tradeImpact({send=[],receive=[],rosterTotals}={}){
  const raw=['FGM','FGA','FTM','FTA','3PM','PTS','REB','AST','STL','BLK','TO'];
  if(!rosterTotals||!Array.isArray(send)||!Array.isArray(receive)||!send.length||!receive.length)return {available:false,reason:'Roster totals and both trade sides required'};
  const all=[rosterTotals,...send,...receive];
- if(all.some(p=>raw.some(k=>!finite(p?.[k])||p[k]<0)))return {available:false,reason:'Verified category projections and shooting attempts required'};
+ const physical=p=>raw.every(k=>finite(p?.[k])&&p[k]>=0)&&
+  p.FGM<=p.FGA&&p.FTM<=p.FTA&&p['3PM']<=p.FGM;
+ if(all.some(p=>!physical(p)))return {available:false,reason:'Verified physically possible category projections and shooting attempts required'};
+ const outgoing=Object.fromEntries(raw.map(k=>[k,send.reduce((s,p)=>s+p[k],0)]));
+ if(raw.some(k=>outgoing[k]>rosterTotals[k]))return {available:false,reason:'Outgoing projections exceed roster totals'};
  const before=Object.fromEntries(raw.map(k=>[k,rosterTotals[k]]));
- const after=Object.fromEntries(raw.map(k=>[k,rosterTotals[k]-send.reduce((s,p)=>s+p[k],0)+receive.reduce((s,p)=>s+p[k],0)]));
- if(raw.some(k=>after[k]<0)||after.FGM>after.FGA||after.FTM>after.FTA)return {available:false,reason:'Trade would produce impossible totals'};
+ const after=Object.fromEntries(raw.map(k=>[k,rosterTotals[k]-outgoing[k]+receive.reduce((s,p)=>s+p[k],0)]));
+ if(raw.some(k=>after[k]<0)||after.FGM>after.FGA||after.FTM>after.FTA||after['3PM']>after.FGM||
+    before.FGA<=0||before.FTA<=0||after.FGA<=0||after.FTA<=0)return {available:false,reason:'Trade would produce impossible or undefined totals'};
  const decorate=s=>({...s,'FG%':rate(s.FGM,s.FGA),'FT%':rate(s.FTM,s.FTA)});
  const a=decorate(before),b=decorate(after);
  return {available:true,before:a,after:b,changes:Object.fromEntries(NINE_CAT.map(k=>[k,a[k]===null||b[k]===null?null:b[k]-a[k]])),winProbability:null,actionable:false,method:'Deterministic projected nine-category delta; no opponent or uncertainty model'};

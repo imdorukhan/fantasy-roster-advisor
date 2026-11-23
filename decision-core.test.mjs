@@ -43,3 +43,16 @@ test('trade impact checks attempt-weighted percentages and refuses missing proje
 test('health reports stale and missing feeds instead of masking failures',()=>{
  const r=dataHealth([{name:'Yahoo',observedAt:'2026-11-17T20:59:00Z'},{name:'ESPN',observedAt:'2026-11-17T19:00:00Z'},{name:'NBA',error:'HTTP 403'}],{now});assert.deepEqual(r.checks.map(c=>c.status),['FRESH','STALE','ERROR']);assert.equal(r.healthy,false);
 });
+
+test('trade impact refuses impossible starting roster statistics even if the swap makes them look possible',()=>{
+ const base={FGM:90,FGA:80,FTM:16,FTA:20,'3PM':20,PTS:100,REB:50,AST:20,STL:10,BLK:5,TO:14};
+ const send={FGM:80,FGA:40,FTM:2,FTA:4,'3PM':2,PTS:20,REB:5,AST:3,STL:2,BLK:1,TO:4};
+ const receive={FGM:9,FGA:12,FTM:3,FTA:3,'3PM':3,PTS:22,REB:6,AST:4,STL:3,BLK:2,TO:2};
+ assert.equal(tradeImpact({send:[send],receive:[receive],rosterTotals:base}).available,false);
+});
+test('trade impact rejects selling more verified statistics than the roster contains',()=>{
+ const base={FGM:10,FGA:30,FTM:9,FTA:15,'3PM':3,PTS:22,REB:4,AST:4,STL:2,BLK:1,TO:2};
+ const send={FGM:10,FGA:20,FTM:9,FTA:12,'3PM':4,PTS:24,REB:5,AST:3,STL:2,BLK:1,TO:2};
+ const receive={FGM:9,FGA:12,FTM:3,FTA:3,'3PM':3,PTS:22,REB:6,AST:4,STL:3,BLK:2,TO:2};
+ assert.equal(tradeImpact({send:[send],receive:[receive],rosterTotals:base}).available,false);
+});
