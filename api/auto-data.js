@@ -357,7 +357,14 @@ async function bridgeHandler(req,res){
    }
   }
   if(req.query?.allRosters==='1'||req.query?.freeAgents==='1'||req.query?.playerPool==='1'||req.query?.matchup==='1'||req.query?.sample)return response(res,503,{...common,mode:'UNAVAILABLE',error:'This data is not included in existing Yahoo snapshots; no inferred ownership or live stats'});
-  if(req.query?.leagueData==='1')return response(res,200,{...common,mode:'YAHOO_LEAGUE_DATA',observedAt,sections,sectionTimestamps:timestamps,staleSections,dbBacked:true,rosterPlayers:roster,leagueTeams,errors:[]});
+  if(req.query?.leagueData==='1'){
+   let injuryEvidence={mode:'SC3_INJURY_EVIDENCE',status:'unavailable',readOnly:true,players:[]};
+   try{
+    const {readInjuryEvidence}=await import('../sc3-injury-evidence.mjs');
+    injuryEvidence=await readInjuryEvidence(roster,observedAt);
+   }catch{ /* Preserve Yahoo roster visibility when verified ESPN injury evidence is unavailable. */ }
+   return response(res,200,{...common,mode:'YAHOO_LEAGUE_DATA',observedAt,sections,sectionTimestamps:timestamps,staleSections,dbBacked:true,rosterPlayers:roster,leagueTeams,injuryEvidence,errors:[]});
+  }
   return response(res,200,{...common,mode:'YAHOO_API_LIVE',observedAt,teamName:leagueTeams.find(t=>t.key===teamKey)?.name,players:roster,staleSections});
  }catch{return response(res,503,{mode:'UNAVAILABLE',error:'Verified Yahoo snapshot bridge unavailable',readOnly:true})}
 }

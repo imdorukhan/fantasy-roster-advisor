@@ -6,6 +6,7 @@ import puppeteer from 'puppeteer-core';
 const root=resolve(import.meta.dirname,'..');
 const stamp='2026-11-23T12:00:00.000Z';
 const season={complete:true,games:14,values:{PTS:25,REB:7,AST:5,STL:1.1,BLK:1,TO:2,'FG%':.51,'FT%':.8,MPG:31}};
+let leagueReads=0;
 const players=[
  {yahooId:'10001',name:'Verified ESPN Player',slot:'PG',nbaTeam:'GSW',status:'A'},
  {yahooId:'10002',name:'Unmapped Player',slot:'IL',nbaTeam:'LAL',status:'GTD'}
@@ -16,9 +17,14 @@ const server=createServer(async(req,res)=>{
  if(url.pathname==='/api/auto-data'){
   let data={error:'Owner sign-in required'},code=401;
   if(url.searchParams.get('leagueData')==='1'){
+   leagueReads++;
    code=200;
    data={mode:'YAHOO_LEAGUE_DATA',rosterPlayers:players,leagueTeams:[{name:'My Team',key:'478.l.85892.t.5'}],
-    observedAt:stamp,sections,staleSections:[],readOnly:true};
+    observedAt:stamp,sections,staleSections:[],readOnly:true,
+    injuryEvidence:{mode:'SC3_INJURY_EVIDENCE',status:'verified',yahooObservedAt:stamp,readOnly:true,players:[
+      {yahooId:'10001',name:'Verified ESPN Player',rosterSlot:'PG',yahooStatus:'A',espnDepthVerified:true,espnDepthIL:true,returnDate:null},
+      {yahooId:'10002',name:'Unmapped Player',rosterSlot:'IL',yahooStatus:'GTD',espnDepthVerified:false,espnDepthIL:false,returnDate:null}
+    ]}};
   }else if(url.searchParams.get('performance')==='1'){
    code=200;
    data={mode:'YAHOO_LINKED_PERFORMANCE',historyEnd:'2026-11-22',expectedEnd:'2026-11-22',fresh:true,
@@ -90,6 +96,14 @@ try{
  assert.match(centers[0],/Alpha Center/);
  assert.match(centers[0],/Verified ESPN: C #3/);
  assert.match(await page.$eval('#fa-status',e=>e.textContent),/Verified Yahoo–ESPN depth links: 2\/2/);
+ await page.click('[data-view="injury"]');
+ const watch=await page.$eval('#injury-roster',e=>e.textContent);
+ assert.match(watch,/ESPN full depth: IL marker/);
+ assert.match(watch,/Yahoo flag: GTD/);
+ assert.match(watch,/Return date not independently verified/);
+ await page.click('#injury-refresh');
+ await page.waitForFunction(()=>document.querySelector('#injury-source-status')?.textContent.includes('No return dates verified'),{timeout:8000});
+ assert.ok(leagueReads>=2,'Refresh injury indicators re-reads the verified Yahoo roster');
  assert.deepEqual(errors,[]);
- console.log('PASS: roster ESPN source label, verified season averages, unavailable unmapped player, search filter, no JS errors');
+ console.log('PASS: roster ESPN provenance, FA depth filters, two-source injury indicators, refresh, no JS errors');
 } finally {await browser.close();await new Promise(ok=>server.close(ok));}
