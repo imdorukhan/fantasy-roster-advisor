@@ -15,5 +15,16 @@ export function matchPlayers(yahoo,espn){
   out.push(row);if(selected){const key=row.espnId;if(!used.has(key))used.set(key,[]);used.get(key).push(row)}
  }
  for(const list of used.values())if(list.length>1)for(const r of list){r.espnId=null;r.status='unresolved';r.evidence='conflicting one-to-one identity'}
+ const seenYahoo=new Map();
+ for(const row of out){
+  const set=seenYahoo.get(row.yahooId)||[];
+  set.push(row);
+  seenYahoo.set(row.yahooId,set);
+ }
+ // A duplicated Yahoo identifier cannot authorize two distinct ESPN players, even
+ // if name, team, and DOB individually appear unique to each source row.
+ for(const rows of seenYahoo.values())if(rows.length>1)for(const row of rows){
+  row.espnId=null;row.status='unresolved';row.evidence='conflicting duplicate Yahoo identity';
+ }
  return out;
 }
