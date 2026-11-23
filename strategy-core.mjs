@@ -47,7 +47,26 @@ export function forecastError({predictions,outcomes}){
  for(const p of predictions||[]){if(!p.id||seen.has(p.id)||!numeric(p.predicted))continue;seen.add(p.id);const a=outcomes?.[p.id];if(!numeric(a))continue;rows.push({id:p.id,absoluteError:tidy(Math.abs(p.predicted-a))})}
  return {samples:rows.length,meanAbsoluteError:rows.length?tidy(rows.reduce((s,x)=>s+x.absoluteError,0)/rows.length):null,provisional:rows.length<20};
 }
-export function alertCandidates({myRoster,verifiedFreeAgents,news}){
- const known=new Map([...myRoster.map(p=>[p.id,'MY_TEAM']),...verifiedFreeAgents.filter(p=>p.availability==='FA'&&p.liveYahooVerified===true).map(p=>[p.id,'VERIFIED_FA'])]);
- return (news||[]).filter(n=>known.has(n.playerId)&&n.important===true&&n.verifiedSource===true).map(n=>({playerId:n.playerId,scope:known.get(n.playerId),message:n.message,requiresApproval:true,executable:false}));
+export function alertCandidates({myRoster=[],verifiedFreeAgents=[],news=[],now=Date.now()}={}){
+ if(!Array.isArray(myRoster)||!Array.isArray(verifiedFreeAgents)||!Array.isArray(news))throw Error('Verified alert inputs required');
+ const instant=typeof now==='number'?now:Date.parse(now);
+ if(!Number.isFinite(instant))throw Error('Valid alert check time required');
+ const own=new Set(myRoster.filter(p=>p?.liveYahooVerified===true&&(p.ownership==='MY_TEAM'||p.availability==='MY_TEAM')).map(p=>String(p.id)));
+ const fa=new Set(verifiedFreeAgents.filter(p=>p?.liveYahooVerified===true&&p.availability==='FA').map(p=>String(p.id)));
+ const seen=new Set(),results=[];
+ for(const n of news){
+  const id=String(n?.playerId??''),age=instant-Date.parse(n?.observedAt);
+  const inOwn=own.has(id),inFa=fa.has(id);
+  if(!id||inOwn===inFa||n?.important!==true||n.verifiedSource!==true||
+     typeof n.message!=='string'||!n.message.trim()||n.message.length>300||
+     !Number.isFinite(age)||age< -60_000||age>72*3600000||
+     typeof n.sourceUrl!=='string'||!/^https:\/\/[^\s/]+\//.test(n.sourceUrl))continue;
+  const key=id+'|'+n.sourceUrl+'|'+n.message.trim().toLowerCase();
+  if(seen.has(key))continue;
+  seen.add(key);
+  results.push({playerId:id,scope:inOwn?'MY_TEAM':'VERIFIED_FA',
+   message:n.message,sourceUrl:n.sourceUrl,observedAt:n.observedAt,
+   requiresApproval:true,executable:false,deliveryEnabled:false});
+ }
+ return results;
 }
