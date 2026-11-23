@@ -342,7 +342,8 @@ async function bridgeHandler(req,res){
    const byId=new Map(report.players.map(p=>[p.id,p]));
    const get=id=>links.has(id)?byId.get(links.get(id))||null:null;
    if(req.query.performance==='1')return response(res,200,{...common,mode:'YAHOO_LINKED_PERFORMANCE',historyEnd,expectedEnd,missingDays,fresh,source:report.source,pool:report.pool,players:ids.map(yahooId=>({yahooId,performance:get(yahooId)}))});
-   return response(res,200,{...common,mode:'YAHOO_PLAYER_STATS',source:'ESPN verified performance, not Yahoo live stats',players:ids.map(yahooId=>({yahooId,stats:null,mpg:null})),coverage:{requested:ids.length,returned:0,errors:[{section:'Yahoo live player stats unavailable in snapshot bridge'}]}});
+   const {unavailableYahooStatCoverage}=await import('../sc3-yahoo-player-stat-coverage.mjs');
+   return response(res,200,{...common,...unavailableYahooStatCoverage(ids)});
   }
   if(req.query?.officialMatchup==='1'){
    try{return response(res,200,{...officialMatchupFromScoreboard(sections.scoreboard,{observedAt:timestamps.scoreboard,teamKey}),bridge:true})}
