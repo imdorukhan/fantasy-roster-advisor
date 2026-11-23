@@ -1,8 +1,8 @@
 // Offline, read-only quality audit of prospective Yahoo 9-CAT forecasts.
 // It does not fit or activate a predictive model.
 const CAT=['FG%','FT%','3PM','PTS','REB','AST','STL','BLK','TO'];
-const iso=value=>typeof value==='string'&&/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(value)&&
- Number.isFinite(Date.parse(value));
+const iso=value=>typeof value==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?Z$/.test(value)&&
+ Number.isFinite(Date.parse(value))&&new Date(value).toISOString().slice(0,19)===value.slice(0,19);
 const blocked=(status,reason,heldoutWeeks=0)=>({
  status,reason,heldoutWeeks,evaluatedCategories:0,brierScore:null,logLoss:null,
  calibrated:false,actionable:false,winProbability:null,readOnly:true

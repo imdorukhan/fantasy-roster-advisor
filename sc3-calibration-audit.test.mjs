@@ -45,3 +45,19 @@ test('look-ahead features, after-start forecasts, duplicates and missing categor
   assert.equal(result.brierScore,null);
  }
 });
+
+test('a normalized but nonexistent calendar date cannot pass the pre-week holdout chronology',()=>{
+ const cats=['FG%','FT%','3PM','PTS','REB','AST','STL','BLK','TO'];
+ const rows=cats.map((category,i)=>({
+  forecastId:'bad-day-'+category,leagueId:85892,teamId:5,opponentId:2,
+  week:6,category,weekStartAt:'2026-11-31T00:00:00Z',
+  weekEndAt:'2026-12-07T23:59:59Z',
+  issuedAt:'2026-11-30T20:00:00Z',featuresThroughAt:'2026-11-30T19:00:00Z',
+  outcomeObservedAt:'2026-12-08T12:00:00Z',
+  predictedWinProbability:.5,outcome:i%2?'LOSS':'WIN',
+  source:'Yahoo Fantasy Sports API',scoreVerified:true
+ }));
+ const report=auditHeldoutCategories(rows,{minimumWeeks:1,minimumCategories:9});
+ assert.equal(report.status,'unverified');
+ assert.equal(report.brierScore,null);
+});
