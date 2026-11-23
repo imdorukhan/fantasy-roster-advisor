@@ -17,10 +17,15 @@ export function fabPlan({budget,weeksLeft,claims}){
  }).sort((a,b)=>b.suggestedMaxBid-a.suggestedMaxBid);
 }
 export function puntSimulation({categoryWinProbabilities,puntCategory}){
+ const required=['FG%','FT%','3PM','PTS','REB','AST','STL','BLK','TO'];
  const categories=Object.keys(categoryWinProbabilities||{});
- if(categories.length!==9||!categories.includes(puntCategory)||categories.some(k=>!numeric(categoryWinProbabilities[k])||categoryWinProbabilities[k]<0||categoryWinProbabilities[k]>1))throw Error('Nine valid probabilities and punt category required');
- const retained=categories.filter(k=>k!==puntCategory);
- return {puntCategory,retainedExpectedWins:tidy(retained.reduce((s,k)=>s+categoryWinProbabilities[k],0)),targetWins:5,note:'Ignoring a category does not redistribute wins. Re-run matchup model with revised roster projections to evaluate an actual punt.'};
+ if(categories.length!==required.length||required.some(k=>!Object.hasOwn(categoryWinProbabilities,k))||
+    !required.includes(puntCategory)||required.some(k=>!numeric(categoryWinProbabilities[k])||categoryWinProbabilities[k]<0||categoryWinProbabilities[k]>1))
+  throw Error('Nine official 9-CAT probabilities required');
+ const retained=required.filter(k=>k!==puntCategory);
+ return {puntCategory,retainedExpectedWins:tidy(retained.reduce((s,k)=>s+categoryWinProbabilities[k],0)),
+  targetWins:5,winProbability:null,calibrated:false,actionable:false,requiresApproval:true,
+  note:'Scenario arithmetic only. Inputs are not verified or calibrated. Ignoring a category does not redistribute wins. Re-run matchup model with verified revised roster projections to evaluate an actual punt.'};
 }
 export function playoffScheduleValue({players,schedule,dates}){
  if(!Array.isArray(players)||!Array.isArray(schedule)||!Array.isArray(dates))throw Error('Invalid playoff window');
