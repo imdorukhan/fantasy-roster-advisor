@@ -30,10 +30,11 @@
 <script type="module">
 import {playerLink} from "./player-dialog.mjs";
 import {categoryComparison,categorySwing,freshness} from './decision-core.mjs';
+import {classifyMatchupSources} from './matchup-source-health.mjs';
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=(n,cat)=>typeof n!=='number'||!Number.isFinite(n)?'—':cat==='FG%'||cat==='FT%'?(n*100).toFixed(1)+'%':String(n);
-const get=async url=>{const r=await fetch(url,{cache:'no-store',credentials:'same-origin'});if(!r.ok)throw Error('HTTP '+r.status);return r.json()};
+const get=async url=>{const r=await fetch(url,{cache:'no-store',credentials:'same-origin'});if(!r.ok)throw Object.assign(Error('HTTP '+r.status),{status:r.status});return r.json()};
 function roster(el,players){$(el).innerHTML=Array.isArray(players)&&players.length?'<table><thead><tr><th>Player</th><th>NBA</th><th>Yahoo slot</th></tr></thead><tbody>'+players.map(p=>'<tr><td>'+playerLink(p)+'</td><td>'+esc(p.nbaTeam||'?')+'</td><td>'+esc(p.slot||'?')+'</td></tr>').join('')+'</tbody></table>':'<p class="muted">Current roster observation unavailable; historical roster excluded.</p>';}
 async function refresh(){
  const button=$('refresh');button.disabled=true;
@@ -43,6 +44,8 @@ async function refresh(){
   const matchup=official||(results[1].status==='fulfilled'?results[1].value:null);
   const observed=results[2].status==='fulfilled'?results[2].value:null;
   const live=freshness(matchup?.observedAt,{maxAgeMs:300000});
+  const officialError=results[0].status==='rejected'?results[0].reason:null;
+  const state=classifyMatchupSources({officialVerified:Boolean(official),officialHttpStatus:officialError?.status,publicFresh:Boolean(matchup&&live.valid)});
   if(matchup&&live.valid&&matchup.ourTeam?.id===5&&matchup.categories?.length===9){
    const normalized=categoryComparison(matchup.ourTeam.stats,matchup.opponent.stats);
    if(!normalized.verified)throw Error('Invalid categories');
@@ -54,14 +57,15 @@ async function refresh(){
    const swing=categorySwing(normalized);
    $('swing').innerHTML='<p class="muted">Trailing or tied categories only. Without calibrated projections, raw gaps are not comparable across categories.</p><p>'+swing.targets.map(t=>'<span class="pill">'+esc(t.category)+' · '+esc(t.status)+'</span>').join(' ')+'</p><p class="sub">Probabilities and actions: unavailable until verified projections.</p>';
   }else{
-   $('score-summary').textContent='Unverified';
+   $('score-summary').textContent=state.requiresOwner?'Sign-in required':state.weekUnverified?'Week unverified':'Unverified';
    $('categories').innerHTML='<tr><td colspan="4">Current Yahoo category observations unavailable or stale.</td></tr>';
    $('swing').textContent='Verified 9-CAT results required.';
   }
   roster('ours',observed?.rosters?.ours);
   roster('theirs',observed?.rosters?.opponent);
   const sourceResults=(observed?.sources||[]).map(s=>esc(s.source)+': '+esc(s.status)).join(' · ');
-  $('health').innerHTML='<p>'+(official?'Yahoo official API':'Yahoo public observation')+': '+(live.valid?'FRESH':'UNAVAILABLE / STALE')+'</p><p class="sub">'+(sourceResults||'Sources unavailable')+'</p><p class="sub">Yahoo week number not independently verified.</p>';
+  const action=state.requiresOwner?'<p><a href="/api/auth/yahoo/login?owner=1">Sign in with Yahoo to access the verified private matchup</a></p>':state.weekUnverified?'<p class="sub">The current Yahoo week is not verified yet. Older-week results are deliberately not substituted.</p>':'';
+  $('health').innerHTML='<p>Yahoo official API: '+esc(state.officialStatus)+'</p><p>Yahoo public observation: '+esc(state.publicStatus)+'</p><p class="sub">'+(sourceResults||'Sources unavailable')+'</p>'+action+'<p class="sub">'+(official?'Yahoo week '+esc(official.week)+' independently verified.':'Yahoo week number not independently verified.')+'</p>';
  }catch(e){$('categories').innerHTML='<tr><td colspan="4">Verification failed. No historical results substituted.</td></tr>';$('swing').textContent='Analysis unavailable';$('health').textContent=String(e.message);}
  finally{button.disabled=false;}
 }
