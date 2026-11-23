@@ -124,3 +124,18 @@ See the detailed, evidence-separated audit: [SC3 source contracts, calibration a
 **Read-only source verification:** Yahoo health 200 healthy; NBA health 200 fresh/zero missing dates; official Yahoo Week 6 score still 422 with `scoreVerified=false`; full lineup dates 7/7; league 14 teams/206 players; 0 verified FA and 538 waiver players. The SC3 database contains 249 verified Yahoo–ESPN identity links overall and 1,012 ESPN depth rows. These checks do **not** authorize promotion.
 
 **Still not accepted:** owner-signed-in real browser flow, live complete Yahoo 9-CAT, all roster identity links, calibrated Trade/Punt probabilities, Yahoo-verified playoff date coverage, verified NBA injury-return forecasts and opted-in alert delivery. Do not change Production 2.0.
+
+## November 23 P0/P1 source fixes and delivery safety
+
+Continuation after `2576c94`; the full independent evidence and remaining release requirements are in [Source calibration and alert gates](./sc3-source-calibration-alert-gates-2026-11-23.md).
+
+- `9c34d4b` corrected source mismatch acceptance: official Yahoo FG%/FT% values are checked against made/attempt pairs when present; contradictory or partial source rows are rejected by regression tests.
+- `9f396fb` makes snapshot-only Yahoo player stat coverage explicitly unavailable (`complete=false`, missing IDs), instead of silently treating HTTP 200 as full player coverage.
+- `f4ba751` labels verified-but-transient Yahoo 10452 → ESPN 5214640 separately from a stored `sc3.sc3_player_identity` link. Yahoo public DOB, ESPN catalog DOB/name/team and NBA official profile corroborate the identity. **No DB link was added.**
+- `bbbe9a7` suppresses duplicate same-episode/same-status alert candidates and rejects URL credential-host confusion; notification sending remains off.
+- `17a6541` adds strict, offline temporal holdout assessment for genuine nine-category forecast/observed results, including Brier and log-loss diagnostics; never marks a model calibrated or actionable.
+- `f6be245` updates detailed verification requirements and source findings.
+
+**Verification:** 206 Node tests (203 passed, 0 failed, 3 skipped), 6/6 isolated Chrome smoke scripts, clean syntax and diff checks; newest feature Preview READY. Yahoo official week 6 remains 422 stats pending, lineups 7/7 complete, NBA 200 fresh, Yahoo health 200 healthy, Yahoo per-player stats 0/2 incomplete, player 10452 identity verified at runtime but *not persisted*. No owner-authenticated browser acceptance has occurred. Production 2.0 unchanged.
+
+**Blocking the next release:** Owner login and protected UI acceptance, official fully observed 9-CAT, owner-authorized complete Yahoo per-player stats, durable approved identity mapping, real chronologically held-out model dataset, Yahoo-confirmed playoff settings and explicitly opted-in injury alert delivery. None of these were simulated as successfully completed.
