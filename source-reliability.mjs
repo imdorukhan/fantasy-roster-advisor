@@ -2,15 +2,19 @@
 const valid=s=>typeof s==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s)&&
  Number.isFinite(Date.parse(s+'T00:00:00Z'))&&new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s;
 const diff=(a,b)=>Math.round((Date.parse(a+'T00:00:00Z')-Date.parse(b+'T00:00:00Z'))/86400000);
+const evidenceUrl=value=>{
+ if(typeof value!=='string')return false;
+ try{const u=new URL(value);return u.protocol==='https:'&&Boolean(u.hostname)&&!u.username&&!u.password;}catch{return false;}
+};
 export function recordForecast(history,entry){
  if(!entry?.source||!entry?.player||typeof entry.injuryEpisodeId!=='string'||!entry.injuryEpisodeId.trim()||
-    !valid(entry.publishedAt)||!valid(entry.predictedReturn)||!entry.url)throw Error('Incomplete sourced forecast');
+    !valid(entry.publishedAt)||!valid(entry.predictedReturn)||!evidenceUrl(entry.url))throw Error('Incomplete sourced forecast');
  if(diff(entry.predictedReturn,entry.publishedAt)<0)throw Error('Forecast must be recorded before predicted return');
  if(history.some(h=>h.forecastId===entry.forecastId)||!entry.forecastId)throw Error('Duplicate/missing forecast ID');
  return [...history,{...entry,actualReturn:null,actualEvidence:null}];
 }
 export function settleForecast(history,forecastId,{actualReturn,actualEvidence,verifiedAt}){
- if(!valid(actualReturn)||!valid(verifiedAt)||!actualEvidence)throw Error('Verified game appearance date and evidence required');
+ if(!valid(actualReturn)||!valid(verifiedAt)||!evidenceUrl(actualEvidence))throw Error('Verified game appearance date and evidence required');
  const found=history.find(h=>h.forecastId===forecastId);
  if(!found||found.actualReturn)throw Error('Unknown/already settled forecast');
  if(diff(verifiedAt,actualReturn)<0||diff(actualReturn,found.publishedAt)<0)throw Error('Invalid chronology');
@@ -29,7 +33,7 @@ export function sourceReliability(history,prior=0.5,priorWeight=10){
  // Only the first recorded prediction for an episode can contribute an accuracy sample.
  // A later settled revision must not replace an unsettled or incorrect first prediction.
  for(const h of unique.values()){
-  if(!valid(h.actualReturn)||!valid(h.verifiedAt)||!h.actualEvidence||
+  if(!valid(h.actualReturn)||!valid(h.verifiedAt)||!evidenceUrl(h.actualEvidence)||!evidenceUrl(h.url)||
      diff(h.actualReturn,h.publishedAt)<0||diff(h.verifiedAt,h.actualReturn)<0)continue;
   const g=grouped.get(h.source)||[];g.push(Math.abs(diff(h.predictedReturn,h.actualReturn)));grouped.set(h.source,g);
  }
