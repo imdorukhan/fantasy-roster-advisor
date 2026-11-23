@@ -1,9 +1,10 @@
 // Local-only journal. It is intentionally NOT auto-populated from sources.
 import fs from 'node:fs';
+import {dirname} from 'node:path';
 import {recordForecast,settleForecast,sourceReliability} from './source-reliability.mjs';
 const path=process.env.INJURY_LEDGER_PATH||'data/injury-forecast-history.local.json';
 const read=()=>fs.existsSync(path)?JSON.parse(fs.readFileSync(path,'utf8')):[];
-const save=x=>{fs.mkdirSync('data',{recursive:true});const tmp=path+'.tmp';fs.writeFileSync(tmp,JSON.stringify(x,null,2)+'\n',{flag:'w'});fs.renameSync(tmp,path)};
+const save=x=>{fs.mkdirSync(dirname(path),{recursive:true});const tmp=path+'.tmp';fs.writeFileSync(tmp,JSON.stringify(x,null,2)+'\n',{flag:'w'});fs.renameSync(tmp,path)};
 const [command,arg1,arg2]=process.argv.slice(2);
 try{
  if(command==='show')console.log(JSON.stringify({forecasts:read().length,sources:sourceReliability(read())},null,2));
