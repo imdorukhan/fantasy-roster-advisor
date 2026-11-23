@@ -53,10 +53,17 @@ export function latestExpectedDay(now=new Date()){
 export async function readScopedRows({start,end,pool}){
  return withScopedTransaction(async c=>{
  end=end||latestExpectedDay();
- const days=(await c.query('select game_day::text,status,player_rows,completed_events from sc3.sc3_nba_sync_days where game_day between $1::date and $2::date order by game_day',[start,end])).rows;
- const raw=(await c.query('select event_id,espn_id,game_day::text,tipoff::text,player_name,nba_team,stats from sc3.sc3_nba_game_logs where game_day between $1::date and $2::date order by event_id,espn_id',[start,end])).rows;
+ // Production does not currently set the preview-only SC3_SEASON_START variable.
+ // Find the first complete game day in the season containing the requested end.
+ // Do not substitute an unrelated prior NBA season or treat an empty DB as complete.
+ const year=Number(end.slice(0,4))-(Number(end.slice(5,7))<10?1:0);
+ const boundary=year+'-10-01';
+ const resolvedStart=start||(await c.query("select min(game_day)::text as start from sc3.sc3_nba_sync_days where status='complete' and game_day >= $1::date and game_day <= $2::date",[boundary,end])).rows[0]?.start;
+ if(typeof resolvedStart!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(resolvedStart)||resolvedStart>end)throw Error('SC3 NBA season start unavailable');
+ const days=(await c.query('select game_day::text,status,player_rows,completed_events from sc3.sc3_nba_sync_days where game_day between $1::date and $2::date order by game_day',[resolvedStart,end])).rows;
+ const raw=(await c.query('select event_id,espn_id,game_day::text,tipoff::text,player_name,nba_team,stats from sc3.sc3_nba_game_logs where game_day between $1::date and $2::date order by event_id,espn_id',[resolvedStart,end])).rows;
  const identities=(await c.query("select yahoo_id,espn_id,status,evidence from sc3.sc3_player_identity where status='verified' order by yahoo_id")).rows;
- return {days,raw,identities,end};
+ return {days,raw,identities,end,start:resolvedStart};
  },{pool});
 }
 export function scopedSyncStore({pool}={}){
