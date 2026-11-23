@@ -37,7 +37,7 @@ async function loadSystemHealth(){
  panel.textContent='Checking authenticated Yahoo snapshot freshness…';
  try{
   const r=await fetch('/api/auto-data?live=1&health=1',{credentials:'same-origin',cache:'no-store'});
-  if(r.status===401){panel.textContent='Yahoo sign-in required to view private data health.';return;}
+  if(r.status===401){panel.innerHTML='Yahoo owner sign-in required to view private data health. <a href="/api/auth/yahoo/login?owner=1">Sign in with Yahoo</a>.';return;}
   if(!r.ok)throw Error('Data health endpoint unavailable (HTTP '+r.status+')');
   const d=await r.json();
   panel.innerHTML='<p><strong>Overall: '+esc(d.status)+'</strong> · Checked '+esc(new Date(d.checkedAt).toLocaleString())+'</p><table><thead><tr><th>Yahoo section</th><th>Status</th><th>Last observed</th></tr></thead><tbody>'+(d.sections||[]).map(x=>'<tr><td>'+esc(x.section)+'</td><td>'+esc(x.status)+'</td><td>'+esc(x.observedAt?new Date(x.observedAt).toLocaleString():'Not available')+'</td></tr>').join('')+'</tbody></table>';
@@ -135,6 +135,13 @@ async function loadFreeAgents(includeImpact=false){
  freeAgentPlayers=[];faDepthErrors=[];
  try{
   const snapshotResponse=await fetch('/api/auto-data?sc3Streaming=1'+(includeImpact?'&waiverImpact=1':''),{credentials:'same-origin',cache:'no-store'});
+  if(snapshotResponse.status===401){
+   faLoadError='Yahoo owner sign-in required';
+   status.innerHTML='Yahoo sign-in required for private free-agent and waiver data. <a href="/api/auth/yahoo/login?owner=1">Sign in with Yahoo</a>.';
+   waiverStatus.textContent='Yahoo sign-in required to view verified waivers.';
+   renderWaiverPlan(null);
+   return;
+  }
   if(snapshotResponse.status!==404){
    if(!snapshotResponse.ok)throw Error('Verified SC3 snapshot unavailable (HTTP '+snapshotResponse.status+')');
    const snapshot=await snapshotResponse.json();
@@ -237,6 +244,7 @@ async function loadAllLeaguePlayers(){
  status.textContent='Loading all league team rosters from Yahoo API…';
  try{
   const r=await fetch('/api/auto-data?sc3LeagueRosters=1',{credentials:'same-origin',cache:'no-store'});
+  if(r.status===401){status.innerHTML='Yahoo owner sign-in required for league rosters. <a href="/api/auth/yahoo/login?owner=1">Sign in with Yahoo</a>.';body.textContent='';return;}
   const d=await r.json();if(!r.ok||d.mode!=='YAHOO_ALL_ROSTERS')throw Error(d.error||'Yahoo API unavailable');
   allLeaguePlayers=d.teams.flatMap(t=>t.players.map(p=>({...p,fantasyTeam:t.name||t.key})));
   const acquisition=document.querySelector('#acquisition-summary');
