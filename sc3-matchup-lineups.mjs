@@ -1,5 +1,5 @@
 import {datedYahooRows,upcomingTeams} from './sc3-streaming-plan.mjs';
-import {leagueToday,officialMatchupFromScoreboard} from './yahoo-scoreboard.mjs';
+import {leagueToday,officialMatchupFromScoreboard,currentMatchupIdentityFromScoreboard} from './yahoo-scoreboard.mjs';
 import {bridgeSnapshots} from './sc3-yahoo-bridge.mjs';
 import {readMatchupProjection} from './sc3-matchup-projection.mjs';
 import {readYahooPageBaseline} from './sc3-projection-sources.mjs';
@@ -38,9 +38,15 @@ function groupPlayers(days, id) {
   return [...players.values()].sort((a,b)=>a.name.localeCompare(b.name));
 }
 
-export async function readMatchupLineups({now=new Date(),fetcher=fetch,includeProjection=false}={}) {
-  const snapshots = await bridgeSnapshots();
-  const official = officialMatchupFromScoreboard(snapshots.scoreboard?.payload,{observedAt:snapshots.scoreboard?.observed_at,now});
+export async function readMatchupLineups({now=new Date(),fetcher=fetch,includeProjection=false,loadSnapshots=bridgeSnapshots}={}) {
+  const snapshots = await loadSnapshots();
+  const scoreOptions={observedAt:snapshots.scoreboard?.observed_at,now};
+  // Week identity and daily lineup coverage do not depend on published 9-CAT totals.
+  const week=currentMatchupIdentityFromScoreboard(snapshots.scoreboard?.payload,scoreOptions);
+  let scored=null;
+  try { scored=officialMatchupFromScoreboard(snapshots.scoreboard?.payload,scoreOptions); }
+  catch { /* The current week exists but scores may be missing or unverified. */ }
+  const official=scored||week;
   const settingsAge=now.getTime()-Date.parse(snapshots.settings?.observed_at);
   if (!Number.isFinite(settingsAge) || settingsAge<0 || settingsAge>30*3600_000) throw Error('Yahoo settings snapshot unavailable');
   const config=snapshots.settings?.payload?.league?.[1]?.settings?.[0]?.roster_positions?.map(entry=>entry?.roster_position);
@@ -62,9 +68,9 @@ export async function readMatchupLineups({now=new Date(),fetcher=fetch,includePr
     if (!response.ok || response.redirected) throw Error('Source unavailable');
     return response[format]();
   }
-  const baseline = includeProjection && !freshness(official.observedAt,{now:now.getTime()}).valid
-    ? await readYahooPageBaseline(official,now,fetcher).catch(()=>official)
-    : official;
+  const baseline = scored&&includeProjection&&!freshness(scored.observedAt,{now:now.getTime()}).valid
+    ? await readYahooPageBaseline(scored,now,fetcher).catch(()=>scored)
+    : scored||week;
   const days = await Promise.all(dates.map(async date=>{
     const [schedule,...teams]=await Promise.allSettled([
       source(espn+date.replaceAll('-',''),'json').then(data=>upcomingTeams(data,date,now,new Date(baseline.observedAt))),
@@ -80,14 +86,17 @@ export async function readMatchupLineups({now=new Date(),fetcher=fetch,includePr
   }));
   const report = {
     mode:'SC3_MATCHUP_LINEUPS',week:official.week,scoreboardObservedAt:official.observedAt,
-    observedAt:now.toISOString(),readOnly:true,
+    observedAt:now.toISOString(),readOnly:true,scoreVerified:Boolean(scored),
     complete:days.every(day=>day.scheduleVerified&&day.lineups.every(team=>team.verified)),
     days:days.map(({date,scheduleVerified,lineups})=>({date,scheduleVerified,lineups:lineups.map(({id,verified})=>({id,verified}))})),
     teams:[official.ourTeam,official.opponent].map(team=>({id:team.id,name:team.name,players:groupPlayers(days,team.id)}))
   };
   if(includeProjection){
-    try{report.projection=await readMatchupProjection(report,baseline,{now,fetcher,baselineAligned:days.every(day=>day.baselineAligned)});}
-    catch{report.projection={teams:[],blocked:['Verified NBA history unavailable'],endOfWeek:null};}
+    if(!scored)report.projection={teams:[],blocked:['Official Yahoo 9-CAT totals not yet verified'],endOfWeek:null,readOnly:true};
+    else {
+      try{report.projection=await readMatchupProjection(report,baseline,{now,fetcher,baselineAligned:days.every(day=>day.baselineAligned)});}
+      catch{report.projection={teams:[],blocked:['Verified NBA history unavailable'],endOfWeek:null,readOnly:true};}
+    }
   }
   return report;
 }
