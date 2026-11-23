@@ -40,6 +40,11 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const percentage=cat=>cat==='FG%'||cat==='FT%';
 const fmt=(n,cat)=>percentage(cat)?(n*100).toFixed(1)+'%':String(n);
 const gap=(n,cat)=>percentage(cat)?(n*100).toFixed(1)+' pp':String(n);
+function explainUnavailable(panel,code){
+ if(code===401){panel.innerHTML='Yahoo owner sign-in required for private matchup data. <a href="/api/auth/yahoo/login?owner=1">Sign in with Yahoo</a>.';return true;}
+ if(code===422){panel.textContent='Current Yahoo matchup week is not independently verified yet. Prior-week results are not substituted.';return true;}
+ return false;
+}
 
 function render(d) {
  q('score').textContent=d.score.ours+' – '+d.score.opponent+' – '+d.score.ties;
@@ -86,7 +91,7 @@ async function refreshLineups(){
  list.textContent='';
  try{
   const response=await readMatchupEndpoint('/api/auto-data?sc3MatchupLineups=1&projection=1');
-  if(!response.ok)throw Error('Lineup details unavailable (HTTP '+response.status+')');
+  if(!response.ok){if(explainUnavailable(status,response.status)){renderProjection(null);return;}throw Error('Lineup details unavailable (HTTP '+response.status+')');}
   const report=await response.json();
   if(report.mode!=='SC3_MATCHUP_LINEUPS')throw Error('Verified lineup details unavailable');
   renderProjection(report.projection);
@@ -112,14 +117,14 @@ async function refresh(){
 
  try{
   const response=await readMatchupEndpoint('/api/auto-data?live=1&officialMatchup=1');
-  if(!response.ok)throw Error('Yahoo snapshot unavailable (HTTP '+response.status+')');
+  if(!response.ok)throw Object.assign(Error('Yahoo snapshot unavailable (HTTP '+response.status+')'),{status:response.status});
   const view=officialMatchupView(await response.json());
   if(!view.usable)throw Error(view.reason);
   render(view);
  }catch(error){
   for(const id of ['score','our-count','opp-count'])q(id).textContent='—';
   for(const id of ['matchup-teams','our-name','opp-name','categories','targets'])q(id).textContent='';
-  q('matchup-source').textContent=error.message;
+  if(!explainUnavailable(q('matchup-source'),error.status))q('matchup-source').textContent=error.message;
  }finally{
   await refreshLineups();
   button.disabled=false;
