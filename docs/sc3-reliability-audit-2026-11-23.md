@@ -37,3 +37,15 @@ Run `node scripts/sc3-ui-smoke.mjs` with the installed dependencies and Chrome o
 5. Keep the current production alias unchanged until a tested candidate passes owner and anonymous acceptance tests. Recheck rollback deployment before a release.
 
 This document is evidence for diagnostics; it does not claim every owner-only button works.
+
+## Corrective work and evidence
+
+- All four baseline pages were reachable, with 31 safe button interactions and all 15 Matchup Intelligence player dialogs opened in an isolated anonymous Chrome profile. API 401 responses were expected for this profile, and no JavaScript exceptions occurred.
+- The public Matchup Intelligence page now reports owner authentication, public scraper freshness, and Yahoo current-week validity as distinct states. A private 401 displays a Yahoo sign-in link without displaying private data.
+- Dashboard's Streaming Optimizer, Waiver Planner, league roster list, and health panel now expose actionable Yahoo owner sign-in guidance when their private API returns 401.
+- Matchup Optimizer now displays a Yahoo sign-in prompt on 401 and an explicit current-week verification problem on 422. It clears old totals rather than leaving a previous matchup visible.
+- The private lineup API now maps a recognized unverified Yahoo current-week condition to safe HTTP 422 instead of generic HTTP 503, without exposing arbitrary exception messages. Unknown errors still return opaque 503.
+- The existing, separately protected SC3 Preview returned HTTP 200 for streaming, waiver impact, 14-team/206-player roster, player evaluation, and league data; zero verified free agents and 538 verified waiver players. Its lineup/projection route returned 503 because the current week was not verified, and its official matchup returned 422.
+- After these UI and API changes, 157 Node tests ran: 154 pass, 0 fail, 3 skip. Isolated page-specific browser tests for Matchup Intelligence, Matchup Optimizer, and dashboard owner-sign-in behavior all pass with no JS exceptions.
+- Two new non-secret branch-scoped Preview environment flags were created: `SC3_SHARED_DB=1` and `SC3_YAHOO_BRIDGE=1` for `feature/sc3-reliability-20261123` only. Production and the existing expanded Preview configurations remain unchanged. The preexisting scoped role checks continue to deny broad or legacy database roles.
+- New protected Preview end-to-end verification is required on a deployment built *after* these flags were added. Production was not promoted or modified.
