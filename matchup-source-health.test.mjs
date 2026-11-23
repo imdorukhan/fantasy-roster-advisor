@@ -25,3 +25,12 @@ test('verified official matchup supersedes error status',()=>{
  assert.equal(state.officialStatus,'VERIFIED');
  assert.equal(state.requiresOwner,false);
 });
+
+test('official week six can be verified while category totals remain pending',()=>{
+ const state=classifyMatchupSources({officialHttpStatus:422,officialPending:true,publicFresh:false});
+ assert.equal(state.officialStatus,'WEEK VERIFIED / CATEGORY TOTALS PENDING');
+ assert.equal(state.weekUnverified,false);
+ assert.equal(state.scorePending,true);
+ assert.equal(state.officialVerified,false);
+ assert.equal(state.publicStatus,'UNAVAILABLE / STALE');
+});

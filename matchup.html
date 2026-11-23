@@ -34,7 +34,7 @@ import {classifyMatchupSources} from './matchup-source-health.mjs';
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=(n,cat)=>typeof n!=='number'||!Number.isFinite(n)?'—':cat==='FG%'||cat==='FT%'?(n*100).toFixed(1)+'%':String(n);
-const get=async url=>{const r=await fetch(url,{cache:'no-store',credentials:'same-origin'});if(!r.ok)throw Object.assign(Error('HTTP '+r.status),{status:r.status});return r.json()};
+const get=async url=>{const r=await fetch(url,{cache:'no-store',credentials:'same-origin'});if(!r.ok){let payload=null;if(r.status===422)try{payload=await r.json()}catch{};throw Object.assign(Error('HTTP '+r.status),{status:r.status,payload});}return r.json()};
 function roster(el,players){$(el).innerHTML=Array.isArray(players)&&players.length?'<table><thead><tr><th>Player</th><th>NBA</th><th>Yahoo slot</th></tr></thead><tbody>'+players.map(p=>'<tr><td>'+playerLink(p)+'</td><td>'+esc(p.nbaTeam||'?')+'</td><td>'+esc(p.slot||'?')+'</td></tr>').join('')+'</tbody></table>':'<p class="muted">Current roster observation unavailable; historical roster excluded.</p>';}
 async function refresh(){
  const button=$('refresh');button.disabled=true;
@@ -49,8 +49,12 @@ async function refresh(){
   // Public page scraping remains limited to five minutes; never conflate their freshness.
   const live=official?{valid:true}:freshness(publicMatchup?.observedAt,{maxAgeMs:300000});
   const officialError=results[0].status==='rejected'?results[0].reason:null;
+  const pendingBody=officialError?.payload;
+  const pending=pendingBody?.mode==='YAHOO_OFFICIAL_MATCHUP_STATS_PENDING'&&pendingBody.weekVerified===true&&pendingBody.scoreVerified===false&&
+    pendingBody.leagueId===85892&&pendingBody.teamId===5&&Number.isInteger(pendingBody.week)&&Number.isInteger(pendingBody.opponent?.id)&&
+    freshness(pendingBody.observedAt,{maxAgeMs:30*3600000}).valid?pendingBody:null;
   const publicFresh=freshness(publicMatchup?.observedAt,{maxAgeMs:300000}).valid;
-  const state=classifyMatchupSources({officialVerified:Boolean(official),officialHttpStatus:officialError?.status,publicFresh});
+  const state=classifyMatchupSources({officialVerified:Boolean(official),officialPending:Boolean(pending),officialHttpStatus:officialError?.status,publicFresh});
   if(matchup&&live.valid&&matchup.ourTeam?.id===5&&matchup.categories?.length===9){
    const normalized=categoryComparison(matchup.ourTeam.stats,matchup.opponent.stats);
    if(!normalized.verified)throw Error('Invalid categories');
@@ -61,6 +65,13 @@ async function refresh(){
    $('categories').innerHTML=matchup.categories.map(c=>'<tr><td><strong>'+esc(c.category)+'</strong></td><td class="'+(c.leader==='OURS'?'ours':'')+'">'+fmt(c.ours,c.category)+'</td><td class="'+(c.leader==='OPPONENT'?'opp':'')+'">'+fmt(c.opponent,c.category)+'</td><td class="'+(c.leader==='OURS'?'ours':c.leader==='OPPONENT'?'opp':'tie')+'">'+esc(c.leader)+'</td></tr>').join('');
    const swing=categorySwing(normalized);
    $('swing').innerHTML='<p class="muted">Trailing or tied categories only. Without calibrated projections, raw gaps are not comparable across categories.</p><p>'+swing.targets.map(t=>'<span class="pill">'+esc(t.category)+' · '+esc(t.status)+'</span>').join(' ')+'</p><p class="sub">Probabilities and actions: unavailable until verified projections.</p>';
+  }else if(pending){
+   $('opponent-name').textContent=pending.opponent.name;
+   $('matchup-week-label').textContent='Week '+pending.week+' · '+pending.weekStart+' to '+pending.weekEnd;
+   $('observed-time').textContent='Yahoo matchup observed '+new Date(pending.observedAt).toLocaleString();
+   $('score-summary').textContent='Stats pending';
+   $('categories').innerHTML='<tr><td colspan="4">Current Yahoo week and opponent verified. Official 9-CAT totals have not been published.</td></tr>';
+   $('swing').textContent='Category comparisons and projections are unavailable until official Yahoo totals are published.';
   }else{
    $('score-summary').textContent=state.requiresOwner?'Sign-in required':state.weekUnverified?'Week unverified':'Unverified';
    $('categories').innerHTML='<tr><td colspan="4">Current Yahoo category observations unavailable or stale.</td></tr>';
@@ -69,8 +80,8 @@ async function refresh(){
   roster('ours',observed?.rosters?.ours);
   roster('theirs',observed?.rosters?.opponent);
   const sourceResults=(observed?.sources||[]).map(s=>esc(s.source)+': '+esc(s.status)).join(' · ');
-  const action=state.requiresOwner?'<p><a href="/api/auth/yahoo/login?owner=1">Sign in with Yahoo to access the verified private matchup</a></p>':state.weekUnverified?'<p class="sub">The current Yahoo week is not verified yet. Older-week results are deliberately not substituted.</p>':'';
-  $('health').innerHTML='<p>Yahoo official API: '+esc(state.officialStatus)+'</p><p>Yahoo public observation: '+esc(state.publicStatus)+'</p><p class="sub">'+(sourceResults||'Sources unavailable')+'</p>'+action+'<p class="sub">'+(official?'Yahoo week '+esc(official.week)+' independently verified.':'Yahoo week number not independently verified.')+'</p>';
+  const action=state.requiresOwner?'<p><a href="/api/auth/yahoo/login?owner=1">Sign in with Yahoo to access the verified private matchup</a></p>':state.scorePending?'<p class="sub">The current Yahoo week and opponent are verified. Official 9-CAT totals are pending; no score is inferred.</p>':state.weekUnverified?'<p class="sub">The current Yahoo week is not verified yet. Older-week results are deliberately not substituted.</p>':'';
+  $('health').innerHTML='<p>Yahoo official API: '+esc(state.officialStatus)+'</p><p>Yahoo public observation: '+esc(state.publicStatus)+'</p><p class="sub">'+(sourceResults||'Sources unavailable')+'</p>'+action+'<p class="sub">'+(official||pending?'Yahoo week '+esc((official||pending).week)+' independently verified.':'Yahoo week number not independently verified.')+'</p>';
  }catch(e){$('categories').innerHTML='<tr><td colspan="4">Verification failed. No historical results substituted.</td></tr>';$('swing').textContent='Analysis unavailable';$('health').textContent=String(e.message);}
  finally{button.disabled=false;}
 }

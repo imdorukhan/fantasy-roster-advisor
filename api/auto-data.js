@@ -4,7 +4,7 @@ import {loadPlayerStats} from '../yahoo-player-stats.mjs';
 import {dataHealth} from '../decision-core.mjs';
 import {requireSc3Read} from '../sc3-read-access.mjs';
 import {sc3ProductionEnabled} from '../sc3-yahoo-bridge.mjs';
-import {officialMatchupFromScoreboard} from '../yahoo-scoreboard.mjs';
+import {officialMatchupFromScoreboard,currentMatchupIdentityFromScoreboard} from '../yahoo-scoreboard.mjs';
 import {safeMatchupFailure} from '../sc3-matchup-error.mjs';
 import {cookies,configured} from './auth/yahoo/_lib.js';
 import {yahooSessionClient} from './auth/yahoo/_refresh.js';
@@ -346,7 +346,15 @@ async function bridgeHandler(req,res){
   }
   if(req.query?.officialMatchup==='1'){
    try{return response(res,200,{...officialMatchupFromScoreboard(sections.scoreboard,{observedAt:timestamps.scoreboard,teamKey}),bridge:true})}
-   catch(e){return response(res,422,{...common,mode:'YAHOO_OFFICIAL_MATCHUP_UNAVAILABLE',error:e.message})}
+   catch(e){
+    if(e?.message==='Yahoo current-week category totals not published'){
+     try{
+      const verified=currentMatchupIdentityFromScoreboard(sections.scoreboard,{observedAt:timestamps.scoreboard,teamKey});
+      return response(res,422,{...common,...verified,mode:'YAHOO_OFFICIAL_MATCHUP_STATS_PENDING',error:'Yahoo current-week category totals not published'});
+     }catch{ /* Cannot verify current week; do not expose unverified identities. */ }
+    }
+    return response(res,422,{...common,mode:'YAHOO_OFFICIAL_MATCHUP_UNAVAILABLE',error:e.message});
+   }
   }
   if(req.query?.allRosters==='1'||req.query?.freeAgents==='1'||req.query?.playerPool==='1'||req.query?.matchup==='1'||req.query?.sample)return response(res,503,{...common,mode:'UNAVAILABLE',error:'This data is not included in existing Yahoo snapshots; no inferred ownership or live stats'});
   if(req.query?.leagueData==='1')return response(res,200,{...common,mode:'YAHOO_LEAGUE_DATA',observedAt,sections,sectionTimestamps:timestamps,staleSections,dbBacked:true,rosterPlayers:roster,leagueTeams,errors:[]});
