@@ -50,3 +50,36 @@
 6. **Release:** re-test private/anonymous gates, get explicit production approval, verify the rollback deployment and avoid promoting the Preview automatically.
 
 Do not claim the app is fully repaired until the owner-authenticated and scored-week gates pass.
+
+
+## Follow-up repairs and release-quality checks (November 23, 2026)
+
+The original matrix above is a point-in-time baseline. The following later work has been committed on the same isolated branch:
+
+| Commit | Change | Acceptance |
+| --- | --- | --- |
+| `b27e86796106a51134de7f7b9f72b4f11deca249` | Exact verified Yahoo→ESPN identity and NBA-team checks before showing full-depth ranks on any future free-agent row; invalid/stale/colliding ranks fail closed | Three pure regressions, synthetic Chrome position/rank filters, protected Preview `sc3Streaming=1` HTTP 200 |
+| `4743eb2dd4e9dad9a91fbcf26e2fab7fd853a37c` | Injury Radar separates Yahoo roster injury flags and ESPN full-depth IL markers with read-only Refresh; neither source is a verified return-date forecast | Three injury evidence regressions; Chrome refresh flow; live Preview roster reports 4 Yahoo injury flags and 14/15 verified depth identities |
+| `308092ef35ad6a4b26409abc14c2e5586bc99146` | Injury alert core refuses static October roster-name matches unless live Yahoo ownership is explicitly verified | Old behavior reproduced 2 false alerts; corrected regression passes |
+| `d94efb5268ee41c4751fad8bd255decd72f3ff6e` | Keep/Cut last-three ESPN evidence requires fresh complete history with the expected latest day; Yahoo injury/IL flags visible; never makes a drop action | Three pure regressions, synthetic Chrome Keep/Cut and injury navigation, protected Preview READY |
+
+### Consolidated checks
+
+- Node suite: **176 tests, 173 passed, 0 failed, 3 skipped**. Six isolated, authenticated-fixture browser smoke scripts all passed (owner 401 handling, valid/expired official Yahoo matchup, current week with pending 9-CAT, optimizer auth, dashboard auth, roster/FA/waiver/injury/Keep-Cut navigation and refresh).
+- JavaScript syntax check for repository JS/MJS sources completed without reported failures.
+- Preview root, matchup, optimizer, public matchup and new module routes HTTP 200.
+- Anonymous Preview private league-data request returned HTTP 302 to deployment authentication; **do not weaken this protection**.
+- Live Preview Yahoo league roster is 15 players, league all-rosters 14 teams/206 players, waiver pool 538, available free agents 0. Consequently real ESPN depth rank coverage for future free agents is still untested against a nonempty live FA list; synthetic tests have checked it and the database contains verified ID links.
+- Injury source evidence: 4 Yahoo roster flags; for those players the ESPN full-depth source has no IL marker. This **does not mean they are medically cleared**; all return dates remain unknown.
+- Yahoo week 6 (Nov 23–29) is verified, but **all nine official category totals remain unpublished**, so `officialMatchup=1` returns safe HTTP 422 with `scoreVerified=false`. `sc3MatchupLineups=1&projection=1` returns HTTP 200 with 7/7 date coverage and score-dependent projection explicitly blocked.
+- NBA health HTTP 200 fresh and zero missing dates; Production 2.0 deployment ID remains `dpl_83LCXQgJ1R9sGoSciyxKAYG2eL9c` at this check.
+- No paid services or database migrations, no changes to `public` tables, no token/cookie reads or renewal, and no Yahoo fantasy transactions.
+
+### Still not accepted (do not release automatically)
+
+1. Owner-signed-in browser acceptance of the real protected league pages (user must complete Yahoo sign-in interactively); synthetic Chrome tests are not the same.
+2. Publish and verify genuine Yahoo 9-CAT totals and category-winner cross-check before score, calibrated win probability, matchup impact or full projections can activate.
+3. Wait for actual verified nonempty free-agent availability to test real depth ranking and player-stat sorting. Never infer ownership.
+4. Confirm two unresolved Yahoo→ESPN player identities independently; do not guess a mapping.
+5. Injury-return news, prediction confidence/accuracy ledger, trade/punt/playoff forecasts, and alerts are not fully production-ready. Separate verified-source and owner acceptance is required.
+6. Promotion/rollback requires an explicit production release decision.
