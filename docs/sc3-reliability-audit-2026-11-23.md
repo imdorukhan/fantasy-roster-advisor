@@ -49,3 +49,9 @@ This document is evidence for diagnostics; it does not claim every owner-only bu
 - After these UI and API changes, 157 Node tests ran: 154 pass, 0 fail, 3 skip. Isolated page-specific browser tests for Matchup Intelligence, Matchup Optimizer, and dashboard owner-sign-in behavior all pass with no JS exceptions.
 - Two new non-secret branch-scoped Preview environment flags were created: `SC3_SHARED_DB=1` and `SC3_YAHOO_BRIDGE=1` for `feature/sc3-reliability-20261123` only. Production and the existing expanded Preview configurations remain unchanged. The preexisting scoped role checks continue to deny broad or legacy database roles.
 - New protected Preview end-to-end verification is required on a deployment built *after* these flags were added. Production was not promoted or modified.
+
+## Protected feature Preview integration check
+
+- First Preview build after adding branch-only SC3 bridge flags returned HTTP 200 for Yahoo health (five sections), Streaming Optimizer (0 verified free agents, 538 waiver players), League Rosters (14 teams, 206 players); the new Matchup Lineups API correctly returned HTTP 422 `YAHOO_CURRENT_WEEK_UNVERIFIED` instead of a generic HTTP 503. The official current-week Yahoo result remains unverified.
+- That build's NBA health returned HTTP 503 with sanitized code `Invalid ISO date range`, because `SC3_SEASON_START` was not present in this newly isolated Preview branch. A read-only database query confirmed the earliest complete SC3 day is `2026-10-20` and the latest is `2026-11-22`, across 34 days.
+- The non-secret `SC3_SEASON_START=2026-10-20` has now been added exclusively to this Preview branch. A fresh deployment and verification must confirm the health endpoint no longer returns 503.
