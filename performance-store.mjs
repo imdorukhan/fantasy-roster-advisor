@@ -31,5 +31,5 @@ function summarize(dayRows,raw,identities,start,end,days){
  const report=buildPerformance(logs,{asOf,historyComplete:true});
  if(!report.available)throw Error('Performance report unavailable');
  const links=new Map(identities.filter(i=>i.status==='verified'&&i.yahoo_id&&i.espn_id).map(i=>[String(i.yahoo_id),String(i.espn_id)]));
- return {report,links,historyEnd:end};
+ return {report,links,persistedLinks:new Set(identities.filter(i=>i.status==='verified'&&i.persisted!==false&&i.yahoo_id&&i.espn_id).map(i=>String(i.yahoo_id))),historyEnd:end};
 }
