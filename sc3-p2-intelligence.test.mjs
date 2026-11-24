@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {forecastMatchup,availableHistory,injuryDecision} from './sc3-forecast.mjs';
+import {forecastMatchup,availableHistory,injuryDecision,alternativeForecasts} from './sc3-forecast.mjs';
 import {forecastsFromEspn,returnForecast,settleReturn,sourceReliability} from './sc3-return-ledger.mjs';
 import {appendObservedForecasts,readReturnLedger,appendVerifiedSettlements} from './sc3-return-store.mjs';
 import {walkForwardGameTest} from './sc3-walk-forward.mjs';
@@ -86,4 +86,25 @@ test('multiple daily injury reports settling on one return event contribute only
  const later=settleReturn(revised,[actual],days,cutoff);
  const r=sourceReliability([f,revised],[s,later],{asOf:new Date(cutoff)})[0];
  assert.equal(r.recorded,2);assert.equal(r.settledReports,2);assert.equal(r.settled,1);assert.equal(r.maeDays,1);
+});
+
+test('all seven alternatives use the same fixed inputs, history chronology and common seed',()=>{
+ const extended=Array.from({length:16},(_,i)=>({yahoo_id:'10',espn_id:'10',event_id:String(i+100),tipoff:'2026-11-'+String(i+1).padStart(2,'0')+'T02:00Z',observed_at:'2026-11-'+String(i+1).padStart(2,'0')+'T10:00Z',stats:{...stats,PTS:i}}));
+ const suite=alternativeForecasts({...args,logs:[...extended,...logs],simulations:100});
+ assert.equal(suite.alternatives.length,7);assert.equal(suite.primary.model,'L10');
+ assert.equal(new Set(suite.alternatives.map(x=>x.inputsDigest)).size,7);
+ assert.ok(suite.alternatives.every(x=>x.available&&x.coverage.starterGames===2&&x.conditional&&!x.calibrated));
+ assert.notDeepEqual(suite.alternatives.find(x=>x.model==='L3').scenarios,suite.alternatives.find(x=>x.model==='SEASON').scenarios);
+ assert.deepEqual(suite,alternativeForecasts({...args,logs:[...extended,...logs],simulations:100}));
+});
+test('official game status overrides ESPN only for exact player, normalized team and date',()=>{
+ const injuryFeed={observedAt:asOf,rows:new Map([['10',{name:'A',nbaTeam:'SAC',status:'Out',reportedReturnDate:'2026-11-27',reportAt:'2026-11-24T18:00Z'}]])};
+ const row={espnId:'10',name:'A',nbaTeam:'SAC',gameDate:'2026-11-25',status:'Available',publishedAt:'2026-11-24T19:00Z',observedAt:asOf};
+ const nba={source:'NBA_OFFICIAL',publishedAt:row.publishedAt,observedAt:asOf,rows:[row]};
+ const input={...args,injuryFeed,identityPairs:[{yahoo_id:'10',espn_id:'10'}]};
+ let x=forecastMatchup({...input,officialInjuries:nba});assert.equal(x.coverage.officialMatchedStarts,1);assert.equal(x.coverage.excludedStarts,0);
+ for(const change of [{gameDate:'2026-11-26'},{nbaTeam:'LAL'},{name:'Wrong'}]){
+  x=forecastMatchup({...input,officialInjuries:{...nba,rows:[{...row,...change}]}});assert.equal(x.coverage.officialMatchedStarts,0);assert.equal(x.coverage.excludedStarts,1);
+ }
+ x=forecastMatchup({...input,officialInjuries:{...nba,observedAt:'2026-11-25T00:00Z'}});assert.equal(x.coverage.officialInjuryVerified,false);assert.equal(x.coverage.excludedStarts,1);
 });
