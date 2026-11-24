@@ -54,7 +54,11 @@ test('P2 ledger uses real disposable PostgreSQL; server timestamps and append-on
   await assert.rejects(tx(writer)(c=>c.query("insert into sc3.p2_return_settlements(forecast_id,event_id,actual_date,actual_tipoff,evidence_observed_at) values($1,'999',$2,$3,$3)",[forecast.id,day,evidence])),/does not match/);
   const settled=await appendVerifiedSettlements({writerTransaction:tx(writer)});
   assert.equal(settled.inserted,1);
-  const final=await readReturnLedger({transaction:tx(reader),now:new Date()});
+  // PostgreSQL captures microseconds, whereas JavaScript Date truncates to ms.
+  // Choose an actual DB observation after commit, not a future synthetic cutoff.
+  await c.query('select pg_sleep(0.01)');
+  const readAt=(await c.query('select clock_timestamp() as now')).rows[0].now;
+  const final=await readReturnLedger({transaction:tx(reader),now:readAt});
   assert.equal(final.settled,1);assert.equal(final.sources[0].maeDays,0);assert.equal(final.sources[0].reliability,null);
   await assert.rejects(tx(writer)(c=>c.query('delete from sc3.p2_return_settlements')),/permission denied/);
   await assert.rejects(c.query('delete from '+schema+'.p2_return_settlements'),/append-only/);
