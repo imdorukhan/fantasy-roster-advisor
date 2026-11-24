@@ -79,3 +79,11 @@ test('walk-forward never trains on rows not observed before target tipoff, and e
  r=walkForwardGameTest(rows,{asOf});assert.equal(r.scored,1);assert.equal(r.skipped,4);
  assert.equal(walkForwardGameTest(rows,{asOf:'2026-11-04T05:00:00Z'}).scored,0);
 });
+
+test('multiple daily injury reports settling on one return event contribute only one source score sample',()=>{
+ const s=settleReturn(f,[actual],days,cutoff);
+ const revised=returnForecast({...source,reportAt:'2026-11-25T17:00:00Z',feedObservedAt:'2026-11-25T19:00:00Z',estimatedDate:'2026-11-27'},'2026-11-25T20:00:00Z');
+ const later=settleReturn(revised,[actual],days,cutoff);
+ const r=sourceReliability([f,revised],[s,later],{asOf:new Date(cutoff)})[0];
+ assert.equal(r.recorded,2);assert.equal(r.settledReports,2);assert.equal(r.settled,1);assert.equal(r.maeDays,1);
+});
