@@ -41,8 +41,10 @@ export async function readGameBacktest({now=new Date(),transaction=withScopedTra
  const rows=await transaction(async c=>(await c.query(`select l.event_id,l.espn_id,l.tipoff::text,l.observed_at::text,l.stats
  from sc3.sc3_nba_game_logs l join sc3.sc3_nba_sync_days d using(game_day)
  where d.status='complete' and l.observed_at<=$1::timestamptz and d.observed_at<=$1::timestamptz
- and l.game_day >= (($1::timestamptz at time zone 'America/New_York')::date-45)
+ and l.game_day >= make_date(extract(year from ($1::timestamptz at time zone 'America/New_York'))::int - case when extract(month from ($1::timestamptz at time zone 'America/New_York'))<10 then 1 else 0 end,10,1)
  order by l.espn_id,l.tipoff`,[now])).rows);
  const {compareModels}=await import('./sc3-model-comparison.mjs');
- return {...walkForwardGameTest(rows,{asOf:now.toISOString()}),comparison:compareModels(rows,{asOf:now.toISOString()})};
+ const calendarComparison=compareModels(rows,{asOf:now.toISOString()});
+ const comparison=calendarComparison.available?calendarComparison:{...compareModels(rows,{asOf:now.toISOString(),split:'observation-coverage'}),exploratory:true,originalCalendar:{validationStart:calendarComparison.validationStart,testStart:calendarComparison.testStart,counts:calendarComparison.counts},note:'Calendar validation empty/inadequate; split based on observed-at eligibility only. Retrospective exploratory comparison, not prospective model approval.'};
+ return {...walkForwardGameTest(rows,{asOf:now.toISOString()}),comparison};
 }
