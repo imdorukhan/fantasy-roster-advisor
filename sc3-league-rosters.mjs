@@ -18,5 +18,18 @@ export async function readLeagueRosters(){
  let acquisitions=null;
  try{acquisitions=yahooWindow(sections,new Date()).acquisitions;}catch{}
  const team=d.teams.find(team=>team.key==='478.l.85892.t.5');
- return {...d,observedAt:row.observed_at,acquisitions,ilCount:team.players.filter(p=>/^(IL|IR)/.test(p.slot)).length};
+ const {readPerformance}=await import('./performance-store.mjs');
+ let coverage=null,byId=new Map();
+ try{
+  const perf=await readPerformance({scoped:true,start:process.env.SC3_SEASON_START});
+  const {profileCoverage}=await import('./sc3-roster-identity.mjs');
+  const byEspn=new Map(perf.report.players.map(p=>[String(p.id),p]));
+  const links=[...perf.links].map(([yahoo_id,espn_id])=>({yahoo_id,espn_id,persisted:perf.persistedLinks?.has(yahoo_id)??null}));
+  const counts=new Map(perf.report.players.map(p=>[String(p.id),p.season?.games??0]));
+  const info=profileCoverage(players,links,counts);
+  byId=new Map(info.map(p=>[p.yahooId,{...p,analytics:byEspn.get(p.espnId)??null}]));
+  coverage={total:players.length,linked:info.filter(p=>p.espnId).length,withGames:info.filter(p=>p.games>0).length,threeGames:info.filter(p=>p.games>=3).length,persisted:info.filter(p=>p.persisted===true).length,historyThrough:perf.historyEnd,fresh:perf.fresh};
+ }catch{}
+ const teams=d.teams.map(t=>({...t,players:t.players.map(p=>({...p,profileCoverage:byId.get(p.yahooId)??null}))}));
+ return {...d,teams,profileCoverage:coverage,observedAt:row.observed_at,acquisitions,ilCount:team.players.filter(p=>/^(IL|IR)/.test(p.slot)).length};
 }
