@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {rosterIdentityFallback,profileCoverage,readRosterIdentityInputs} from './sc3-roster-identity.mjs';
-import {compareOwnership,recheckOwnership} from './sc3-ownership-check.mjs';
+import {compareOwnership,recheckOwnership,stableLiveOwnership} from './sc3-ownership-check.mjs';
 import {parseEspnInjuryFeed,attachInjuryReports} from './sc3-injury-feed.mjs';
 import {buildInjuryEvidence} from './sc3-injury-evidence.mjs';
 import {planWaiverIdentityChecks,waiverImpactCoverage} from './sc3-waiver-impact.mjs';
@@ -66,4 +66,25 @@ test('waiver coverage prioritizes exact sample-backed candidates and accounts fo
  assert.deepEqual(p.checked.map(r=>r.yahooId),['2']);assert.equal(p.reasons.get('1'),'VERIFICATION_BUDGET');assert.equal(p.reasons.get('3'),'CATALOG_SAMPLE_LT_3');assert.equal(p.reasons.get('4'),'NO_CATALOG_MATCH');
  const summary=waiverImpactCoverage(c,[{yahooId:'5',impact:{}}],known,[],p);
  assert.equal(summary.reasons.READY,1);assert.equal(summary.reasons.IDENTITY_UNVERIFIED,1);assert.equal(Object.values(summary.reasons).reduce((a,b)=>a+b,0),5);
+});
+
+test('changed ownership requires two matching complete live passes; unstable lists never replace snapshot',async()=>{
+ const snapshot={freeAgents:{count:0,players:[]},waivers:{count:1,players:[w]}};
+ const updated={...w,yahooRosterStatus:'W (Nov 25)'};
+ const run=async(rows)=>{
+  let pass=0;
+  const collector=async(filter,onPage)=>{
+   const players=filter==='FA'?[]:rows[pass++];
+   onPage({players});return {count:players.length,pageCount:1,complete:true,observedAt:stamp};
+  };
+  const result=await stableLiveOwnership(snapshot,{collector});return {result,pass};
+ };
+ const same=await run([[w]]);
+ assert.equal(same.pass,1);assert.equal(same.result.status,'MATCH');
+ const stable=await run([[updated],[updated]]);
+ assert.equal(stable.pass,2);assert.equal(stable.result.status,'LIVE_VERIFIED');
+ assert.equal(stable.result.live.waivers.players[0].yahooRosterStatus,'W (Nov 25)');
+ assert.equal(snapshot.waivers.players[0].yahooRosterStatus,'W (Nov 24)');
+ const unstable=await run([[updated],[w]]);
+ assert.equal(unstable.result.status,'UNSTABLE');assert.equal(unstable.result.live,null);
 });
