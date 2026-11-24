@@ -1,9 +1,10 @@
 import {buildPerformance} from './player-performance.mjs';
 import {dateRange,coverage} from './nba-sync.mjs';
 import {readScopedRows} from './sc3-postgres.mjs';
+import {resolveRosterBirthFallback} from './sc3-roster-identity.mjs';
 // Read only from an explicitly isolated Supabase project. Never use production env.
 export async function readPerformance({url,secret,expectedRef,start,end,fetcher=fetch,scoped=false,pool}={}){
- if(scoped){const data=await readScopedRows({start,pool});const startDay=data.start;const expected=dateRange(startDay,data.end);const complete=new Set(data.days.filter(d=>d.status==='complete').map(d=>d.game_day));const missing=expected.filter(d=>!complete.has(d));const first=expected.findIndex(d=>!complete.has(d));if(first===0)throw Error('Incomplete NBA history');const contiguous=first<0?expected:expected.slice(0,first);const actualEnd=contiguous.at(-1);const result=summarize(data.days.filter(d=>d.game_day<=actualEnd),data.raw.filter(d=>d.game_day<=actualEnd),data.identities,startDay,actualEnd,contiguous);return {...result,historyStart:startDay,expectedEnd:data.end,missingDays:missing,fresh:missing.length===0};}
+ if(scoped){const data=await readScopedRows({start,pool});const startDay=data.start;const expected=dateRange(startDay,data.end);const complete=new Set(data.days.filter(d=>d.status==='complete').map(d=>d.game_day));const missing=expected.filter(d=>!complete.has(d));const first=expected.findIndex(d=>!complete.has(d));if(first===0)throw Error('Incomplete NBA history');const contiguous=first<0?expected:expected.slice(0,first);const actualEnd=contiguous.at(-1);const birthLinks=await resolveRosterBirthFallback(data.rosterIdentityCandidates??[],data.identities,data.identityCatalog??[],fetcher);const result=summarize(data.days.filter(d=>d.game_day<=actualEnd),data.raw.filter(d=>d.game_day<=actualEnd),[...data.identities,...birthLinks],startDay,actualEnd,contiguous);return {...result,historyStart:startDay,expectedEnd:data.end,missingDays:missing,fresh:missing.length===0};}
  const days=dateRange(start,end);
  const u=new URL(url);
  if(!expectedRef||expectedRef==='bmsfbcuausbfzheufjtc'||u.hostname!==expectedRef+'.supabase.co'||u.protocol!=='https:'||u.pathname!=='/'||u.search||u.hash||!secret)throw Error('Isolated performance database not configured');
@@ -31,5 +32,5 @@ function summarize(dayRows,raw,identities,start,end,days){
  const report=buildPerformance(logs,{asOf,historyComplete:true});
  if(!report.available)throw Error('Performance report unavailable');
  const links=new Map(identities.filter(i=>i.status==='verified'&&i.yahoo_id&&i.espn_id).map(i=>[String(i.yahoo_id),String(i.espn_id)]));
- return {report,links,historyEnd:end};
+ return {report,links,persistedLinks:new Set(identities.filter(i=>i.status==='verified'&&i.persisted!==false&&i.yahoo_id&&i.espn_id).map(i=>String(i.yahoo_id))),historyEnd:end};
 }

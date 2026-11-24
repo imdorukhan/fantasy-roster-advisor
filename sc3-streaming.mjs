@@ -1,6 +1,7 @@
 import {withScopedTransaction} from './sc3-postgres.mjs';
 import {buildStreamingPlan} from './sc3-streaming-plan.mjs';
 import {attachVerifiedDepth} from './sc3-verified-depth.mjs';
+import {stableLiveOwnership} from './sc3-ownership-check.mjs';
 
 const leagueId = 85892;
 const maxAgeMs = 30 * 60 * 60 * 1000;
@@ -47,7 +48,10 @@ export async function readStreamingAvailability({includeWaiverImpact=false}={}) 
        (section in ('settings', 'roster', 'scoreboard') and source = 'Yahoo Fantasy Sports API')
      )`, [leagueId]
   )).rows);
-  const verified=streamingAvailability(rows);
+  const stored=streamingAvailability(rows);
+  const check=await stableLiveOwnership(stored).catch(()=>({status:'UNAVAILABLE',readOnly:true}));
+  const {live,...ownershipCheck}=check;
+  const verified=check.status==='MATCH'||check.status==='LIVE_VERIFIED'?{...stored,...live}:stored;
   let depthRows=[], depthQueryAvailable=true;
   if(verified.freeAgents.count>0){
     try{
@@ -66,5 +70,7 @@ export async function readStreamingAvailability({includeWaiverImpact=false}={}) 
   const ranked=attachVerifiedDepth(verified,depthRows);
   const result={...ranked,depthCoverage:{...ranked.depthCoverage,queryAvailable:depthQueryAvailable}};
   const yahooRows=Object.fromEntries(rows.map(row=>[row.section,row]));
-  return {...result,plan:await buildStreamingPlan(result,yahooRows,{includeWaiverImpact})};
+  const plan=['MATCH','LIVE_VERIFIED'].includes(ownershipCheck.status)?await buildStreamingPlan(result,yahooRows,{includeWaiverImpact,ownershipCheck}):
+    {available:false,reason:ownershipCheck.status==='UNSTABLE'?'Yahoo ownership changed during consecutive complete observations':'Live Yahoo ownership verification unavailable',waiverPlan:null};
+  return {...result,ownershipCheck,storedOwnership:{freeAgents:{count:stored.freeAgents.count,observedAt:stored.freeAgents.observedAt},waivers:{count:stored.waivers.count,observedAt:stored.waivers.observedAt}},plan};
 }

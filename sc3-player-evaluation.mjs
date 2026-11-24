@@ -6,6 +6,9 @@ import {verifyMissingYahooPlayers} from './sc3-projection-sources.mjs';
 import {resolveVerifiedIdentity} from './sc3-identity-provenance.mjs';
 import {buildStreamingPlan} from './sc3-streaming-plan.mjs';
 import {readMatchupLineups} from './sc3-matchup-lineups.mjs';
+import {readRosterIdentityInputs,rosterIdentityFallback} from './sc3-roster-identity.mjs';
+import {resolveProfileOwnership,observeProfileOwnership,excludeAvailableFromRoster} from './sc3-profile-ownership.mjs';
+import {missingHistoryCatalog,recoverHistoryCatalog,readDepthAliases,canonicalizeDepthAliases} from './sc3-catalog-recovery.mjs';
 
 const counting=NINE_CAT.filter(cat=>!cat.includes('%'));
 const shotKeys=['FGM','FGA','FTM','FTA'];
@@ -89,22 +92,6 @@ async function readSeasonSchedule(player,settings,now,fetcher){
  return {yahooEnd,scheduledGames:dates.length,dates,source:'ESPN NBA schedule'};
 }
 
-function resolvePlayer(rows,id,now){
- const found=[];
- const rosters=rows.all_rosters;
- if(fresh(rosters,now)&&rosters.payload?.complete===true){
-  for(const team of rosters.payload.teams??[]){
-   for(const player of team.players??[])if(player.yahooId===id)found.push({player,teamKey:team.key,fantasyTeam:team.name,ownership:'ROSTERED',observedAt:rosters.observed_at});
-  }
- }
- for(const [section,ownership] of [['free_agents','FREE_AGENT'],['waivers','WAIVERS']]){
-  const row=rows[section];
-  if(!fresh(row,now)||row.payload?.complete!==true||row.payload?.individualOwnershipVerified!==true)continue;
-  for(const player of row.payload.players??[])if(player.yahooId===id)found.push({player,ownership,observedAt:row.observed_at});
- }
- return found.length===1?found[0]:null;
-}
-
 async function readPlayerHistory(espnId,start){
  return espnId?await withScopedTransaction(async c=>{
   const latest=(await c.query("select max(game_day)::text as latest from sc3.sc3_nba_sync_days where status='complete' and game_day<$1::date",[start])).rows[0]?.latest;
@@ -120,30 +107,39 @@ async function readPlayerHistory(espnId,start){
 }
 export async function readPlayerEvaluation(id,{now=new Date(),fetcher=fetch,dropId=null}={}){
  const start=leagueToday(now);
- const {rows,identity,catalog}=await withScopedTransaction(async client=>{
-  const query=await client.query("select section,payload,observed_at::text from sc3.yahoo_league_snapshots where league_id=85892 and section in ('all_rosters','free_agents','waivers','settings','scoreboard','roster')");
+ const {rows,identity,catalog,rosterLinks,missingSeeds,occupied,depthAliases}=await withScopedTransaction(async client=>{
+  const query=await client.query("select section,payload,observed_at::text from sc3.yahoo_league_snapshots where league_id=85892 and ((section in ('all_rosters','settings','scoreboard','roster') and source='Yahoo Fantasy Sports API') or (section in ('free_agents','waivers') and source='Yahoo Fantasy Basketball league player list'))");
   const rows=Object.fromEntries(query.rows.map(row=>[row.section,row]));
-  const found=resolvePlayer(rows,id,now);
-  if(!found)return {rows,identity:null,catalog:[]};
   const identity=(await client.query("select espn_id from sc3.sc3_player_identity where status='verified' and yahoo_id=$1",[id])).rows[0]?.espn_id??null;
-  const catalog=identity?[]:(await client.query(`
+  const known=(await client.query("select yahoo_id,espn_id,status from sc3.sc3_player_identity where status='verified'")).rows;
+  const inputs=await readRosterIdentityInputs(client,now.getTime());
+  const rosterLinks=rosterIdentityFallback(inputs.players,known,inputs.catalog);
+  const occupied=new Set([...known,...rosterLinks].filter(r=>r.yahoo_id!==id).map(r=>String(r.espn_id)));
+  const catalog=identity||rosterLinks.some(r=>r.yahoo_id===id)?[]:(await client.query(`
    select e.espn_id as "espnId",e.name,e.nba_team as team,e.birth_date::text as "birthDate"
-   from sc3.espn_player_identity e where e.birth_date is not null and not exists
-    (select 1 from sc3.sc3_player_identity i where i.espn_id=e.espn_id and i.status='verified')
+   from sc3.espn_player_identity e where e.birth_date is not null
   `)).rows;
-  return {rows,identity,catalog};
+  const missingSeeds=identity||rosterLinks.some(r=>r.yahoo_id===id)?[]:await missingHistoryCatalog(client,start);
+  const depthAliases=identity||rosterLinks.some(r=>r.yahoo_id===id)?[]:await readDepthAliases(client);
+  return {rows,identity,catalog,rosterLinks,missingSeeds,occupied,depthAliases};
  });
- const found=resolvePlayer(rows,id,now);
+ const observation=await observeProfileOwnership(rows,{now,fetcher});
+ const found=resolveProfileOwnership(rows,id,observation,now);
  if(!found)return null;
- const {player,ownership,teamKey,fantasyTeam,observedAt}=found;
- const matches=identity?[]:await verifyMissingYahooPlayers([player],catalog,fetcher);
- const identityVerification=resolveVerifiedIdentity(id,identity,matches);
+ const {player,ownership,teamKey,fantasyTeam,observedAt,ownershipSource,ownershipCheck}=found;
+ const rosterMatch=rosterLinks.find(r=>r.yahoo_id===id);
+ const recovery=identity||rosterMatch?{profiles:[]}:await recoverHistoryCatalog([player],missingSeeds,fetcher);
+ const expanded=[...catalog,...recovery.profiles];
+ const canonical=canonicalizeDepthAliases([player],expanded,depthAliases,now)[0];
+ const matches=identity||rosterMatch?[]:(await verifyMissingYahooPlayers([canonical],expanded,fetcher)).filter(p=>!occupied.has(String(p.espnId))&&(!canonical.depthAliasEspnId||canonical.depthAliasEspnId===String(p.espnId)));
+ const identityVerification=rosterMatch&&!identity?{espnId:rosterMatch.espn_id,source:'YAHOO_ROSTER_AND_ESPN_CATALOG',persisted:false,readOnly:true,evidence:rosterMatch.evidence}:resolveVerifiedIdentity(id,identity,matches);
+ if(canonical.depthAlias&&identityVerification.espnId)identityVerification.evidence+=' + matching fresh ESPN depth alias';
  const espnId=identityVerification.espnId;
  const history=await readPlayerHistory(espnId,start);
  const analytics=history?.games.length?buildPerformance(history.games,{asOf:now.toISOString(),historyComplete:true}).players?.[0]:null;
  if(analytics)delete analytics.z; // A single player's history cannot produce a league rank.
  const own=teamKey==='478.l.85892.t.5';
- const roster=fresh(rows.all_rosters,now)?rows.all_rosters.payload?.teams?.find(t=>t.key==='478.l.85892.t.5')?.players??[]:[];
+ const roster=excludeAvailableFromRoster(fresh(rows.all_rosters,now)?rows.all_rosters.payload?.teams?.find(t=>t.key==='478.l.85892.t.5')?.players??[]:[],observation);
  const dropOptions=roster.map(p=>({id:p.yahooId,name:p.name,slot:p.slot})).sort((a,b)=>a.name.localeCompare(b.name));
  const dropPlayer=dropId?roster.find(p=>p.yahooId===dropId):null;
  if(dropId&&!dropPlayer)return {invalidDrop:true};
@@ -151,7 +147,7 @@ export async function readPlayerEvaluation(id,{now=new Date(),fetcher=fetch,drop
    select position,rank,nba_team,injury_marker,observed_at::text from sc3.nba_depth_chart
    where espn_id=$1 order by position,rank
  `,[espnId])).rows).catch(()=>[]):[];
- const profile={...player,ownership,fantasyTeam:fantasyTeam??null,own,observedAt,espnId:espnId??null,identityVerification,depth,analytics,historyThrough:history?.latest??null};
+ const profile={...player,ownership,fantasyTeam:fantasyTeam??null,own,observedAt,ownershipSource,ownershipCheck,espnId:espnId??null,identityVerification,depth,analytics,historyThrough:history?.latest??null,historyStatus:!espnId?'IDENTITY_UNRESOLVED':!history?'HISTORY_UNAVAILABLE':history.games.length===0?'NO_REGULAR_SEASON_SAMPLE':history.games.length<3?'INSUFFICIENT_SAMPLE':'READY'};
  const season=await readSeasonSchedule(player,rows.settings,now,fetcher).catch(()=>null);
  const seasonImpact=season&&analytics?.season?.complete&&analytics.season.games>=3
   ? {...season,sampleGames:analytics.season.games,production:projectedProduction(analytics.season.values,season.scheduledGames)}
@@ -189,7 +185,7 @@ export async function readPlayerEvaluation(id,{now=new Date(),fetcher=fetch,drop
   comparison={drop:{id:dropPlayer.yahooId,name:dropPlayer.name},effectiveOn,dropOnly:own,
    week:null,season:null,reason:'Weekly comparison requires verified upcoming lineup slots and both players’ recent history.'};
   if(effectiveOn){
-   const dropEspn=await withScopedTransaction(async client=>(await client.query(
+   const dropEspn=rosterLinks.find(r=>r.yahoo_id===dropId)?.espn_id??await withScopedTransaction(async client=>(await client.query(
     "select espn_id from sc3.sc3_player_identity where status='verified' and yahoo_id=$1",[dropId]
    )).rows[0]?.espn_id);
    const dropHistory=await readPlayerHistory(dropEspn,start);

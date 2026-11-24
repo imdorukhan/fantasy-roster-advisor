@@ -1,6 +1,6 @@
 // A depth ranking is usable only through an explicitly verified Yahoo-to-ESPN ID link.
 // Never infer an identity from similar names or a team abbreviation alone.
-const canonicalTeam = value => ({GSW:'GS',NOP:'NO',NYK:'NY',SAS:'SA',WAS:'WSH',BRK:'BKN',PHO:'PHX'}[String(value||'').toUpperCase()]||String(value||'').toUpperCase());
+const canonicalTeam = value => ({GSW:'GS',NOP:'NO',NYK:'NY',SAS:'SA',WAS:'WSH',BRK:'BKN',PHO:'PHX',UTAH:'UTA'}[String(value||'').toUpperCase()]||String(value||'').toUpperCase());
 const positions = new Set(['PG','SG','SF','PF','C']);
 const maxDepthAgeMs = 26*3600000;
 export function attachVerifiedDepth(snapshot, rows, now=Date.now()){
