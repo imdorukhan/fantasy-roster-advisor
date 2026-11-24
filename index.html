@@ -94,8 +94,11 @@ function renderWaiverPlan(plan){
   '<p class="small">9-CAT coverage '+esc(plan.impactCoverage)+'/'+esc(plan.impactChecked)+' eligible candidates in the full waiver pool · '+esc(plan.displayImpactCoverage)+' displayed with 9-CAT impact · ESPN through '+esc(plan.historyThrough)+' · Yahoo observed '+esc(new Date(plan.impactObservedAt).toLocaleString())+'.</p>':'';
  const diagnostics=plan.impactDiagnostics?.reasons;
  const diagnosticText=diagnostics?'<p class="small">'+Object.entries(diagnostics).map(([k,v])=>esc(k.toLowerCase().replaceAll('_',' '))+': '+esc(v)).join(' · ')+'</p>':'';
+ const missing=plan.impactDiagnostics?.unresolved||[];
+ const missingDetails=missing.length?'<details><summary>'+esc(missing.length)+' candidates without verified category impact</summary><div class="table-wrap"><table><thead><tr><th>Player</th><th>NBA team</th><th>Reason</th></tr></thead><tbody>'+missing.map(p=>'<tr><td>'+playerLink(p)+'</td><td>'+esc(p.nbaTeam)+'</td><td>'+esc(p.reason.replaceAll('_',' '))+'</td></tr>').join('')+'</tbody></table></div></details>':'';
+
  panel.innerHTML='<p>'+esc(plan.evaluated)+' of '+esc(plan.totalWaivers)+' waiver players evaluated · '+esc(plan.rankable)+' with verified dates · Top '+esc(plan.rows.length)+' shown · '+esc(plan.remainingAdds)+' weekly adds remaining.</p>'+
- '<p class="small">Extra starts rank first. Among candidates with the same start count, projected contribution to trailing or tied categories decides the order. Turnovers count against you. Each candidate is evaluated individually after the listed waiver date.</p>'+impact+diagnosticText+
+ '<p class="small">Extra starts rank first. Among candidates with the same start count, projected contribution to trailing or tied categories decides the order. Turnovers count against you. Each candidate is evaluated individually after the listed waiver date.</p>'+impact+diagnosticText+missingDetails+
  (table?'<div class="table-wrap"><table><thead><tr><th>Player</th><th>Yahoo status</th><th>Extra starts</th><th>Eligible game dates</th><th>9-CAT matchup impact</th></tr></thead><tbody>'+table+'</tbody></table></div>':'');
 }
 function renderFreeAgents(){
@@ -124,7 +127,7 @@ function renderFreeAgents(){
   status.append(waivers.count+' waiver players · '+new Date(freeAgents.observedAt).toLocaleString()+'.');
   const check=streamingSnapshot.ownershipCheck;
   if(check?.status==='MATCH')status.append(' Live Yahoo recheck verified '+check.freeAgents.count+' FA / '+check.waivers.count+' waivers · '+new Date(check.waivers.observedAt).toLocaleString()+'.');
-  else if(check?.status==='LIVE_VERIFIED')status.append(' Current Yahoo lists verified by two complete observations; stored snapshot had '+check.waivers.snapshotCount+' waivers. No snapshot write. Player detail ownership may reflect the last saved snapshot.');
+  else if(check?.status==='LIVE_VERIFIED')status.append(' Current Yahoo lists verified by two complete observations; stored snapshot had '+check.waivers.snapshotCount+' waivers. No snapshot write. Player details independently recheck live Yahoo ownership.');
   else if(check?.status==='UNSTABLE')status.append(' Consecutive live Yahoo observations disagree; rankings paused.');
   else status.append(' Live ownership recheck unavailable; stored counts are historical observations.');
   if(rankLimit&&shown.length===0)status.append(' No players with a verified ESPN depth rank match the selected limit.');
