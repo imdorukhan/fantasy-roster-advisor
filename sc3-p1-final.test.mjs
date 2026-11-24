@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {resolveProfileOwnership,excludeAvailableFromRoster,observeProfileOwnership} from './sc3-profile-ownership.mjs';
-import {parseEspnCatalogProfile,recoverHistoryCatalog} from './sc3-catalog-recovery.mjs';
+import {parseEspnCatalogProfile,recoverHistoryCatalog,canonicalizeDepthAliases} from './sc3-catalog-recovery.mjs';
 import {resolveRosterBirthFallback} from './sc3-roster-identity.mjs';
 import {planWaiverIdentityChecks,waiverImpactCoverage} from './sc3-waiver-impact.mjs';
 const stamp='2026-11-24T12:00:00Z',now=new Date('2026-11-24T12:30:00Z');
@@ -58,4 +58,20 @@ test('jersey mismatch requires matching independent DOB and does not overwrite e
  const matches=await resolveRosterBirthFallback([player],[],catalog,yahoo);
  assert.equal(matches.length,1);assert.equal(matches[0].espn_id,'4432241');assert.equal(matches[0].persisted,false);
  assert.equal((await resolveRosterBirthFallback([player],[{yahoo_id:'88',espn_id:'4432241'}],catalog,yahoo)).length,0);
+});
+
+test('ESPN depth alias must have exact ID, team, fresh source and subsequent independent Yahoo DOB',async()=>{
+ const alias={yahooId:'5159',name:'K. Caldwell-Pope',nbaTeam:'PHI',extraStarts:2};
+ const catalog=[{espnId:'2581018',name:'Kentavious Caldwell-Pope',team:'PHI',birthDate:'1993-02-18',games:18}];
+ const d={espn_id:'2581018',player_name:alias.name,nba_team:'PHI',source:'https://www.espn.com/nba/depth/_/type/full',observed_at:stamp};
+ const canonical=canonicalizeDepthAliases([alias],catalog,[d],now)[0];
+ assert.equal(canonical.name,'Kentavious Caldwell-Pope');assert.equal(canonical.depthAliasEspnId,'2581018');
+ assert.equal(canonicalizeDepthAliases([alias],catalog,[{...d,observed_at:'2026-11-20T00:00:00Z'}],now)[0].name,alias.name);
+ assert.equal(canonicalizeDepthAliases([alias],catalog,[{...d,nba_team:'LAL'}],now)[0].name,alias.name);
+ const check=planWaiverIdentityChecks([canonical],[],catalog);assert.equal(check.checked.length,1);
+ const yahoo=async()=>({ok:true,text:async()=>'<title>Kentavious Caldwell-Pope (SG) Stats</title> '+String.raw`\"birthDate\":\"1993-02-18\"`});
+ const matches=await resolveRosterBirthFallback([canonical],[],catalog,yahoo);
+ assert.equal(matches[0].espn_id,'2581018');
+ const wrong=async()=>({ok:true,text:async()=>'<title>Kentavious Caldwell-Pope (SG) Stats</title> '+String.raw`\"birthDate\":\"1993-02-19\"`});
+ assert.equal((await resolveRosterBirthFallback([canonical],[],catalog,wrong)).length,0);
 });
