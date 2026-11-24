@@ -32,7 +32,7 @@ export async function appendMatchupSettlements({writerTransaction,readFinal}={})
  if(typeof writerTransaction!=='function'||typeof readFinal!=='function')throw Error('Dedicated writer and verified final reader required');
  return writerTransaction(async c=>{
   const now=(await c.query('select clock_timestamp() now')).rows[0].now;
-  const rows=(await c.query('select f.payload from sc3.p2_matchup_forecasts f where not exists(select 1 from sc3.p2_matchup_settlements s where s.forecast_id=f.id) and f.week_end < (clock_timestamp() at time zone \'America/Los_Angeles\')::date order by f.forecast_as_of limit 250')).rows;
+  const rows=(await c.query('select f.payload from sc3.p2_matchup_forecasts f where not exists(select 1 from sc3.p2_matchup_settlements s where s.forecast_id=f.id) and f.week_end < (clock_timestamp() at time zone \'America/Los_Angeles\')::date and exists(select 1 from sc3.p2_yahoo_final_observations a where a.league_id=f.league_id and a.week=f.week and a.opponent_id=f.opponent_id and a.week_start=f.week_start and a.week_end=f.week_end and a.observed_at>f.forecast_as_of) order by f.forecast_as_of limit 250')).rows;
   let inserted=0;for(const {payload} of rows){
    const official=await readFinal(c,payload,now);const outcome=settleMatchup(payload,official,new Date(now).toISOString());if(!outcome)continue;
    const r=await c.query('insert into sc3.p2_matchup_settlements(forecast_id,final_observed_at,outcome) values($1,$2,$3::jsonb) on conflict do nothing returning forecast_id',[payload.id,outcome.observedAt,JSON.stringify(outcome)]);inserted+=r.rowCount;
