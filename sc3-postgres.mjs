@@ -63,7 +63,11 @@ export async function readScopedRows({start,end,pool}){
  const days=(await c.query('select game_day::text,status,player_rows,completed_events from sc3.sc3_nba_sync_days where game_day between $1::date and $2::date order by game_day',[resolvedStart,end])).rows;
  const raw=(await c.query('select event_id,espn_id,game_day::text,tipoff::text,player_name,nba_team,stats from sc3.sc3_nba_game_logs where game_day between $1::date and $2::date order by event_id,espn_id',[resolvedStart,end])).rows;
  const identities=(await c.query("select yahoo_id,espn_id,status,evidence from sc3.sc3_player_identity where status='verified' order by yahoo_id")).rows;
- return {days,raw,identities,end,start:resolvedStart};
+ // Additional identities remain transient and are never written by read paths.
+ const {readRosterIdentityInputs,rosterIdentityFallback}=await import('./sc3-roster-identity.mjs');
+ const {players,catalog}=await readRosterIdentityInputs(c);
+ const fallback=rosterIdentityFallback(players,identities,catalog);
+ return {days,raw,identities:[...identities,...fallback],end,start:resolvedStart};
  },{pool});
 }
 export function scopedSyncStore({pool}={}){
