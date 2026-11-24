@@ -54,11 +54,13 @@ export async function archiveFinalMatchups(targets,{writerTransaction,readWeek,n
  const unique=new Map();
  for(const f of targets??[]){
   if(f.leagueId!==85892||!Number.isInteger(f.week)||f.week<1||f.week>30||!Number.isInteger(f.opponentId)||f.opponentId<1||f.opponentId>14||f.opponentId===5||!day(f.weekStart)||!day(f.weekEnd)||f.weekStart>f.weekEnd||f.weekEnd>=leagueToday(now()))continue;
-  if(unique.has(f.week)&&JSON.stringify(unique.get(f.week))!==JSON.stringify(f))throw Error('Conflicting final week target');
+  if(unique.has(f.week)&&['opponentId','weekStart','weekEnd'].some(k=>unique.get(f.week)[k]!==f[k]))throw Error('Conflicting final week target');
   unique.set(f.week,f);
  }
  let inserted=0,verified=0;const unavailable=[];
- for(const f of [...unique.values()].sort((a,b)=>b.week-a.week).slice(0,4)){
+ const existing=await writerTransaction(async c=>(await c.query('select distinct week,opponent_id,week_start::text,week_end::text from sc3.p2_yahoo_final_observations where league_id=85892')).rows);
+ const remainingTargets=[...unique.values()].filter(f=>!existing.some(r=>r.week===f.week&&r.opponent_id===f.opponentId&&r.week_start===f.weekStart&&r.week_end===f.weekEnd));
+ for(const f of remainingTargets.sort((a,b)=>b.week-a.week).slice(0,4)){
   try{
    const raw=await readWeek(historicalScoreboardPath(f.week)),observedAt=now().toISOString();
    const official=finalMatchupFromHistory(raw,f,{observedAt,now:new Date(observedAt)});if(!official){unavailable.push(f.week);continue;}
@@ -68,7 +70,7 @@ export async function archiveFinalMatchups(targets,{writerTransaction,readWeek,n
    inserted+=result.rowCount;
   }catch{unavailable.push(f.week);}
  }
- return {verified,inserted,unavailable,remaining:Math.max(0,unique.size-4)};
+ return {verified,inserted,unavailable,remaining:Math.max(0,remainingTargets.length-4)};
 }
 export async function readVerifiedFinalArchive(c,record,now){
  const rows=(await c.query("select payload,observed_at::text from sc3.p2_yahoo_final_observations where league_id=85892 and week=$1 and opponent_id=$2 and week_start=$3::date and week_end=$4::date and source='Yahoo Fantasy Sports API' and observed_at>$5::timestamptz and observed_at<=$6::timestamptz order by observed_at desc limit 2",[record.week,record.opponentId,record.weekStart,record.weekEnd,record.asOf,now])).rows;
