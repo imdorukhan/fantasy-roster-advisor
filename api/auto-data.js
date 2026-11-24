@@ -250,14 +250,15 @@ export async function read(token,path,{require200=false}={}){
  if(!r.ok||(require200&&r.status!==200))throw Object.assign(Error('Yahoo Fantasy API rejected request'),{status:r.status});
  const j=await r.json();if(!j.fantasy_content)throw Error('Invalid Yahoo Fantasy response');return j.fantasy_content;
 }
-async function enrichPlayerStats(gameKey,players,coverage,client){
+async function enrichPlayerStats(gameKey,players,coverage,client,{diagnostics=false}={}){
  const uniqueIds=[...new Set(players.map(p=>String(p.yahooId)).filter(x=>/^\d+$/.test(x)))];
  try{
-  const result=await loadPlayerStats({read:path=>client.read(path),gameKey,playerIds:uniqueIds,coverage});
+  const result=await loadPlayerStats({read:path=>client.read(path),gameKey,playerIds:uniqueIds,coverage,diagnostics});
   return {players:players.map(p=>{const record=result.records.get(String(p.yahooId));return {...p,stats:record||null,mpg:record?.values?.MPG??null}}),
    coverage:{requested:result.requested,returned:result.returned,complete:result.complete,missingIds:result.missingIds,
     nineCatReady:result.nineCatReady,missingNineCatById:result.missingNineCatById,
-    invalidNineCatById:result.invalidNineCatById,errors:result.errors,window:coverage}};
+    invalidNineCatById:result.invalidNineCatById,errors:result.errors,window:coverage,
+    ...(diagnostics?{diagnostics:result.diagnostics}:{})}};
  }catch(e){return {players:players.map(p=>({...p,stats:null,mpg:null})),coverage:{requested:uniqueIds.length,returned:0,errors:[{status:e.status||null}],window:coverage}}}
 }
 export function findTeams(node,out=[],depth=0){
@@ -415,7 +416,7 @@ async function liveHandler(req,res){
    if(!ids.length||ids.length>25)return response(res,400,{error:'Supply 1–25 Yahoo player IDs'});
    const window=String(req.query.window||'average_season');
    if(!['average_season','season','lastweek','lastmonth'].includes(window))return response(res,400,{error:'Unsupported stats window'});
-   const result=await enrichPlayerStats(unique[0].key.split('.')[0],ids.map(yahooId=>({yahooId})),window,client);
+   const result=await enrichPlayerStats(unique[0].key.split('.')[0],ids.map(yahooId=>({yahooId})),window,client,{diagnostics:req.query?.statsDiag==='1'});
    return response(res,200,{mode:'YAHOO_PLAYER_STATS',...result,readOnly:true});
   }
   if(req.query?.allRosters==='1'){
