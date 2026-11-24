@@ -29,3 +29,14 @@ export async function readRosterIdentityInputs(c,now=Date.now()){
  const catalog=(await c.query("select espn_id as \"espnId\",name,nba_team as team,jersey,birth_date::text as \"birthDate\" from sc3.espn_player_identity")).rows;
  return {players,catalog};
 }
+
+ // A jersey change must not be treated as a different athlete. Require independent
+ // public Yahoo date of birth, the same name/team, and an unused ESPN identity.
+export async function resolveRosterBirthFallback(players,known,catalog,fetcher=fetch,{limit=8}={}){
+ const {verifyMissingYahooPlayers}=await import('./sc3-projection-sources.mjs');
+ const linked=new Set(known.map(p=>String(p.yahoo_id))),occupied=new Set(known.map(p=>String(p.espn_id)));
+ const pending=players.filter(p=>!linked.has(String(p.yahooId))).slice(0,limit);
+ if(!pending.length)return [];
+ const matches=await verifyMissingYahooPlayers(pending,catalog,fetcher);
+ return matches.filter(p=>!occupied.has(String(p.espnId))&&p.evidence.includes('exact birth date')).map(p=>({yahoo_id:p.yahooId,espn_id:p.espnId,status:'verified',evidence:p.evidence,persisted:false,source:'public Yahoo profile and ESPN catalog'}));
+}
