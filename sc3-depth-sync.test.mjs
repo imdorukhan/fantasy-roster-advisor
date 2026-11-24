@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseTables,validateRows,depthSync,saveDepth,verifyDepth} from './sc3-depth-sync.mjs';
+import {parseTables,validateRows,depthSync,depthPreviewProbe,saveDepth,verifyDepth} from './sc3-depth-sync.mjs';
 import {depthSource} from './sc3-depth-store.mjs';
 const names='Atlanta|Boston|Brooklyn|Charlotte|Chicago|Cleveland|Dallas|Denver|Detroit|Golden State|Houston|Indiana|LA Clippers|LA Lakers|Memphis|Miami|Milwaukee|Minnesota|New Orleans|New York|Oklahoma City|Orlando|Philadelphia|Phoenix|Portland|Sacramento|San Antonio|Toronto|Utah|Washington'.split('|');
 const tables=()=>names.map((header,i)=>({header,rows:['PG','SG','SF','PF','C'].map((pos,j)=>({text:pos+'1 - Player '+i+' '+j,name:'Player '+i+' '+j,href:`https://www.espn.com/nba/player/_/id/${100+i*5+j}/player`}))}));
@@ -67,4 +67,17 @@ test('depth replacement is atomic, rejects stale observations and verifies exact
   await pool.query("create function sc3.reject_row() returns trigger language plpgsql as $$begin raise exception 'fixture';end$$;create trigger reject_row before insert on sc3.nba_depth_chart for each row execute function sc3.reject_row()");
   await assert.rejects(saveDepth({...batch,observedAt:new Date(Date.now()+1).toISOString()},options));
   assert.equal((await verifyDepth(batch,options)).rows,150);
+});
+
+test('depth preview probe is disabled outside explicitly enabled Preview and never invokes database writes',async()=>{
+ const enabled={VERCEL_ENV:'preview',SC3_DEPTH_PREVIEW_PROBE:'1',SC3_DEPTH_SYNC_WRITE:'1'};
+ let calls=0;
+ const collect=async()=>{calls++;return {rows:parseTables(tables()),observedAt:new Date().toISOString(),source:depthSource}};
+ for(const env of [{...enabled,VERCEL_ENV:'production'},{...enabled,SC3_DEPTH_PREVIEW_PROBE:'0'}]){
+  const r=res();await depthPreviewProbe(req(),r,{env,collect,log:()=>{}});assert.equal(r.code,404);
+ }
+ assert.equal(calls,0);
+ const badMethod=res();await depthPreviewProbe({method:'POST'},badMethod,{env:enabled,collect,log:()=>{}});assert.equal(badMethod.code,405);assert.equal(calls,0);
+ const good=res();await depthPreviewProbe(req(),good,{env:enabled,collect,log:()=>{}});assert.equal(good.code,200);assert.equal(good.body.snapshotWrites,0);assert.equal(good.body.committed,false);assert.equal(calls,1);
+ const bad=res();await depthPreviewProbe(req(),bad,{env:enabled,collect:async()=>{throw Error('private upstream text')},log:()=>{}});assert.equal(bad.code,503);assert.equal(bad.body.snapshotWrites,0);assert.doesNotMatch(JSON.stringify(bad.body),/private upstream text/);
 });
