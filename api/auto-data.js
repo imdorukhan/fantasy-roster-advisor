@@ -5,7 +5,7 @@ import {dataHealth} from '../decision-core.mjs';
 import {requireSc3Read} from '../sc3-read-access.mjs';
 import {sc3ProductionEnabled} from '../sc3-yahoo-bridge.mjs';
 import {officialMatchupFromScoreboard,currentMatchupIdentityFromScoreboard} from '../yahoo-scoreboard.mjs';
-import {safeMatchupFailure} from '../sc3-matchup-error.mjs';
+import {safeMatchupFailure,isYahooIncompleteCurrentWeek} from '../sc3-matchup-error.mjs';
 import {cookies,configured} from './auth/yahoo/_lib.js';
 import {yahooSessionClient} from './auth/yahoo/_refresh.js';
 import {loadSessionRecord,storeConfigured,loadLeagueSnapshots,saveLeagueSnapshots,loadBackgroundYahooSession} from './auth/yahoo/_store.js';
@@ -250,14 +250,15 @@ export async function read(token,path,{require200=false}={}){
  if(!r.ok||(require200&&r.status!==200))throw Object.assign(Error('Yahoo Fantasy API rejected request'),{status:r.status});
  const j=await r.json();if(!j.fantasy_content)throw Error('Invalid Yahoo Fantasy response');return j.fantasy_content;
 }
-async function enrichPlayerStats(gameKey,players,coverage,client){
+async function enrichPlayerStats(gameKey,players,coverage,client,{diagnostics=false}={}){
  const uniqueIds=[...new Set(players.map(p=>String(p.yahooId)).filter(x=>/^\d+$/.test(x)))];
  try{
-  const result=await loadPlayerStats({read:path=>client.read(path),gameKey,playerIds:uniqueIds,coverage});
+  const result=await loadPlayerStats({read:path=>client.read(path),gameKey,playerIds:uniqueIds,coverage,diagnostics});
   return {players:players.map(p=>{const record=result.records.get(String(p.yahooId));return {...p,stats:record||null,mpg:record?.values?.MPG??null}}),
    coverage:{requested:result.requested,returned:result.returned,complete:result.complete,missingIds:result.missingIds,
     nineCatReady:result.nineCatReady,missingNineCatById:result.missingNineCatById,
-    invalidNineCatById:result.invalidNineCatById,errors:result.errors,window:coverage}};
+    invalidNineCatById:result.invalidNineCatById,errors:result.errors,window:coverage,
+    ...(diagnostics?{diagnostics:result.diagnostics}:{})}};
  }catch(e){return {players:players.map(p=>({...p,stats:null,mpg:null})),coverage:{requested:uniqueIds.length,returned:0,errors:[{status:e.status||null}],window:coverage}}}
 }
 export function findTeams(node,out=[],depth=0){
@@ -349,10 +350,10 @@ async function bridgeHandler(req,res){
   if(req.query?.officialMatchup==='1'){
    try{return response(res,200,{...officialMatchupFromScoreboard(sections.scoreboard,{observedAt:timestamps.scoreboard,teamKey}),bridge:true})}
    catch(e){
-    if(e?.message==='Yahoo current-week category totals not published'){
+    if(isYahooIncompleteCurrentWeek(e)){
      try{
       const verified=currentMatchupIdentityFromScoreboard(sections.scoreboard,{observedAt:timestamps.scoreboard,teamKey});
-      return response(res,422,{...common,...verified,mode:'YAHOO_OFFICIAL_MATCHUP_STATS_PENDING',error:'Yahoo current-week category totals not published'});
+      return response(res,422,{...common,...verified,mode:'YAHOO_OFFICIAL_MATCHUP_STATS_PENDING',error:'Yahoo current-week category totals incomplete or not yet published'});
      }catch{ /* Cannot verify current week; do not expose unverified identities. */ }
     }
     return response(res,422,{...common,mode:'YAHOO_OFFICIAL_MATCHUP_UNAVAILABLE',error:e.message});
@@ -415,7 +416,7 @@ async function liveHandler(req,res){
    if(!ids.length||ids.length>25)return response(res,400,{error:'Supply 1–25 Yahoo player IDs'});
    const window=String(req.query.window||'average_season');
    if(!['average_season','season','lastweek','lastmonth'].includes(window))return response(res,400,{error:'Unsupported stats window'});
-   const result=await enrichPlayerStats(unique[0].key.split('.')[0],ids.map(yahooId=>({yahooId})),window,client);
+   const result=await enrichPlayerStats(unique[0].key.split('.')[0],ids.map(yahooId=>({yahooId})),window,client,{diagnostics:req.query?.statsDiag==='1'});
    return response(res,200,{mode:'YAHOO_PLAYER_STATS',...result,readOnly:true});
   }
   if(req.query?.allRosters==='1'){
@@ -478,7 +479,16 @@ async function liveHandler(req,res){
    }
    if(!sources.teams&&!sources.roster)return response(res,502,{mode:'YAHOO_LEAGUE_UNAVAILABLE',errors});
    const staleSections=Object.keys(sources).filter(k=>now-Date.parse(timestamps[k])>=maxAge);
-   return response(res,200,{mode:'YAHOO_LEAGUE_DATA',leagueId:85892,teamId:5,teamKey:unique[0].key,observedAt:new Date().toISOString(),source:'Yahoo Fantasy Sports API via Supabase',readOnly:true,sections:sources,sectionTimestamps:timestamps,staleSections,dbBacked:Object.keys(stored).length>0,rosterPlayers:sources.roster?[...new Map(findPlayers(sources.roster).map(p=>[p.yahooId,p])).values()]:[],leagueTeams:sources.teams?[...new Map(findTeams(sources.teams).map(t=>[t.key,t])).values()]:[],errors});
+   const rosterPlayers=sources.roster?[...new Map(findPlayers(sources.roster).map(p=>[p.yahooId,p])).values()]:[];
+   const {attachOwnerInjuryEvidence}=await import('../sc3-owner-injury-evidence.mjs');
+   const injuryEvidence=await attachOwnerInjuryEvidence(rosterPlayers,timestamps.roster,{
+    enabled:sc3ProductionEnabled(),
+    read:async(players,at)=>{
+     const {readInjuryEvidence}=await import('../sc3-injury-evidence.mjs');
+     return readInjuryEvidence(players,at);
+    }
+   });
+   return response(res,200,{mode:'YAHOO_LEAGUE_DATA',leagueId:85892,teamId:5,teamKey:unique[0].key,observedAt:new Date().toISOString(),source:'Yahoo Fantasy Sports API via Supabase',readOnly:true,sections:sources,sectionTimestamps:timestamps,staleSections,dbBacked:Object.keys(stored).length>0,rosterPlayers,leagueTeams:sources.teams?[...new Map(findTeams(sources.teams).map(t=>[t.key,t])).values()]:[],injuryEvidence,errors});
   }
   if(req.query?.matchup==='1'){
    const data=await client.read('team/'+encodeURIComponent(unique[0].key)+'/matchups?format=json');

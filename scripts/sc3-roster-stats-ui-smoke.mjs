@@ -45,7 +45,7 @@ const server=createServer(async(req,res)=>{
   res.writeHead(code,{'content-type':'application/json','cache-control':'no-store'});res.end(JSON.stringify(data));return;
  }
  const path=url.pathname==='/'?'index.html':url.pathname.slice(1);
- if(!['index.html','player-dialog.mjs','league-data.js','sc3-roster-stat-source.mjs','sc3-keepcut-evidence.mjs'].includes(path)){
+ if(!['index.html','player-dialog.mjs','league-data.js','sc3-roster-stat-source.mjs','sc3-keepcut-evidence.mjs','sc3-acquisition-summary.mjs'].includes(path)){
   res.writeHead(404);res.end();return;
  }
  const bytes=await readFile(join(root,path));

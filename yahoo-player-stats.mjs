@@ -1,5 +1,6 @@
 // Deterministic Yahoo Fantasy NBA stat normalization. Read-only.
 import {assessYahooNineCat} from './yahoo-stat-readiness.mjs';
+import {inspectYahooStatShape} from './yahoo-stat-shape.mjs';
 export function statCategoryId(root,labels){
  const accepted=new Set(labels.map(x=>String(x).trim().toLowerCase()));
  let found=null;
@@ -111,24 +112,29 @@ export function playerStatRecords(root,catalog,{coverage='average_season',observ
  Object.values(v).forEach(x=>walk(x,d+1));}
  walk(root);return out;
 }
-export async function loadPlayerStats({read,gameKey,playerIds,coverage='average_season',batchSize=25}){
+export async function loadPlayerStats({read,gameKey,playerIds,coverage='average_season',batchSize=25,diagnostics=false}){
  if(!['average_season','season','lastweek','lastmonth'].includes(coverage))throw Error('Unsupported Yahoo stat window');
  const ids=[...new Set(playerIds.map(String))].filter(x=>/^\d+$/.test(x));
  if(!/^\d+$/.test(String(gameKey)))throw Error('Invalid game key');
  const catalog=statCatalog(await read('game/'+gameKey+'/stat_categories?format=json'));
  const records=new Map(),errors=[];
+ const diagnostic=diagnostics?{schema:'counts_only',catalogEntries:catalog.size,batches:[]}:null;
  const size=Math.min(25,Math.max(1,batchSize));
  for(let i=0;i<ids.length;i+=size){
  const batch=ids.slice(i,i+size);
  try{
  const payload=await read('players;player_keys='+batch.map(id=>gameKey+'.p.'+id).join(',')+'/stats;type='+coverage+'?format=json');
+ if(diagnostic)diagnostic.batches.push({...inspectYahooStatShape(payload,batch),requestedCoverage:coverage});
  const duplicates=new Set();
  const parsed=playerStatRecords(payload,catalog,{coverage,onConflict:id=>duplicates.add(id)});
  for(const [id,record] of parsed)if(batch.includes(id))records.set(id,record);
  const omitted=batch.filter(id=>!parsed.has(id));
  if(duplicates.size)errors.push({count:duplicates.size,status:null,reason:'Conflicting duplicate Yahoo player stats'});
  if(omitted.length)errors.push({count:omitted.length,status:null,reason:'Incomplete Yahoo stat batch'});
- }catch(e){errors.push({count:batch.length,status:e.status||null,reason:'Yahoo stat batch unavailable'});}
+ }catch(e){
+  errors.push({count:batch.length,status:e.status||null,reason:'Yahoo stat batch unavailable'});
+  if(diagnostic)diagnostic.batches.push({requestedCoverage:coverage,readFailed:true,status:e.status||null});
+ }
  }
  const missingIds=ids.filter(id=>!records.has(id));
  const complete=errors.length===0&&missingIds.length===0;
@@ -141,5 +147,6 @@ export async function loadPlayerStats({read,gameKey,playerIds,coverage='average_
   if(!audit.ready)nineCatReady=false;
  }
  return {records,requested:ids.length,returned:records.size,missingIds,complete,
-  nineCatReady,missingNineCatById,invalidNineCatById,errors};
+  nineCatReady,missingNineCatById,invalidNineCatById,errors,
+  ...(diagnostic?{diagnostics:diagnostic}:{})};
 }
