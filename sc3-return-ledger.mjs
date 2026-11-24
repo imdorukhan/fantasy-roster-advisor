@@ -37,26 +37,32 @@ export function settleReturn(forecast,logs,days,settledAt){
  return {forecastId:forecast.id,eventId:String(first.event_id),actualDate:first.game_day,actualTipoff:iso(ms(first.tipoff)),evidenceObservedAt:iso(ms(first.observed_at)),settledAt:iso(cutoff),signedErrorDays:error,absoluteErrorDays:Math.abs(error),hitWithin3:Math.abs(error)<=3,source:'ESPN completed NBA box score'};
 }
 export function sourceReliability(forecasts,settlements,{asOf=new Date(),minimum=10}={}){
- const cutoff=+asOf,byId=new Map(forecasts.filter(f=>ms(f.capturedAt)<=cutoff).map(f=>[f.id,f])),groups=new Map();
- // One earliest observed forecast per athlete/report episode/source; do not let
- // repeated estimate revisions multiply one injury's influence.
- const earliest=new Map();
+ const cutoff=+asOf,byId=new Map(forecasts.filter(f=>Number.isFinite(ms(f.capturedAt))&&ms(f.capturedAt)<=cutoff).map(f=>[f.id,f])),groups=new Map();
+ // One earliest captured estimate per source + player + realized return event.
+ // Repeated daily updates of the same injury must not inflate sample size.
+ const earliestReport=new Map(),earliestReturn=new Map();
  for(const f of byId.values()){
   const key=f.source+'|'+f.espnId+'|'+f.reportAt;
-  if(!earliest.has(key)||ms(f.capturedAt)<ms(earliest.get(key).capturedAt))earliest.set(key,f);
+  if(!earliestReport.has(key)||ms(f.capturedAt)<ms(earliestReport.get(key).capturedAt))earliestReport.set(key,f);
+  if(!groups.has(f.source))groups.set(f.source,{source:f.source,recorded:0,settled:0,absolute:0,hits:0,bias:0,pending:0,settledReports:0});
  }
- const accepted=new Set([...earliest.values()].map(f=>f.id)),seen=new Set();
- for(const f of earliest.values())if(!groups.has(f.source))groups.set(f.source,{source:f.source,recorded:0,settled:0,absolute:0,hits:0,bias:0});
- for(const f of earliest.values())groups.get(f.source).recorded++;
+ for(const f of earliestReport.values())groups.get(f.source).recorded++;
+ const accepted=new Set([...earliestReport.values()].map(f=>f.id)),seen=new Set();
  for(const s of settlements){
   const f=byId.get(s.forecastId);
-  if(!f||!accepted.has(f.id)||seen.has(f.id)||ms(s.settledAt)>cutoff||ms(s.actualTipoff)<=ms(f.capturedAt)||!date(s.actualDate))continue;
-  seen.add(f.id);const g=groups.get(f.source),error=diffDays(s.actualDate,f.estimatedDate);
+  if(!f||!accepted.has(f.id)||seen.has(f.id)||!Number.isFinite(ms(s.settledAt))||ms(s.settledAt)>cutoff||ms(s.actualTipoff)<=ms(f.capturedAt)||!date(s.actualDate)||!s.eventId)continue;
+  seen.add(f.id);groups.get(f.source).settledReports++;
+  const key=f.source+'|'+f.espnId+'|'+s.eventId;
+  if(!earliestReturn.has(key)||ms(f.capturedAt)<ms(earliestReturn.get(key).f.capturedAt))earliestReturn.set(key,{f,s});
+ }
+ for(const f of earliestReport.values())if(!seen.has(f.id))groups.get(f.source).pending++;
+ for(const {f,s} of earliestReturn.values()){
+  const g=groups.get(f.source),error=diffDays(s.actualDate,f.estimatedDate);
   g.settled++;g.absolute+=Math.abs(error);g.bias+=error;g.hits+=Math.abs(error)<=3?1:0;
  }
  return [...groups.values()].map(g=>{
   const n=g.settled,p=n?g.hits/n:null,z=1.96;
   const lower=n?(p+z*z/(2*n)-z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n)))/(1+z*z/n):null;
-  return {source:g.source,recorded:g.recorded,settled:n,pending:g.recorded-n,maeDays:n?g.absolute/n:null,biasDays:n?g.bias/n:null,hitWithin3:p,reliability:n>=minimum?Math.max(0,lower):null,minimum,method:'95% Wilson lower bound on ±3 day hit rate; earliest captured estimate per report'};
+  return {source:g.source,recorded:g.recorded,settled:n,settledReports:g.settledReports,pending:g.pending,maeDays:n?g.absolute/n:null,biasDays:n?g.bias/n:null,hitWithin3:p,reliability:n>=minimum?Math.max(0,lower):null,minimum,method:'95% Wilson lower bound on ±3 day hit rate; earliest captured estimate per realized athlete return event'};
  }).sort((a,b)=>(b.reliability??-1)-(a.reliability??-1));
 }
