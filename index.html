@@ -121,10 +121,11 @@ function renderFreeAgents(){
   });
   const status=document.querySelector('#fa-status');
   status.textContent=shown.length+' shown / '+freeAgents.count+' Yahoo verified free agents. ';
-  status.append(waivers.count+' players on waivers in stored snapshot · '+new Date(freeAgents.observedAt).toLocaleString()+'.');
+  status.append(waivers.count+' waiver players · '+new Date(freeAgents.observedAt).toLocaleString()+'.');
   const check=streamingSnapshot.ownershipCheck;
   if(check?.status==='MATCH')status.append(' Live Yahoo recheck verified '+check.freeAgents.count+' FA / '+check.waivers.count+' waivers · '+new Date(check.waivers.observedAt).toLocaleString()+'.');
-  else if(check?.status==='CHANGED')status.append(' Live Yahoo reports '+check.freeAgents.count+' FA / '+check.waivers.count+' waivers; stored lists changed. Rankings paused until verified synchronization.');
+  else if(check?.status==='LIVE_VERIFIED')status.append(' Current Yahoo lists verified by two complete observations; stored snapshot had '+check.waivers.snapshotCount+' waivers. No snapshot write. Player detail ownership may reflect the last saved snapshot.');
+  else if(check?.status==='UNSTABLE')status.append(' Consecutive live Yahoo observations disagree; rankings paused.');
   else status.append(' Live ownership recheck unavailable; stored counts are historical observations.');
   if(rankLimit&&shown.length===0)status.append(' No players with a verified ESPN depth rank match the selected limit.');
   const coverage=streamingSnapshot.depthCoverage;
@@ -133,7 +134,7 @@ function renderFreeAgents(){
   if((sort==='rank'||sort==='rankThenPositions')&&shown.length&&shown.every(p=>rankOf(p)===Infinity))status.append(' ESPN depth ranks unavailable; alphabetical fallback is used.');
   body.innerHTML=shown.map(p=>'<tr><td>'+playerLink(p)+'</td><td>'+esc(p.nbaTeam||'—')+'</td><td>Yahoo eligible: '+esc((p.eligiblePositions||[]).join(', ')||'Unavailable')+'<span class="small" style="display:block">'+(faDepthFor(p).length?'Verified ESPN: '+faDepthFor(p).map(r=>esc(r.position)+' #'+esc(r.rank)).join(', '):'ESPN depth not verified')+'</span></td><td>'+(rankOf(p)===Infinity?'—':'#'+rankOf(p))+'</td><td>'+faPositionCount(p)+'</td>'+statCells(p)+perfCells(p)+'<td>Free agent</td></tr>').join('')
    || '<tr><td colspan="30">No verified free agents match the current filters.</td></tr>';
-  document.querySelector('#waiver-status').textContent=waivers.count+' Yahoo waiver snapshot players · '+new Date(waivers.observedAt).toLocaleString()+(check?.status==='MATCH'?' · Live recheck matched':check?.status==='CHANGED'?' · Live list changed, rankings paused':' · Live recheck unavailable');
+  document.querySelector('#waiver-status').textContent=waivers.count+' Yahoo waiver players · '+new Date(waivers.observedAt).toLocaleString()+(check?.status==='MATCH'?' · Live recheck matched':check?.status==='LIVE_VERIFIED'?' · Two full live observations matched; saved snapshot unchanged':check?.status==='UNSTABLE'?' · Live list unstable, rankings paused':' · Live recheck unavailable');
   document.querySelector('#waiver-body').innerHTML=waivers.players.map(player=>'<tr><td>'+playerLink(player)+'</td><td>'+esc(player.yahooRosterStatus)+'</td></tr>').join('');
   document.querySelector('#waiver-results').hidden=waivers.count===0;
   return;
