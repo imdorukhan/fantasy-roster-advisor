@@ -62,6 +62,8 @@ grant select on sc3.p2_cbs_settlements,sc3.p2_official_injury_observations,sc3.p
 grant insert(observation_id,event_id,actual_date,actual_tipoff,evidence_observed_at) on sc3.p2_cbs_settlements to sc3_p2_writer;
 grant insert(id,espn_id,game_date,published_at,observed_at,document_digest,source_url,status,payload) on sc3.p2_official_injury_observations to sc3_p2_writer;
 grant insert(id,league_id,week,opponent_id,week_start,week_end,observed_at,source,payload) on sc3.p2_yahoo_final_observations to sc3_p2_writer;
+-- Writer never needs the private legacy snapshot history or OAuth tables.
+revoke select on sc3.yahoo_league_snapshot_history from sc3_p2_writer;
 -- RLS defense-in-depth: only named reader/writer group, no broad authenticated access.
 do $p22$
 declare t text;
