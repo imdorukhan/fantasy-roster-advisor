@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
+import {runP22Cycle} from './sc3-p22-cycle.mjs';
+import {archiveFinalMatchups} from './sc3-final-archive.mjs';
+import {readCBSBoundMetrics} from './sc3-cbs-settlement.mjs';
+import {officialPublication} from './sc3-nba-official-injuries.mjs';
 import {runP21Cycle} from './sc3-p21-cycle.mjs';
 import {NINE_CAT} from './decision-core.mjs';
 import {YAHOO_STAT_IDS} from './yahoo-scoreboard.mjs';
@@ -27,13 +31,16 @@ test('P2 ledger uses real disposable PostgreSQL; server timestamps and append-on
   await c.query('grant usage on schema '+schema+' to '+reader);
   await c.query(`create table ${schema}.sc3_nba_sync_days(game_day date primary key,observed_at timestamptz,player_rows integer,completed_events integer,status text);
    create table ${schema}.sc3_nba_game_logs(event_id text,espn_id text,game_day date,tipoff timestamptz,observed_at timestamptz,stats jsonb);
-   create table ${schema}.yahoo_league_snapshot_history(league_id integer,section text,source text,observed_at timestamptz,payload jsonb)`);
+   create table ${schema}.yahoo_league_snapshot_history(league_id integer,section text,observed_at timestamptz,payload jsonb)`);
   let migration=await readFile(new URL('./migrations/sc3-p2-return-ledger.sql',import.meta.url),'utf8');
   migration=migration.replace(/\bsc3\b/g,schema).replace(/\bsc3_app\b/g,reader).replace(/\bsc3_p2_writer\b/g,writer).replace(/\banon\b/g,'p2_ci_anon').replace(/\bauthenticated\b/g,'p2_ci_authenticated');
   await c.query(migration);
   let p21=await readFile(new URL('./migrations/sc3-p21-matchup-ledger.sql',import.meta.url),'utf8');
   p21=p21.replace(/\bsc3\b/g,schema).replace(/\bsc3_app\b/g,reader).replace(/\bsc3_p2_writer\b/g,writer).replace(/\banon\b/g,'p2_ci_anon').replace(/\bauthenticated\b/g,'p2_ci_authenticated');
   await c.query(p21);
+  let p22=await readFile(new URL('./migrations/sc3-p22-evidence-ledger.sql',import.meta.url),'utf8');
+  p22=p22.replace(/\bsc3\b/g,schema).replace(/\bsc3_app\b/g,reader).replace(/\bsc3_p2_writer\b/g,writer).replace(/\banon\b/g,'p2_ci_anon').replace(/\bauthenticated\b/g,'p2_ci_authenticated');
+  await c.query(p22);
   const now=(await c.query('select clock_timestamp() now')).rows[0].now;
   const instant=new Date(now-2000).toISOString();
   const day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
@@ -95,8 +102,11 @@ test('P2 ledger uses real disposable PostgreSQL; server timestamps and append-on
   await c.query('insert into '+schema+'.p2_matchup_forecasts(id,league_id,week,opponent_id,week_start,week_end,model_version,forecast_as_of,baseline_observed_at,history_through,inputs_digest,payload) values($1,85892,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',[old.id,old.week,old.opponentId,old.weekStart,old.weekEnd,old.modelVersion,old.asOf,old.baselineObservedAt,old.historyThrough,old.inputsDigest,JSON.stringify(old)]);
   const key=id=>'478.l.85892.t.'+id;
   const team=id=>({team:[[{team_key:key(id)},{name:'Fixture'}],{team_stats:{stats:Object.entries(YAHOO_STAT_IDS).map(([cat,stat_id])=>({stat:{stat_id,value:cat.includes('%')?'0.5':'1'}}))},team_points:{total:'0'}}]});
-  const finalPayload={league:[{}, {scoreboard:{0:{matchups:{0:{matchup:{status:'postevent',week:'5',week_start:pastStart,week_end:pastEnd,'0':{teams:{0:team(5),1:team(2)}},stat_winners:Object.values(YAHOO_STAT_IDS).map(stat_id=>({stat_winner:{stat_id}}))}}}}}}]};
-  await c.query('insert into '+schema+'.yahoo_league_snapshot_history values(85892,\'scoreboard\',\'Yahoo Fantasy Sports API\',$1,$2)',[current,JSON.stringify(finalPayload)]);
+  const finalPayload={league:[{league_key:'478.l.85892'}, {scoreboard:{0:{matchups:{0:{matchup:{status:'postevent',week:'5',week_start:pastStart,week_end:pastEnd,'0':{teams:{0:team(5),1:team(2)}},stat_winners:Object.values(YAHOO_STAT_IDS).map(stat_id=>({stat_winner:{stat_id}}))}}}}}}]};
+  await c.query('insert into '+schema+'.yahoo_league_snapshot_history values(85892,\'scoreboard\',$1,$2)',[current,JSON.stringify(finalPayload)]);
+  const archived=await archiveFinalMatchups([old],{writerTransaction:tx(writer),readWeek:async path=>{assert.match(path,/scoreboard;week=5\?format=json$/);return finalPayload;}});
+  assert.equal(archived.inserted,1);
+  assert.equal((await archiveFinalMatchups([old],{writerTransaction:tx(writer),readWeek:async()=>{throw Error('duplicate should not read');}})).inserted,0);
   const finalCycle=await runP21Cycle(opts);
   assert.equal(finalCycle.matchupSettlement.inserted,1);
   const finalRow=(await c.query('select outcome from '+schema+'.p2_matchup_settlements where forecast_id=$1',[old.id])).rows[0];
@@ -104,6 +114,28 @@ test('P2 ledger uses real disposable PostgreSQL; server timestamps and append-on
   await assert.rejects(tx(writer)(c=>c.query('update sc3.p2_matchup_forecasts set model_version=model_version')),/permission denied/);
   await assert.rejects(c.query('delete from '+schema+'.p2_matchup_settlements'),/append-only/);
   await assert.rejects(tx(writer)(c=>c.query('truncate sc3.p2_cbs_observations')),/permission denied/);
+  // P2.2: an explicit lower bound on athlete 11, captured before the test appearance.
+  const stamp=(await c.query('select clock_timestamp() now')).rows[0].now.toISOString();
+  const bound={...cbs,observedAt:stamp,rows:[{...cbs.rows[0],espnId:'11',observedAt:stamp,earliestReturn:shift(day,1)}]};
+  const parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:true}).formatToParts(new Date(stamp)).map(p=>[p.type,p.value]));
+  const url='https://ak-static.cms.nba.com/referee/injury/Injury-Report_'+parts.year+'-'+parts.month+'-'+parts.day+'_'+parts.hour+'_'+parts.minute+parts.dayPeriod+'.pdf';
+  const publishedAt=officialPublication(url);
+  const official={source:'NBA_OFFICIAL',url,publishedAt,observedAt:stamp,documentDigest:'b'.repeat(64),rows:[{espnId:'11',name:'Fixture',nbaTeam:'SAC',gameDate:day,status:'Out',source:'NBA_OFFICIAL',sourceUrl:url,publishedAt,observedAt:stamp,kind:'GAME_STATUS_NOT_RETURN_ESTIMATE'}]};
+  const alt={...forecastData,model:'EWMA',modelVersion:'ci-fixture:EWMA',asOf:stamp,baselineObservedAt:stamp,inputsDigest:'c'.repeat(64)};
+  const p22opts={...opts,collectOfficial:async()=>official,collectCBS:async()=>bound,collectMatchup:async()=>({...report,projection:{forecast:forecastData,alternativeForecasts:[alt]}}),loadTargets:async()=>[old],readWeek:async()=>{throw Error('already archived');}};
+  const p22first=await runP22Cycle(p22opts);assert.equal(p22first.nbaOfficial.inserted,1);assert.equal(p22first.cbs.inserted,1);assert.equal(p22first.modelAlternatives.inserted,1);assert.equal(p22first.cbsSettlement.inserted,0);
+  await c.query('select pg_sleep(0.02)');
+  const after=(await c.query('select clock_timestamp() now')).rows[0].now;
+  await c.query(`insert into ${schema}.sc3_nba_game_logs values('778','11',$1,$2,$2,'{"MIN":20}'::jsonb)`,[day,after]);
+  await c.query(`update ${schema}.sc3_nba_sync_days set player_rows=2,completed_events=2,observed_at=$1 where game_day=$2`,[after,day]);
+  await c.query('select pg_sleep(0.02)');
+  const p22second=await runP22Cycle(p22opts);assert.equal(p22second.nbaOfficial.inserted,0);assert.equal(p22second.cbs.inserted,0);assert.equal(p22second.modelAlternatives.inserted,0);assert.equal(p22second.cbsSettlement.inserted,1);
+  await c.query('select pg_sleep(0.01)');
+  const metrics=await readCBSBoundMetrics({transaction:tx(reader),now:(await c.query('select clock_timestamp() now')).rows[0].now});
+  assert.equal(metrics.independentReturnEvents,1);assert.equal(metrics.violations,1);assert.equal(metrics.meanDaysEarly,1);assert.equal(metrics.boundAdherenceLower95,null);
+  await assert.rejects(tx(writer)(c=>c.query('delete from sc3.p2_cbs_settlements')),/permission denied/);
+  await assert.rejects(tx(writer)(c=>c.query('select * from sc3.yahoo_league_snapshot_history')),/permission denied/);
+
 
  }finally{
   try{await c.query('rollback')}catch{}
