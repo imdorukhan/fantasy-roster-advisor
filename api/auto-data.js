@@ -195,11 +195,24 @@ export default async function handler(req,res){
    return response(res,200,await readLeagueRosters());
   }catch{return response(res,503,{error:'Verified Yahoo league rosters unavailable'});}
  }
+ if(req.query?.sc3P2Lab==='1'){
+  if(!await requireSc3Read(req,res))return;
+  if(process.env.VERCEL_ENV!=='preview'||process.env.SC3_P2_PREVIEW!=='1')return response(res,404,{error:'Not found'});
+  try{
+   const {readReturnLedger}=await import('../sc3-return-store.mjs');
+   const {readGameBacktest}=await import('../sc3-walk-forward.mjs');
+   const {fetchEspnInjuryFeed}=await import('../sc3-injury-feed.mjs');
+   const {forecastsFromEspn}=await import('../sc3-return-ledger.mjs');
+   const [ledger,backtest,feed]=await Promise.all([readReturnLedger(),readGameBacktest(),fetchEspnInjuryFeed().catch(()=>null)]);
+   const candidates=feed?forecastsFromEspn(feed,new Date().toISOString()):[];
+   return response(res,200,{mode:'SC3_P2_LAB',ledger,backtest,injuryPreview:{observedAt:feed?.observedAt??null,candidateCount:candidates.length,source:'ESPN',persisted:false},snapshotWrites:0,readOnly:true});
+  }catch{return response(res,503,{error:'Verified P2 lab data unavailable'});}
+ }
  if(req.query?.sc3MatchupLineups==='1'){
   if(!await requireSc3Read(req,res))return;
   try{
    const {readMatchupLineups}=await import('../sc3-matchup-lineups.mjs');
-   return response(res,200,await readMatchupLineups({includeProjection:req.query?.projection==='1'}));
+   return response(res,200,await readMatchupLineups({includeProjection:req.query?.projection==='1',includeForecast:req.query?.forecast==='1'&&process.env.VERCEL_ENV==='preview'&&process.env.SC3_P2_PREVIEW==='1'}));
   }catch(error){const result=safeMatchupFailure(error);return response(res,result.status,result.body);}
  }
  if(req.query?.sc3Streaming==='1'){
