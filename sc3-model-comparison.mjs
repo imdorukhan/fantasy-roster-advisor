@@ -36,6 +36,7 @@ export function compareModels(rows,{asOf,minimum=3,split='calendar'}={}){
  }else if(split!=='calendar')throw Error('Invalid split');
  const validationTime=time(validationStart+'T00:00:00Z'),testTime=time(testStart+'T00:00:00Z');
  const bucket=()=>Object.fromEntries(MODELS.map(m=>[m,Object.fromEntries(NINE_CAT.map(k=>[k,{n:0,weight:0,ae:0,se:0,brier:0,brierN:0}]))]));
+ const phaseDays={validation:new Set(),test:new Set()};
  const metrics={validation:bucket(),test:bucket()},counts={training:0,validation:0,test:0,skipped:0};
  for(const games of groups.values()){
   games.sort((a,b)=>time(a.tipoff)-time(b.tipoff));
@@ -47,7 +48,7 @@ export function compareModels(rows,{asOf,minimum=3,split='calendar'}={}){
    if(phase==='validation'&&time(r.observed_at)>=testTime){counts.skipped++;continue;}
    const samples=games.slice(0,i).filter(g=>time(g.tipoff)<origin&&time(g.observed_at)<origin).map(g=>g.stats);
    if(samples.length<minimum){counts.skipped++;continue;}
-   counts[phase]++;
+   counts[phase]++;phaseDays[phase].add(new Date(origin).toISOString().slice(0,10));
    const weights=Object.fromEntries(MODELS.map(m=>[m,modelWeights(samples.length,m)]));
    for(const k of NINE_CAT){
     const [made,attempt]=pair[k]??[];
@@ -73,5 +74,5 @@ export function compareModels(rows,{asOf,minimum=3,split='calendar'}={}){
  const score=m=>{const ratios=NINE_CAT.map(k=>{const base=validation.SEASON[k].mae,err=validation[m][k].mae;return base>0&&err!==null?err/base:null;});return ratios.every(v=>v!==null)?ratios.reduce((a,b)=>a+b,0)/ratios.length:null;};
  const ranking=MODELS.map(model=>({model,score:score(model)})).filter(x=>x.score!==null).sort((a,b)=>a.score-b.score||a.model.localeCompare(b.model));
  const selected=ranking[0]?.model??null;
- return {available:!!selected&&counts.test>0,asOf,split,eligibleDays,validationStart,testStart,counts,athletes:groups.size,validation,test,ranking,selected,selection:'validation normalized MAE only; frozen for test',method:'Rolling origin; windows up to N observed appearances, EWMA half-life 5, shrinkage recent 7 toward own season with 10 pseudo-games. FG%/FT% ratios of weighted makes/attempts; errors weighted by actual attempts.',calibratesMatchup:false,readOnly:true};
+ return {available:!!selected&&counts.test>0,asOf,split,eligibleDays,validationStart,testStart,counts,phaseDays:{validation:phaseDays.validation.size,test:phaseDays.test.size},athletes:groups.size,validation,test,ranking,selected,selection:'validation normalized MAE only; frozen for test',method:'Rolling origin; windows up to N observed appearances, EWMA half-life 5, shrinkage recent 7 toward own season with 10 pseudo-games. FG%/FT% ratios of weighted makes/attempts; errors weighted by actual attempts.',calibratesMatchup:false,readOnly:true};
 }
