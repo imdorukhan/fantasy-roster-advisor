@@ -141,7 +141,7 @@ export async function fetchScheduleSource(url,format,fetcher=fetch){
  throw sourceError('source_network');
 }
 
-export async function buildStreamingPlan(availability, yahooRows, {now=new Date(), fetcher=fetch, includeWaiverImpact=false,skipWaiverPlan=false,evaluationPlayer=null,dropId=null}={}) {
+export async function buildStreamingPlan(availability, yahooRows, {now=new Date(), fetcher=fetch, includeWaiverImpact=false,skipWaiverPlan=false,evaluationPlayer=null,dropId=null,ownershipCheck=null}={}) {
   let window;
   try {window = yahooWindow(yahooRows, now);}
   catch (error) {return {available:false, reason:error.message};}
@@ -175,7 +175,10 @@ export async function buildStreamingPlan(availability, yahooRows, {now=new Date(
       return {available:false,reason:missing.join(' and ')+' coverage unavailable',week,acquisitions,days:coverage};
     }
     // Player-specific scenarios do not use free-agent membership to model starts.
-    if(!skipWaiverPlan){
+    if(!skipWaiverPlan&&ownershipCheck?.status==='MATCH'){
+      metadata.push(...availability.freeAgents.players);
+      metadata.observation={status:'verified',...ownershipCheck.freeAgents};
+    }else if(!skipWaiverPlan){
       const live=await collect('FA',page=>metadata.push(...page.players),{fetcher});
       const names = new Map(availability.freeAgents.players.map(player => [player.yahooId,player.name]));
       if (metadata.length !== names.size || metadata.some(player => names.get(player.yahooId)!==player.name ||
