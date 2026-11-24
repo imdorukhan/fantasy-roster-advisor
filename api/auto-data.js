@@ -204,9 +204,12 @@ export default async function handler(req,res){
    const {fetchEspnInjuryFeed}=await import('../sc3-injury-feed.mjs');
    const {forecastsFromEspn}=await import('../sc3-return-ledger.mjs');
    const {readCBSInjuries}=await import('../sc3-cbs-injuries.mjs');
-   const [ledger,backtest,feed,cbs]=await Promise.all([readReturnLedger(),readGameBacktest(),fetchEspnInjuryFeed().catch(()=>null),readCBSInjuries().catch(()=>null)]);
+   const {readOfficialInjuries}=await import('../sc3-nba-official-injuries.mjs');
+   const {readCBSBoundMetrics}=await import('../sc3-cbs-settlement.mjs');
+   const {readHistoricalCoverage}=await import('../sc3-final-archive.mjs');
+   const [ledger,backtest,feed,cbs,nba,cbsMetrics,historyCoverage]=await Promise.all([readReturnLedger(),readGameBacktest(),fetchEspnInjuryFeed().catch(()=>null),readCBSInjuries().catch(()=>null),readOfficialInjuries().catch(()=>null),readCBSBoundMetrics(),readHistoricalCoverage().catch(()=>null)]);
    const candidates=feed?forecastsFromEspn(feed,new Date().toISOString()):[];
-   return response(res,200,{mode:'SC3_P2_LAB',ledger,backtest,injuryPreview:{observedAt:feed?.observedAt??null,candidateCount:candidates.length,source:'ESPN',persisted:false},cbsEvidence:cbs?{source:cbs.source,observedAt:cbs.observedAt,teamGroups:cbs.teamGroups,parsed:cbs.parsed,matched:cbs.rows.length,lowerBounds:cbs.rows.filter(p=>p.earliestReturn).length,rows:cbs.rows,persisted:false}:null,snapshotWrites:0,readOnly:true});
+   return response(res,200,{mode:'SC3_P2_LAB',ledger,backtest,injuryPreview:{observedAt:feed?.observedAt??null,candidateCount:candidates.length,source:'ESPN',persisted:false},cbsEvidence:cbs?{source:cbs.source,observedAt:cbs.observedAt,teamGroups:cbs.teamGroups,parsed:cbs.parsed,matched:cbs.rows.length,lowerBounds:cbs.rows.filter(p=>p.earliestReturn).length,rows:cbs.rows,persisted:false}:null,nbaOfficialEvidence:nba?{...nba,persisted:false}:null,cbsMetrics,historyCoverage,snapshotWrites:0,readOnly:true});
   }catch{return response(res,503,{error:'Verified P2 lab data unavailable'});}
  }
  if(req.query?.sc3MatchupLineups==='1'){
