@@ -134,6 +134,10 @@ async function sc3CloudHealth(req,res){
 
 export const config={maxDuration:300};
 export default async function handler(req,res){
+ if(req.query?.sc3DepthProbe==='1'){
+  const {depthPreviewProbe}=await import('../sc3-depth-sync.mjs');
+  return depthPreviewProbe(req,res);
+ }
  if(req.query?.sc3DepthSync==='1'){
   const {depthSync}=await import('../sc3-depth-sync.mjs');
   return depthSync(req,res);
