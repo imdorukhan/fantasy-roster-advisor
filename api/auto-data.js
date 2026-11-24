@@ -5,7 +5,7 @@ import {dataHealth} from '../decision-core.mjs';
 import {requireSc3Read} from '../sc3-read-access.mjs';
 import {sc3ProductionEnabled} from '../sc3-yahoo-bridge.mjs';
 import {officialMatchupFromScoreboard,currentMatchupIdentityFromScoreboard} from '../yahoo-scoreboard.mjs';
-import {safeMatchupFailure} from '../sc3-matchup-error.mjs';
+import {safeMatchupFailure,isYahooIncompleteCurrentWeek} from '../sc3-matchup-error.mjs';
 import {cookies,configured} from './auth/yahoo/_lib.js';
 import {yahooSessionClient} from './auth/yahoo/_refresh.js';
 import {loadSessionRecord,storeConfigured,loadLeagueSnapshots,saveLeagueSnapshots,loadBackgroundYahooSession} from './auth/yahoo/_store.js';
@@ -349,10 +349,10 @@ async function bridgeHandler(req,res){
   if(req.query?.officialMatchup==='1'){
    try{return response(res,200,{...officialMatchupFromScoreboard(sections.scoreboard,{observedAt:timestamps.scoreboard,teamKey}),bridge:true})}
    catch(e){
-    if(e?.message==='Yahoo current-week category totals not published'){
+    if(isYahooIncompleteCurrentWeek(e)){
      try{
       const verified=currentMatchupIdentityFromScoreboard(sections.scoreboard,{observedAt:timestamps.scoreboard,teamKey});
-      return response(res,422,{...common,...verified,mode:'YAHOO_OFFICIAL_MATCHUP_STATS_PENDING',error:'Yahoo current-week category totals not published'});
+      return response(res,422,{...common,...verified,mode:'YAHOO_OFFICIAL_MATCHUP_STATS_PENDING',error:'Yahoo current-week category totals incomplete or not yet published'});
      }catch{ /* Cannot verify current week; do not expose unverified identities. */ }
     }
     return response(res,422,{...common,mode:'YAHOO_OFFICIAL_MATCHUP_UNAVAILABLE',error:e.message});
