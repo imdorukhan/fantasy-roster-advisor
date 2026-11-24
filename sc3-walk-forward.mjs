@@ -46,5 +46,6 @@ export async function readGameBacktest({now=new Date(),transaction=withScopedTra
  const {compareModels}=await import('./sc3-model-comparison.mjs');
  const calendarComparison=compareModels(rows,{asOf:now.toISOString()});
  const comparison=calendarComparison.available?calendarComparison:{...compareModels(rows,{asOf:now.toISOString(),split:'observation-coverage'}),exploratory:true,originalCalendar:{validationStart:calendarComparison.validationStart,testStart:calendarComparison.testStart,counts:calendarComparison.counts},note:'Calendar validation empty/inadequate; split based on observed-at eligibility only. Retrospective exploratory comparison, not prospective model approval.'};
- return {...walkForwardGameTest(rows,{asOf:now.toISOString()}),comparison};
+ const {modelPromotion}=await import('./sc3-model-promotion.mjs');
+ return {...walkForwardGameTest(rows,{asOf:now.toISOString()}),comparison:{...comparison,promotion:modelPromotion(comparison)}};
 }
