@@ -1,4 +1,4 @@
-import {teamCode} from './sc3-depth-store.mjs';
+import {teamCode,depthSource} from './sc3-depth-store.mjs';
 const normalize=s=>String(s??'').normalize('NFKD').replace(/\p{Diacritic}/gu,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const key=(name,team)=>normalize(name)+'|'+teamCode(team??'');
 export async function missingHistoryCatalog(c,through){
@@ -30,4 +30,27 @@ export async function recoverHistoryCatalog(players,seeds,fetcher=fetch,{limit=1
   recovered.push(...batch.filter(r=>r.status==='fulfilled'&&r.value).map(r=>r.value));
  }
  return {attempted:pending.length,profiles:recovered};
+}
+
+export async function readDepthAliases(c){
+ return (await c.query("select distinct espn_id,player_name,nba_team,source,observed_at::text from sc3.nba_depth_chart where source=$1",[depthSource])).rows;
+}
+// A display alias is allowed only when the same ESPN athlete ID is explicitly
+// present in a fresh official depth row and the current catalog. It still needs
+// independent Yahoo profile DOB confirmation before a link can be accepted.
+export function canonicalizeDepthAliases(players,catalog,depth,now=new Date()){
+ const byId=new Map(catalog.map(p=>[String(p.espnId),p]));
+ const exact=new Set(catalog.map(p=>key(p.name,p.team)));
+ return players.map(p=>{
+  if(exact.has(key(p.name,p.nbaTeam)))return p;
+  const hits=new Map();
+  for(const d of depth){
+   const age=+now-Date.parse(d.observed_at),entry=byId.get(String(d.espn_id));
+   if(d.source!==depthSource||!Number.isFinite(age)||age<0||age>26*3600_000||!entry?.birthDate||
+     key(d.player_name,d.nba_team)!==key(p.name,p.nbaTeam)||teamCode(entry.team)!==teamCode(p.nbaTeam))continue;
+   hits.set(String(entry.espnId),entry);
+  }
+  if(hits.size!==1)return p;
+  return {...p,name:[...hits.values()][0].name,depthAlias:p.name,depthAliasEspnId:[...hits.keys()][0]};
+ });
 }
