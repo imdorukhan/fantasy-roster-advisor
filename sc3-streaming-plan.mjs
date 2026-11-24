@@ -116,6 +116,31 @@ export function rankStreamingFits(players, dates, acquisitions) {
   return streamingCalendar(candidates,{startDate:dates[0].date,endDate:dates.at(-1).date,remainingAdds:acquisitions.remaining});
 }
 
+
+// Safe source diagnostics; bounded retry only for transient network/HTTP failures.
+const scheduleFailureCodes=new Set(['source_timeout','source_network','source_http_transient','source_http_rejected','source_redirect','source_invalid_body']);
+function scheduleFailure(error){return scheduleFailureCodes.has(error?.code)?error.code:'source_validation_failed';}
+function sourceError(code){return Object.assign(Error(code),{code});}
+export async function fetchScheduleSource(url,format,fetcher=fetch){
+ for(let attempt=0;attempt<2;attempt++){
+  let response;
+  try{response=await fetcher(url,{signal:AbortSignal.timeout(8000)});}
+  catch(error){
+   if(attempt===0)continue;
+   throw sourceError(['TimeoutError','AbortError'].includes(error?.name)?'source_timeout':'source_network');
+  }
+  if(response.redirected)throw sourceError('source_redirect');
+  if(!response.ok){
+   const transient=response.status===429||response.status>=500;
+   if(transient&&attempt===0)continue;
+   throw sourceError(transient?'source_http_transient':'source_http_rejected');
+  }
+  try{return await response[format]();}
+  catch{throw sourceError('source_invalid_body');}
+ }
+ throw sourceError('source_network');
+}
+
 export async function buildStreamingPlan(availability, yahooRows, {now=new Date(), fetcher=fetch, includeWaiverImpact=false,skipWaiverPlan=false,evaluationPlayer=null,dropId=null}={}) {
   let window;
   try {window = yahooWindow(yahooRows, now);}
@@ -128,11 +153,7 @@ export async function buildStreamingPlan(availability, yahooRows, {now=new Date(
   const metadata = [];
   try {
     if (!dates.length || dates.at(-1)!==end) throw Error('Yahoo matchup date range could not be verified');
-    async function source(url, format) {
-      const response = await fetcher(url,{signal:AbortSignal.timeout(8000)});
-      if (!response.ok || response.redirected) throw Error('Source returned HTTP '+response.status);
-      return response[format]();
-    }
+    const source = (url,format) => fetchScheduleSource(url,format,fetcher);
     const checkDay = async date => {
       const [lineup,schedule] = await Promise.allSettled([
         source(rosterUrl+'?date='+date,'text').then(html=>{
@@ -141,10 +162,12 @@ export async function buildStreamingPlan(availability, yahooRows, {now=new Date(
         }),
         source(espnUrl+date.replaceAll('-',''),'json').then(json => upcomingTeams(json,date,now))
       ]);
-      return {date, openSlots:lineup.status==='fulfilled'?lineup.value.open:null, lineup:lineup.status==='fulfilled'?lineup.value.rows:null, schedule:schedule.status==='fulfilled'?schedule.value:null};
+      return {date, openSlots:lineup.status==='fulfilled'?lineup.value.open:null, lineup:lineup.status==='fulfilled'?lineup.value.rows:null, schedule:schedule.status==='fulfilled'?schedule.value:null, lineupFailure:lineup.status==='rejected'?scheduleFailure(lineup.reason):null, scheduleFailure:schedule.status==='rejected'?scheduleFailure(schedule.reason):null};
     };
-    const daily = await Promise.all(dates.map(checkDay));
-    const coverage = daily.map(({date,openSlots,schedule}) => ({date,openSlots,scheduledGames:schedule?.gameCount??null}));
+    const daily = [];
+    // Limit simultaneous upstream requests to two days (four requests).
+    for(let i=0;i<dates.length;i+=2)daily.push(...await Promise.all(dates.slice(i,i+2).map(checkDay)));
+    const coverage = daily.map(({date,openSlots,schedule,lineupFailure,scheduleFailure}) => ({date,openSlots,scheduledGames:schedule?.gameCount??null,lineupFailure,scheduleFailure}));
     if (daily.some(day => !day.openSlots || !day.schedule)) {
       const missing = [];
       if (daily.some(day => !day.openSlots)) missing.push('Yahoo lineup');
