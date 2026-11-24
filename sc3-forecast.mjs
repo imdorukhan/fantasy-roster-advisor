@@ -57,19 +57,19 @@ export function forecastMatchup({report,official,logs,asOf,historyThrough,baseli
     const decision=injuryDecision(verified?r:null,game.date);
     if(decision.uncertain)uncertain.add(p.yahooId);
     if(decision.exclude)excludedStarts++;
-    starters.push({side,samples,exclude:decision.exclude});
+    starters.push({side,samples,exclude:decision.exclude,uncertain:decision.uncertain});
    }
   }
  }
  if(missing.length)return {...blocked('Minimum three observed complete games required for each starter'),missing,coveredStarts:starters.length};
- const rng=random(seed),scenarios=[{id:'ALL_STARTERS_PLAY',exclude:false},{id:'REPORTED_OUT_EXCLUSION',exclude:true}].filter(s=>!s.exclude||freshInjury);
- const results=scenarios.map(s=>({id:s.id,exclude:s.exclude,counts:Object.fromEntries(NINE_CAT.map(k=>[k,{win:0,tie:0,loss:0}])),match:{win:0,tie:0,loss:0},wins:Array(10).fill(0)}));
+ const rng=random(seed),scenarios=[{id:'ALL_STARTERS_PLAY',exclude:false,stress:false},{id:'REPORTED_OUT_EXCLUSION',exclude:true,stress:false},{id:'UNCERTAIN_PLAYERS_SIT',exclude:true,stress:true}].filter(s=>!s.exclude||freshInjury&&(!s.stress||uncertain.size>0));
+ const results=scenarios.map(s=>({id:s.id,exclude:s.exclude,stress:s.stress,counts:Object.fromEntries(NINE_CAT.map(k=>[k,{win:0,tie:0,loss:0}])),match:{win:0,tie:0,loss:0},wins:Array(10).fill(0)}));
  for(let n=0;n<simulations;n++){
   // Common random numbers across scenarios; preserve the complete box-score vector.
   const draws=starters.map(p=>p.samples[Math.floor(rng()*p.samples.length)]);
   for(const s of results){
    const teams=[raw(official.ourTeam),raw(official.opponent)];
-   starters.forEach((p,i)=>{if(!s.exclude||!p.exclude)for(const k of RAW_KEYS)teams[p.side][k]+=draws[i][k];});
+   starters.forEach((p,i)=>{if((!s.exclude||!p.exclude)&&(!s.stress||!p.uncertain))for(const k of RAW_KEYS)teams[p.side][k]+=draws[i][k];});
    const c=categoryComparison(totals(teams[0]),totals(teams[1]));
    if(!c.verified)return blocked('Simulation contains undefined category');
    for(const row of c.rows)s.counts[row.category][row.leader==='OURS'?'win':row.leader==='TIE'?'tie':'loss']++;
@@ -81,5 +81,5 @@ export function forecastMatchup({report,official,logs,asOf,historyThrough,baseli
  return {available:true,modelVersion:MODEL_VERSION,asOf,historyThrough,baselineObservedAt:official.observedAt,simulations,seed,conditional:true,calibrated:false,readOnly:true,
   coverage:{starterGames:starters.length,minSample:Number.isFinite(minSample)?minSample:null,injuryFeedVerified:freshInjury,uncertainPlayers:uncertain.size,excludedStarts},
   scenarios:results.map(s=>({id:s.id,matchup:proportions(s.match),categories:NINE_CAT.map(category=>({category,...proportions(s.counts[category])})),categoryWins:s.wins.map(v=>v/simulations),swingTargets:NINE_CAT.filter(k=>official.ourTeam.stats[k]!==undefined&&(k==='TO'?official.ourTeam.stats[k]>=official.opponent.stats[k]:official.ourTeam.stats[k]<=official.opponent.stats[k])).map(category=>({category,win:s.counts[category].win/simulations})).sort((a,b)=>b.win-a.win)})),
-  limitations:['Conditional on fixed Yahoo starters and observed game samples; not calibrated real-world probabilities.','Resampling preserves within-game category correlation, not between-player or team correlation.','Injury scenario excludes reported out/doubtful starts before provider estimate; estimated return is not medical clearance. No unverified participation probabilities.','No future trades, lineup changes, minutes regime changes or replacement-player effects modeled.']};
+  limitations:['Conditional on fixed Yahoo starters and observed game samples; not calibrated real-world probabilities.','Resampling preserves within-game category correlation, not between-player or team correlation.','Injury scenario excludes reported out/doubtful starts before provider estimate; estimated return is not medical clearance. No unverified participation probabilities.','The uncertain-players-sit stress scenario excludes all matched uncertain starts; it is not a likely outcome or calibrated confidence interval.','No future trades, lineup changes, minutes regime changes or replacement-player effects modeled.']};
 }
