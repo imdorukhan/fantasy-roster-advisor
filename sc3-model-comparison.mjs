@@ -1,20 +1,9 @@
 import {NINE_CAT} from './decision-core.mjs';
 import {availableHistory,RAW_KEYS} from './sc3-forecast.mjs';
-export const MODELS=['L3','L7','L10','L14','SEASON','EWMA','SHRINKAGE'];
+import {MODELS,modelWeights} from './sc3-model-weights.mjs';
+export {MODELS,modelWeights};
 const time=x=>Date.parse(x);
 const pair={'FG%':['FGM','FGA'],'FT%':['FTM','FTA']};
-export function modelWeights(n,model){
- if(!Number.isInteger(n)||n<1||!MODELS.includes(model))throw Error('Invalid model');
- const window=Number(model.slice(1));
- const w=Array.from({length:n},(_,i)=>{
-  const age=n-1-i;
-  if(model==='SEASON')return 1/n;
-  if(model==='EWMA')return Math.pow(.5,age/5);
-  if(model==='SHRINKAGE'){const k=Math.min(7,n),lambda=k/(k+10);return (1-lambda)/n+(age<k?lambda/k:0);}
-  return age<window?1:0;
- });
- const total=w.reduce((a,b)=>a+b,0);return w.map(x=>x/total);
-}
 export function estimate(samples,weights,category){
  if(pair[category]){
   const [m,a]=pair[category];const attempts=samples.reduce((sum,s,i)=>sum+s[a]*weights[i],0);
