@@ -195,6 +195,21 @@ export default async function handler(req,res){
    return response(res,200,await readLeagueRosters());
   }catch{return response(res,503,{error:'Verified Yahoo league rosters unavailable'});}
  }
+ if(req.query?.sc3P22Probe==='1'){
+  if(!await requireSc3Read(req,res))return;
+  if(process.env.VERCEL_ENV!=='preview'||process.env.SC3_P2_PREVIEW!=='1')return response(res,404,{error:'Not found'});
+  const part=req.query?.part;
+  if(!['nba','history'].includes(part))return response(res,400,{error:'Unknown probe'});
+  try{
+   const data=part==='nba'?await (await import('../sc3-nba-official-injuries.mjs')).readOfficialInjuries():await (await import('../sc3-final-archive.mjs')).readHistoricalCoverage();
+   return response(res,200,{mode:'SC3_P22_PREVIEW_PROBE',part,data,snapshotWrites:0,readOnly:true});
+  }catch(e){
+   const message=String(e?.message??'');
+   const codes=['NBA report index unavailable','Fresh official report unavailable','NBA PDF unavailable','Invalid NBA PDF','Invalid NBA report provenance','NBA report title mismatch','NBA report table header missing','NBA report page sequence mismatch','NBA game date format changed','Invalid NBA game date','NBA matchup format changed','Unknown NBA matchup','Unknown report team','Unverified non-submission','NBA report row format changed','Unknown NBA player name format','Duplicate NBA report identity','NBA report coverage unavailable','Unexpected PDF geometry','Invalid PDF coordinates','Invalid NBA report page count'];
+   const safeCode=codes.includes(message)?message:/Cannot find (?:module|package)|ERR_MODULE_NOT_FOUND/.test(message)?'pdf_dependency_unavailable':/DOMMatrix|ImageData|Path2D/.test(message)?'pdf_runtime_geometry_unavailable':/timeout|timed out|aborted/i.test(message)?'source_or_database_timeout':/fetch failed|network/i.test(message)?'source_network':/permission denied/i.test(message)?'database_permission':/column .* does not exist/i.test(message)?'database_schema':/pdf/i.test(message)?'pdf_runtime_error':/Scoped role/.test(message)?'scoped_role_error':/is not a function|Cannot read properties|undefined/.test(message)?'data_shape_or_runtime':'unknown_source_failure';
+   return response(res,503,{mode:'SC3_P22_PREVIEW_PROBE',part,category:safeCode,snapshotWrites:0,readOnly:true});
+  }
+ }
  if(req.query?.sc3P22Collect==='1'){
   const {p22Cron}=await import('../sc3-p22-writer.mjs');
   const collectors={
