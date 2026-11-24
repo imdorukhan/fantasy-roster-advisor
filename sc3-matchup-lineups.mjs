@@ -38,7 +38,7 @@ function groupPlayers(days, id) {
   return [...players.values()].sort((a,b)=>a.name.localeCompare(b.name));
 }
 
-export async function readMatchupLineups({now=new Date(),fetcher=fetch,includeProjection=false,loadSnapshots=bridgeSnapshots}={}) {
+export async function readMatchupLineups({now=new Date(),fetcher=fetch,includeProjection=false,includeForecast=false,loadSnapshots=bridgeSnapshots}={}) {
   const snapshots = await loadSnapshots();
   const scoreOptions={observedAt:snapshots.scoreboard?.observed_at,now};
   // Week identity and daily lineup coverage do not depend on published 9-CAT totals.
@@ -94,7 +94,7 @@ export async function readMatchupLineups({now=new Date(),fetcher=fetch,includePr
   if(includeProjection){
     if(!scored)report.projection={teams:[],blocked:['Official Yahoo 9-CAT totals not yet verified'],endOfWeek:null,readOnly:true};
     else {
-      try{report.projection=await readMatchupProjection(report,baseline,{now,fetcher,baselineAligned:days.every(day=>day.baselineAligned)});}
+      try{report.projection=await readMatchupProjection(report,baseline,{now,fetcher,includeForecast,baselineAligned:days.every(day=>day.baselineAligned)});}
       catch{report.projection={teams:[],blocked:['Verified NBA history unavailable'],endOfWeek:null,readOnly:true};}
     }
   }
