@@ -91,13 +91,18 @@ function normalizeStat(raw,canonical){
  }
  return typeof raw==='string'&&/^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(raw.trim())?raw.trim():null;
 }
-export function playerStatRecords(root,catalog,{coverage='average_season',observedAt=new Date().toISOString(),onConflict=null}={}){
+export function playerStatRecords(root,catalog,{coverage='average_season',observedAt=new Date().toISOString(),onConflict=null,allowMissingCoverage=false}={}){
  const out=new Map(),ambiguous=new Set();
  function walk(v,d=0){if(!v||typeof v!=='object'||d>25)return;
  if(Array.isArray(v.player)&&Array.isArray(v.player[0])){
  const meta=v.player[0],id=meta.find(x=>x?.player_id!==undefined)?.player_id;
  const block=v.player.slice(1).find(x=>x?.player_stats)?.player_stats;
- if(id!==undefined&&block&&block.coverage_type===coverage&&Array.isArray(block.stats)){
+ // Yahoo can omit coverage_type even when the explicit /stats;type=... API
+ // request returned the correct player-stat node. Only the trusted typed
+ // resource loader may opt into that case; conflicting metadata never passes.
+ const yahooReportsCoverage=block?.coverage_type===coverage;
+ const requestVerifiedCoverage=allowMissingCoverage&&block?.coverage_type===undefined;
+ if(id!==undefined&&block&&(yahooReportsCoverage||requestVerifiedCoverage)&&Array.isArray(block.stats)&&block.stats.length>0){
  const values={},rawStats=[];
  for(const wrapper of block.stats){
  const stat=wrapper?.stat;if(stat?.stat_id===undefined)continue;
@@ -107,7 +112,9 @@ export function playerStatRecords(root,catalog,{coverage='average_season',observ
  }
  const key=String(id);
  if(out.has(key)){out.delete(key);ambiguous.add(key);onConflict?.(key);}
- else if(!ambiguous.has(key))out.set(key,{coverage,observedAt,source:'Yahoo Fantasy Sports API',values,rawStats});
+ else if(!ambiguous.has(key))out.set(key,{coverage,observedAt,source:'Yahoo Fantasy Sports API',
+  coverageVerification:yahooReportsCoverage?'YAHOO_REPORTED_COVERAGE':'EXPLICIT_YAHOO_WINDOW_REQUEST',
+  values,rawStats});
  }}
  Object.values(v).forEach(x=>walk(x,d+1));}
  walk(root);return out;
@@ -126,7 +133,7 @@ export async function loadPlayerStats({read,gameKey,playerIds,coverage='average_
  const payload=await read('players;player_keys='+batch.map(id=>gameKey+'.p.'+id).join(',')+'/stats;type='+coverage+'?format=json');
  if(diagnostic)diagnostic.batches.push({...inspectYahooStatShape(payload,batch),requestedCoverage:coverage});
  const duplicates=new Set();
- const parsed=playerStatRecords(payload,catalog,{coverage,onConflict:id=>duplicates.add(id)});
+ const parsed=playerStatRecords(payload,catalog,{coverage,onConflict:id=>duplicates.add(id),allowMissingCoverage:true});
  for(const [id,record] of parsed)if(batch.includes(id))records.set(id,record);
  const omitted=batch.filter(id=>!parsed.has(id));
  if(duplicates.size)errors.push({count:duplicates.size,status:null,reason:'Conflicting duplicate Yahoo player stats'});
