@@ -8,7 +8,7 @@ import {buildStreamingPlan} from './sc3-streaming-plan.mjs';
 import {readMatchupLineups} from './sc3-matchup-lineups.mjs';
 import {readRosterIdentityInputs,rosterIdentityFallback} from './sc3-roster-identity.mjs';
 import {resolveProfileOwnership,observeProfileOwnership,excludeAvailableFromRoster} from './sc3-profile-ownership.mjs';
-import {missingHistoryCatalog,recoverHistoryCatalog} from './sc3-catalog-recovery.mjs';
+import {missingHistoryCatalog,recoverHistoryCatalog,readDepthAliases,canonicalizeDepthAliases} from './sc3-catalog-recovery.mjs';
 
 const counting=NINE_CAT.filter(cat=>!cat.includes('%'));
 const shotKeys=['FGM','FGA','FTM','FTA'];
@@ -107,7 +107,7 @@ async function readPlayerHistory(espnId,start){
 }
 export async function readPlayerEvaluation(id,{now=new Date(),fetcher=fetch,dropId=null}={}){
  const start=leagueToday(now);
- const {rows,identity,catalog,rosterLinks,missingSeeds,occupied}=await withScopedTransaction(async client=>{
+ const {rows,identity,catalog,rosterLinks,missingSeeds,occupied,depthAliases}=await withScopedTransaction(async client=>{
   const query=await client.query("select section,payload,observed_at::text from sc3.yahoo_league_snapshots where league_id=85892 and ((section in ('all_rosters','settings','scoreboard','roster') and source='Yahoo Fantasy Sports API') or (section in ('free_agents','waivers') and source='Yahoo Fantasy Basketball league player list'))");
   const rows=Object.fromEntries(query.rows.map(row=>[row.section,row]));
   const identity=(await client.query("select espn_id from sc3.sc3_player_identity where status='verified' and yahoo_id=$1",[id])).rows[0]?.espn_id??null;
@@ -120,7 +120,8 @@ export async function readPlayerEvaluation(id,{now=new Date(),fetcher=fetch,drop
    from sc3.espn_player_identity e where e.birth_date is not null
   `)).rows;
   const missingSeeds=identity||rosterLinks.some(r=>r.yahoo_id===id)?[]:await missingHistoryCatalog(client,start);
-  return {rows,identity,catalog,rosterLinks,missingSeeds,occupied};
+  const depthAliases=identity||rosterLinks.some(r=>r.yahoo_id===id)?[]:await readDepthAliases(client);
+  return {rows,identity,catalog,rosterLinks,missingSeeds,occupied,depthAliases};
  });
  const observation=await observeProfileOwnership(rows,{now,fetcher});
  const found=resolveProfileOwnership(rows,id,observation,now);
@@ -128,8 +129,11 @@ export async function readPlayerEvaluation(id,{now=new Date(),fetcher=fetch,drop
  const {player,ownership,teamKey,fantasyTeam,observedAt,ownershipSource,ownershipCheck}=found;
  const rosterMatch=rosterLinks.find(r=>r.yahoo_id===id);
  const recovery=identity||rosterMatch?{profiles:[]}:await recoverHistoryCatalog([player],missingSeeds,fetcher);
- const matches=identity||rosterMatch?[]:(await verifyMissingYahooPlayers([player],[...catalog,...recovery.profiles],fetcher)).filter(p=>!occupied.has(String(p.espnId)));
+ const expanded=[...catalog,...recovery.profiles];
+ const canonical=canonicalizeDepthAliases([player],expanded,depthAliases,now)[0];
+ const matches=identity||rosterMatch?[]:(await verifyMissingYahooPlayers([canonical],expanded,fetcher)).filter(p=>!occupied.has(String(p.espnId))&&(!canonical.depthAliasEspnId||canonical.depthAliasEspnId===String(p.espnId)));
  const identityVerification=rosterMatch&&!identity?{espnId:rosterMatch.espn_id,source:'YAHOO_ROSTER_AND_ESPN_CATALOG',persisted:false,readOnly:true,evidence:rosterMatch.evidence}:resolveVerifiedIdentity(id,identity,matches);
+ if(canonical.depthAlias&&identityVerification.espnId)identityVerification.evidence+=' + matching fresh ESPN depth alias';
  const espnId=identityVerification.espnId;
  const history=await readPlayerHistory(espnId,start);
  const analytics=history?.games.length?buildPerformance(history.games,{asOf:now.toISOString(),historyComplete:true}).players?.[0]:null;
