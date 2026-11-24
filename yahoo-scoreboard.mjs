@@ -122,3 +122,37 @@ export function officialMatchupFromScoreboard(raw,{observedAt,now=new Date(),tea
   executable:false,warning:'Official weekly totals, but remaining lineup appearances and projected future category wins are not validated.'
  };
 }
+
+// Count only already observed Yahoo values for the verified current fixture.
+// This deliberately returns no category scores, winners, or projections: a
+// partial 9-CAT scoreboard is not an official matchup result.
+export function currentMatchupCategoryCoverage(raw,opts={}){
+ const {matchup,teams}=selectCurrentMatchup(raw,opts);
+ const entries=Object.entries(matchup?.['0']?.teams||{}).filter(([key])=>/^\d+$/.test(key));
+ if(entries.length!==2)throw Error('Yahoo matchup team coverage unavailable');
+ const byTeam=new Map();
+ for(const [,entry] of entries){
+  const metadata=entry?.team?.[0],stats=entry?.team?.[1]?.team_stats?.stats;
+  if(!Array.isArray(metadata)||!Array.isArray(stats))throw Error('Yahoo stat coverage unavailable');
+  const key=metadata.find(x=>typeof x?.team_key==='string')?.team_key;
+  if(!teams.some(team=>team.key===key)||byTeam.has(key))throw Error('Yahoo stat coverage team mismatch');
+  const seen=new Map();
+  for(const wrapper of stats){
+   const row=wrapper?.stat,id=String(row?.stat_id??'');
+   if(!Object.values(YAHOO_STAT_IDS).includes(id))continue;
+   if(seen.has(id))throw Error('Duplicate Yahoo category');
+   const value=row.value;
+   if(value===null||value===undefined||value===''){seen.set(id,false);continue;}
+   const n=Number(value);
+   const percent=id===YAHOO_STAT_IDS['FG%']||id===YAHOO_STAT_IDS['FT%'];
+   if(!Number.isFinite(n)||n<0||(percent&&n>1))throw Error('Invalid published Yahoo category');
+   seen.set(id,true);
+  }
+  byTeam.set(key,seen);
+ }
+ const missingCategories=Object.entries(YAHOO_STAT_IDS)
+  .filter(([,id])=>teams.some(team=>byTeam.get(team.key)?.get(id)!==true))
+  .map(([name])=>name);
+ return {publishedCount:9-missingCategories.length,totalCategories:9,missingCategories,
+  scoreVerified:false,readOnly:true};
+}

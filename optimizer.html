@@ -43,8 +43,12 @@ const gap=(n,cat)=>percentage(cat)?(n*100).toFixed(1)+' pp':String(n);
 function explainUnavailable(panel,code,body=null){
  if(code===401){panel.innerHTML='Yahoo owner sign-in required for private matchup data. <a href="/api/auth/yahoo/login?owner=1">Sign in with Yahoo</a>.';return true;}
  if(code===422){
+  const coverage=body?.categoryCoverage;
+  const info=coverage?.scoreVerified===false&&Number.isInteger(coverage.publishedCount)&&coverage.totalCategories===9&&
+   Array.isArray(coverage.missingCategories)&&coverage.missingCategories.every(x=>['FG%','FT%','3PM','PTS','REB','AST','STL','BLK','TO'].includes(x))
+    ? ' Yahoo values present: '+coverage.publishedCount+'/9. Awaiting '+coverage.missingCategories.join(', ')+'.':'';
   panel.textContent=body?.mode==='YAHOO_CURRENT_WEEK_STATS_PENDING'||body?.mode==='YAHOO_OFFICIAL_MATCHUP_STATS_PENDING'?
-   'Current Yahoo week and opponent are verified; 9-CAT totals are not yet published. Scores and projections remain unavailable.':
+   'Current Yahoo week and opponent are verified; full 9-CAT totals are not yet published.'+info+' Scores and projections remain unavailable.':
    'Current Yahoo matchup week is not independently verified yet. Prior-week results are not substituted.';
   return true;
  }
