@@ -67,7 +67,7 @@ export async function readScopedRows({start,end,pool}){
  const {readRosterIdentityInputs,rosterIdentityFallback}=await import('./sc3-roster-identity.mjs');
  const {players,catalog}=await readRosterIdentityInputs(c);
  const fallback=rosterIdentityFallback(players,identities,catalog);
- return {days,raw,identities:[...identities,...fallback],end,start:resolvedStart};
+ return {days,raw,identities:[...identities,...fallback],rosterIdentityCandidates:players,identityCatalog:catalog,end,start:resolvedStart};
  },{pool});
 }
 export function scopedSyncStore({pool}={}){
