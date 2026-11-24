@@ -170,6 +170,7 @@ export function currentMatchupCategoryCoverage(raw,opts={}){
 
 export function finalMatchupFromHistory(raw,record,{observedAt,now=new Date()}={}){
  const t=Date.parse(observedAt);
+ if(!Array.isArray(raw?.league)||!raw.league.some(x=>x?.league_key==='478.l.85892'))return null;
  if(!Number.isFinite(t)||t>+now||!validDay(record.weekEnd)||leagueToday(new Date(t))<=record.weekEnd||record.leagueId!==85892)return null;
  const matchups=raw?.league?.[1]?.scoreboard?.[0]?.matchups;
  if(!matchups)return null;
