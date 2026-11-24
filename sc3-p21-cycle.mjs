@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import {appendObservedForecasts,appendVerifiedSettlements} from './sc3-return-store.mjs';
 import {appendMatchup,appendMatchupSettlements} from './sc3-matchup-ledger.mjs';
-import {finalMatchupFromHistory} from './yahoo-scoreboard.mjs';
+import {readVerifiedFinalArchive} from './sc3-final-archive.mjs';
 import {CBS_SOURCE} from './sc3-cbs-injuries.mjs';
 export async function appendCBSObservations(feed,{writerTransaction}={}){
  if(typeof writerTransaction!=='function')throw Error('Dedicated writer required');
@@ -19,11 +19,7 @@ export async function appendCBSObservations(feed,{writerTransaction}={}){
   return {inserted};
  });
 }
-export async function readVerifiedFinal(c,record,now){
- const rows=(await c.query("select payload,observed_at::text from sc3.yahoo_league_snapshot_history where league_id=85892 and section='scoreboard' and source='Yahoo Fantasy Sports API' and observed_at>$1::timestamptz and observed_at<=$2::timestamptz order by observed_at desc limit 100",[record.asOf,now])).rows;
- for(const row of rows){const final=finalMatchupFromHistory(row.payload,record,{observedAt:row.observed_at,now});if(final)return final;}
- return null;
-}
+export const readVerifiedFinal=readVerifiedFinalArchive;
 // No default DB writer, no scheduler registration, no production route.
 // An explicitly isolated runner supplies both collectors and its dedicated writer.
 export async function runP21Cycle({writerTransaction,collectESPN,collectCBS,collectMatchup,readFinal=readVerifiedFinal}={}){
