@@ -148,7 +148,7 @@ export async function loadPlayerStats({read,gameKey,playerIds,coverage='average_
  const missingNineCatById={},invalidNineCatById={};
  let nineCatReady=complete&&ids.length>0;
  for(const id of ids){
-  const audit=assessYahooNineCat(records.get(id)?.values);
+  const audit=assessYahooNineCat(records.get(id)?.values,{coverage});
   missingNineCatById[id]=audit.missing;
   invalidNineCatById[id]=audit.invalid;
   if(!audit.ready)nineCatReady=false;
