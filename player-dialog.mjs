@@ -20,8 +20,8 @@ function profileBody(data){
   ?'Verified and stored in SC3'
   :p.identityVerification?.source==='YAHOO_PUBLIC_PROFILE_AND_ESPN_CATALOG'
    ?'Verified via public Yahoo profile + ESPN; not stored in SC3'
-   :'ESPN identity not independently verified';
- const details=[['Yahoo ID',p.yahooId],['ESPN ID',p.espnId],['ESPN identity source',identityStatus],['Yahoo injury flag',p.status],['Eligible positions',p.eligiblePositions?.map(pos=>typeof pos==='string'?pos:pos.position).filter(Boolean).join(', ')],['Yahoo rank',p.yahooRank],['Percent owned',p.percentOwned],
+   :p.identityVerification?.source==='YAHOO_ROSTER_AND_ESPN_CATALOG'?'Verified Yahoo roster and ESPN catalog (read-only)': 'ESPN identity not independently verified';
+ const details=[['Yahoo ID',p.yahooId],['ESPN ID',p.espnId],['ESPN identity source',identityStatus],['Regular-season history',p.historyStatus?.replaceAll('_',' ')],['Yahoo injury flag',p.status],['Eligible positions',p.eligiblePositions?.map(pos=>typeof pos==='string'?pos:pos.position).filter(Boolean).join(', ')],['Yahoo rank',p.yahooRank],['Percent owned',p.percentOwned],
   ['Percent started',p.forecast?.percentStarted],['Next 7-day rank',p.forecast?.next7DayRank],['Next 14-day rank',p.forecast?.next14DayRank],['Rest-of-season rank',p.forecast?.restOfSeasonRank]];
  sections.push('<details open><summary>Player information</summary>'+table(['Field','Value'],details)+'</details>');
  if(a){
