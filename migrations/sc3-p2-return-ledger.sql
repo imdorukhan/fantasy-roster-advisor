@@ -32,7 +32,7 @@ begin raise exception 'P2 ledger is append-only'; end; $$;
 create trigger p2_forecast_no_mutation before update or delete or truncate on sc3.p2_return_forecasts for each statement execute function sc3.p2_reject_mutation();
 create trigger p2_settlement_no_mutation before update or delete or truncate on sc3.p2_return_settlements for each statement execute function sc3.p2_reject_mutation();
 -- Settlement is accepted only against an existing recorded positive-minute game.
-create function sc3.p2_verify_settlement() returns trigger language plpgsql set search_path=pg_catalog,sc3 as $
+create function sc3.p2_verify_settlement() returns trigger language plpgsql set search_path=pg_catalog,sc3 as $p2$
 declare f sc3.p2_return_forecasts%rowtype;
 begin
  select * into strict f from sc3.p2_return_forecasts where id=new.forecast_id;
@@ -43,7 +43,7 @@ begin
    and d.status='complete' and d.observed_at<=new.settled_at and (g.stats->>'MIN')::numeric>0
  ) then raise exception 'P2 settlement does not match completed post-capture appearance'; end if;
  return new;
-end; $;
+end; $p2$;
 create trigger p2_verify_settlement before insert on sc3.p2_return_settlements for each row execute function sc3.p2_verify_settlement();
 revoke all on sc3.p2_return_forecasts,sc3.p2_return_settlements from public, anon, authenticated, sc3_app;
 -- Application reads only. The NOLOGIN writer role cannot be used until a
