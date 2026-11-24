@@ -204,9 +204,8 @@ export default async function handler(req,res){
    const data=part==='nba'?await (await import('../sc3-nba-official-injuries.mjs')).readOfficialInjuries():await (await import('../sc3-final-archive.mjs')).readHistoricalCoverage();
    return response(res,200,{mode:'SC3_P22_PREVIEW_PROBE',part,data,snapshotWrites:0,readOnly:true});
   }catch(e){
-   const message=String(e?.message??'');
-   const codes=['NBA report index unavailable','Fresh official report unavailable','NBA PDF unavailable','Invalid NBA PDF','Invalid NBA report provenance','NBA report title mismatch','NBA report table header missing','NBA report page sequence mismatch','NBA game date format changed','Invalid NBA game date','NBA matchup format changed','Unknown NBA matchup','Unknown report team','Unverified non-submission','NBA report row format changed','Unknown NBA player name format','Duplicate NBA report identity','NBA report coverage unavailable','Unexpected PDF geometry','Invalid PDF coordinates','Invalid NBA report page count'];
-   const safeCode=codes.includes(message)?message:/Cannot find (?:module|package)|ERR_MODULE_NOT_FOUND/.test(message)?'pdf_dependency_unavailable':/DOMMatrix|ImageData|Path2D/.test(message)?'pdf_runtime_geometry_unavailable':/timeout|timed out|aborted/i.test(message)?'source_or_database_timeout':/fetch failed|network/i.test(message)?'source_network':/permission denied/i.test(message)?'database_permission':/column .* does not exist/i.test(message)?'database_schema':/pdf/i.test(message)?'pdf_runtime_error':/Scoped role/.test(message)?'scoped_role_error':/is not a function|Cannot read properties|undefined/.test(message)?'data_shape_or_runtime':'unknown_source_failure';
+   const {safeP22SourceFailure}=await import('../sc3-p22-source-diagnostics.mjs');
+   const safeCode=safeP22SourceFailure(e);
    return response(res,503,{mode:'SC3_P22_PREVIEW_PROBE',part,category:safeCode,snapshotWrites:0,readOnly:true});
   }
  }
@@ -241,9 +240,13 @@ export default async function handler(req,res){
    const {readOfficialInjuries}=await import('../sc3-nba-official-injuries.mjs');
    const {readCBSBoundMetrics}=await import('../sc3-cbs-settlement.mjs');
    const {readHistoricalCoverage}=await import('../sc3-final-archive.mjs');
-   const [ledger,backtest,feed,cbs,nba,cbsMetrics,historyCoverage]=await Promise.all([readReturnLedger(),readGameBacktest(),fetchEspnInjuryFeed().catch(()=>null),readCBSInjuries().catch(()=>null),readOfficialInjuries().catch(()=>null),readCBSBoundMetrics(),readHistoricalCoverage().catch(()=>null)]);
+   const {readP22Evidence}=await import('../sc3-p22-source-diagnostics.mjs');
+   // Start the lightweight history and official-catalog reads before the longer
+   // backtest and absent-ledger checks. Transient history read failures get one retry.
+   const [historyResult,nbaResult,ledger,backtest,feed,cbs,cbsMetrics]=await Promise.all([readP22Evidence(readHistoricalCoverage),readP22Evidence(readOfficialInjuries),readReturnLedger(),readGameBacktest(),fetchEspnInjuryFeed().catch(()=>null),readCBSInjuries().catch(()=>null),readCBSBoundMetrics()]);
+   const nba=nbaResult.data,historyCoverage=historyResult.data;
    const candidates=feed?forecastsFromEspn(feed,new Date().toISOString()):[];
-   return response(res,200,{mode:'SC3_P2_LAB',ledger,backtest,injuryPreview:{observedAt:feed?.observedAt??null,candidateCount:candidates.length,source:'ESPN',persisted:false},cbsEvidence:cbs?{source:cbs.source,observedAt:cbs.observedAt,teamGroups:cbs.teamGroups,parsed:cbs.parsed,matched:cbs.rows.length,lowerBounds:cbs.rows.filter(p=>p.earliestReturn).length,rows:cbs.rows,persisted:false}:null,nbaOfficialEvidence:nba?{...nba,persisted:false}:null,cbsMetrics,historyCoverage,snapshotWrites:0,readOnly:true});
+   return response(res,200,{mode:'SC3_P2_LAB',ledger,backtest,injuryPreview:{observedAt:feed?.observedAt??null,candidateCount:candidates.length,source:'ESPN',persisted:false},cbsEvidence:cbs?{source:cbs.source,observedAt:cbs.observedAt,teamGroups:cbs.teamGroups,parsed:cbs.parsed,matched:cbs.rows.length,lowerBounds:cbs.rows.filter(p=>p.earliestReturn).length,rows:cbs.rows,persisted:false}:null,nbaOfficialEvidence:nba?{...nba,persisted:false}:null,cbsMetrics,historyCoverage,nbaOfficialFailure:nbaResult.failure,historyCoverageFailure:historyResult.failure,snapshotWrites:0,readOnly:true});
   }catch{return response(res,503,{error:'Verified P2 lab data unavailable'});}
  }
  if(req.query?.sc3MatchupLineups==='1'){

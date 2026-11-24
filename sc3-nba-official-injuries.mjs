@@ -2,6 +2,11 @@ import {createHash} from 'node:crypto';
 import {teamCode,teams as nbaTeams} from './sc3-depth-store.mjs';
 import {withScopedTransaction} from './sc3-postgres.mjs';
 export const NBA_INJURY_INDEX='https://www.nba.com/players/injury-report';
+export function officialIndexUrls(now=new Date()){
+ const parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',year:'numeric',month:'numeric'}).formatToParts(now).map(p=>[p.type,p.value]));
+ const year=Number(parts.year)-(Number(parts.month)<10?1:0);
+ return ['https://official.nba.com/nba-injury-report-'+year+'-'+String(year+1).slice(-2)+'-season/',NBA_INJURY_INDEX];
+}
 const pattern=/^https:\/\/(?:ak-static\.cms|official)\.nba\.com\/referee\/injury\/Injury-Report_(\d{4})-(\d{2})-(\d{2})_(\d{2})_(\d{2})(AM|PM)\.pdf$/;
 const statusSet=new Set(['Out','Doubtful','Questionable','Probable','Available']);
 const normalize=s=>String(s??'').normalize('NFKD').replace(/\p{Diacritic}/gu,'').toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -86,24 +91,59 @@ export function parseOfficialPages(pages,catalog,{url,publishedAt,observedAt}){
  return {source:'NBA_OFFICIAL',url,publishedAt,observedAt,parsed,matched:rows.length,unmatched,teamGroups:teamGroups.size,notSubmitted,rows,readOnly:true};
 }
 export async function extractOfficialPages(bytes){
- const {getDocument}=await import('pdfjs-dist/legacy/build/pdf.mjs');
- const task=getDocument({data:new Uint8Array(bytes),isEvalSupported:false,useSystemFonts:true,disableFontFace:true});
+ // unpdf ships its serverless PDF.js build, including the worker, without
+ // requiring native canvas just to extract text. Never render the PDF.
+ const {getDocumentProxy}=await import('unpdf');
+ const doc=await getDocumentProxy(new Uint8Array(bytes),{isEvalSupported:false,useSystemFonts:false,disableFontFace:true,maxImageSize:1000000});
  try{
-  const doc=await task.promise;if(doc.numPages<1||doc.numPages>30)throw Error('Invalid NBA report page count');
+  if(doc.numPages<1||doc.numPages>30)throw Error('Invalid NBA report page count');
   const pages=[];
-  for(let i=1;i<=doc.numPages;i++){const p=await doc.getPage(i);pages.push({width:p.view[2]-p.view[0],items:(await p.getTextContent()).items});}
+  for(let i=1;i<=doc.numPages;i++){
+   const p=await doc.getPage(i),items=(await p.getTextContent()).items;
+   if(items.length>15000)throw Error('NBA report page text limit exceeded');
+   pages.push({width:p.view[2]-p.view[0],items});
+  }
   return pages;
- }finally{await task.destroy();}
+ }finally{await doc.loadingTask.destroy();}
+}
+async function boundedBody(response,limit){
+ const length=Number(response.headers?.get('content-length')??0);
+ if(!response.ok||response.redirected||length>limit)throw Error('NBA source response unavailable');
+ const reader=response.body?.getReader();
+ if(!reader){const b=new Uint8Array(await response.arrayBuffer());if(b.length>limit)throw Error('NBA source size limit exceeded');return b;}
+ const chunks=[];let total=0;
+ try{
+  for(;;){
+   const {done,value}=await reader.read();if(done)break;
+   total+=value.byteLength;if(total>limit){await reader.cancel();throw Error('NBA source size limit exceeded');}chunks.push(value);
+  }
+ }finally{reader.releaseLock();}
+ const bytes=new Uint8Array(total);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}return bytes;
+}
+export async function discoverOfficialReport({fetcher=fetch,now}={}){
+ const urls=officialIndexUrls(now??new Date());
+ const results=await Promise.allSettled(urls.map(async indexUrl=>{
+  const r=await fetcher(indexUrl,{redirect:'error',signal:AbortSignal.timeout(8000),cache:'no-store',headers:{'User-Agent':'Mozilla/5.0'}});
+  if(!r.ok||r.redirected)throw Error('NBA report index unavailable');
+  const html=new TextDecoder().decode(await boundedBody(r,8*1024*1024));
+  return {indexUrl,selected:selectOfficialReport(html,now??new Date())};
+ }));
+ const accessible=results.filter(r=>r.status==='fulfilled').map(r=>r.value);
+ if(!accessible.length)throw Error('NBA report index unavailable');
+ const candidates=accessible.filter(r=>r.selected).sort((a,b)=>Date.parse(b.selected.publishedAt)-Date.parse(a.selected.publishedAt));
+ if(!candidates.length)throw Error('Fresh official report unavailable');
+ return {...candidates[0].selected,indexUrl:candidates[0].indexUrl,indexCoverage:accessible.length};
 }
 export async function readOfficialInjuries({fetcher=fetch,transaction=withScopedTransaction,now,extract=extractOfficialPages}={}){
- const catalog=await transaction(async c=>(await c.query('select espn_id as "espnId",name,nba_team as team from sc3.espn_player_identity')).rows);
- const index=await fetcher(NBA_INJURY_INDEX,{redirect:'error',signal:AbortSignal.timeout(10000),cache:'no-store',headers:{'User-Agent':'Mozilla/5.0'}});
- if(!index.ok||index.redirected)throw Error('NBA report index unavailable');
- const selected=selectOfficialReport(await index.text(),now??new Date());if(!selected)throw Error('Fresh official report unavailable');
+ const [catalog,selected]=await Promise.all([
+  transaction(async c=>(await c.query('select espn_id as "espnId",name,nba_team as team from sc3.espn_player_identity')).rows),
+  discoverOfficialReport({fetcher,now})
+ ]);
  const r=await fetcher(selected.url,{redirect:'error',signal:AbortSignal.timeout(10000),cache:'no-store'});
  if(!r.ok||r.redirected||Number(r.headers.get('content-length')??0)>4*1024*1024)throw Error('NBA PDF unavailable');
- const bytes=new Uint8Array(await r.arrayBuffer());if(bytes.length>4*1024*1024||new TextDecoder().decode(bytes.slice(0,5))!=='%PDF-')throw Error('Invalid NBA PDF');
+ const bytes=await boundedBody(r,4*1024*1024);
+ if(new TextDecoder().decode(bytes.slice(0,5))!=='%PDF-')throw Error('Invalid NBA PDF');
  const observedAt=(now??new Date()).toISOString();
  const report=parseOfficialPages(await extract(bytes),catalog,{...selected,observedAt});
- return {...report,documentDigest:createHash('sha256').update(bytes).digest('hex')};
+ return {...report,indexUrl:selected.indexUrl,indexCoverage:selected.indexCoverage,documentDigest:createHash('sha256').update(bytes).digest('hex')};
 }

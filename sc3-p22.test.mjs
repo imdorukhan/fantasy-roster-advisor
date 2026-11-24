@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseOfficialPages,officialPublication,selectOfficialReport} from './sc3-nba-official-injuries.mjs';
+import {parseOfficialPages,officialPublication,selectOfficialReport,officialIndexUrls,discoverOfficialReport,readOfficialInjuries,extractOfficialPages} from './sc3-nba-official-injuries.mjs';
 import {settleCBSObservation,cbsBoundMetrics} from './sc3-cbs-settlement.mjs';
 import {modelPromotion} from './sc3-model-promotion.mjs';
 import {NINE_CAT} from './decision-core.mjs';
-import {historicalCoverage,historicalScoreboardPath} from './sc3-final-archive.mjs';
+import {historicalCoverage,historicalScoreboardPath,readHistoricalCoverage} from './sc3-final-archive.mjs';
+import {safeP22SourceFailure,readP22Evidence} from './sc3-p22-source-diagnostics.mjs';
 import {p22Cron,writerConfig} from './sc3-p22-writer.mjs';
 const url='https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-11-24_01_00PM.pdf';
 const publishedAt='2026-11-24T18:00:00.000Z',observedAt='2026-11-24T18:15:00.000Z';
@@ -69,4 +70,52 @@ test('P2 writer route remains inert in preview or without explicit production fl
  await p22Cron({method:'POST',headers:{authorization:'Bearer '+'x'.repeat(40)}},res,{env:on,makeWriter});assert.equal(state.http,405);assert.equal(invoked,0);
  assert.throws(()=>writerConfig({...on,SC3_P2_WRITER_DATABASE_URL:'postgres://sc3_app:fixture@db.bmsfbcuausbfzheufjtc.supabase.co/postgres'}),/role invalid/);
  assert.throws(()=>writerConfig({...on,VERCEL_ENV:'preview'}),/disabled/);
+});
+
+test('dual official indices choose newest published candidate and tolerate one unavailable source',async()=>{
+ const now=new Date(observedAt);
+ const [official,main]=officialIndexUrls(now);
+ assert.equal(official,'https://official.nba.com/nba-injury-report-2026-27-season/');
+ assert.equal(officialIndexUrls(new Date('2027-01-02T12:00Z'))[0],official);
+ const older=url.replace('01_00PM','12_45PM'),future=url.replace('01_00PM','02_00PM');
+ const calls=[];
+ const fetcher=async u=>{calls.push(u);if(u===official)throw Error('network');if(u===main)return new Response(older+' '+url+' '+future);if(u===url)return new Response('%PDF-fixture');throw Error('unexpected URL');};
+ const selected=await discoverOfficialReport({fetcher,now});
+ assert.equal(selected.url,url);assert.equal(selected.indexCoverage,1);assert.equal(selected.indexUrl,main);
+ const result=await readOfficialInjuries({fetcher,now,transaction:fn=>fn({query:async()=>({rows:catalog})}),extract:async()=>[page1,page2]});
+ assert.equal(result.matched,2);assert.equal(result.indexCoverage,1);assert.match(result.documentDigest,/^[a-f0-9]{64}$/);assert.ok(calls.includes(url));
+ const newer=url.replace('01_00PM','01_15PM');
+ const latest=await discoverOfficialReport({now,fetcher:async u=>new Response(u===official?newer:url)});
+ assert.equal(latest.url,newer);assert.equal(latest.indexCoverage,2);
+ await assert.rejects(discoverOfficialReport({now,fetcher:async()=>new Response(future)}),/Fresh official report unavailable/);
+ await assert.rejects(discoverOfficialReport({now,fetcher:async()=>new Response('x',{status:503})}),/NBA report index unavailable/);
+});
+test('serverless text extractor actually loads a minimal generated PDF without native rendering',async()=>{
+ // Deterministic PDF fixture generated here, not a real NBA report or prediction.
+ const stream='BT /F1 12 Tf 50 100 Td (Fixture PDF text) Tj ET';
+ const objs=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>','<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>','<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>','<< /Length '+stream.length+' >>\nstream\n'+stream+'\nendstream'];
+ let pdf='%PDF-1.4\n',offsets=[0];
+ for(const [i,obj] of objs.entries()){offsets.push(pdf.length);pdf+=(i+1)+' 0 obj\n'+obj+'\nendobj\n';}
+ const start=pdf.length;pdf+='xref\n0 6\n0000000000 65535 f \n'+offsets.slice(1).map(n=>String(n).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+start+'\n%%EOF\n';
+ const pages=await extractOfficialPages(new TextEncoder().encode(pdf));
+ assert.equal(pages.length,1);assert.equal(pages[0].width,842);assert.ok(pages[0].items.some(i=>i.str==='Fixture PDF text'));
+});
+test('historical coverage retries only transient read errors and does not invent an archive',async()=>{
+ const team=id=>({team:[[{team_key:'478.l.85892.t.'+id}],{}]});
+ const raw={league:[{league_key:'478.l.85892'},{scoreboard:{0:{matchups:{0:{matchup:{week:'5',week_start:'2026-11-16',week_end:'2026-11-22',status:'midevent',0:{teams:{0:team(5),1:team(2)}}}}}}}}]};
+ const malformed=structuredClone(raw);malformed.league[1].scoreboard[0].matchups[0].matchup[0].teams[0].team[0]={bad:true};
+ const rows=[{payload:raw,observed_at:'2026-11-22T18:00Z'},{payload:malformed,observed_at:'2026-11-22T19:00Z'}];
+ let attempts=0,reads=0;
+ const transaction=async fn=>{if(++attempts===1)throw Object.assign(Error('connection timeout'),{code:'08006'});return fn({query:async sql=>{reads++;return {rows:sql.includes('to_regclass')?[{ready:false}]:rows};}});};
+ const h=await readHistoricalCoverage({transaction,now:new Date(observedAt),pause:async()=>{}});
+ assert.equal(attempts,2);assert.equal(reads,2);assert.equal(h.observations,2);assert.equal(h.unusableObservations,1);assert.equal(h.closedTargets.length,1);assert.equal(h.archiveStatus,'UNAVAILABLE');assert.equal(h.verifiedFinals,null);
+ attempts=0;
+ await assert.rejects(readHistoricalCoverage({transaction:async()=>{attempts++;throw Object.assign(Error('permission denied'),{code:'42501'});},pause:async()=>{}}),/permission denied/);
+ assert.equal(attempts,1);
+});
+test('source diagnostics expose only a safe category even if provider errors contain secrets',async()=>{
+ assert.equal(safeP22SourceFailure(Error('Cannot find package secret-fixture')),'pdf_dependency_unavailable');
+ assert.equal(safeP22SourceFailure(Error('opaque secret-fixture')),'unknown_source_failure');
+ assert.deepEqual(await readP22Evidence(async()=>{throw Error('permission denied secret-fixture');}),{data:null,failure:'database_permission'});
+ assert.deepEqual(await readP22Evidence(async()=>({observations:12})),{data:{observations:12},failure:null});
 });

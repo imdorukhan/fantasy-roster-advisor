@@ -12,7 +12,7 @@ function fixtureFromRaw(raw){
   if(!/^\d+$/.test(k))continue;
   const m=v?.matchup,week=Number(m?.week);
   if(!Number.isInteger(week)||week<1||week>30||!day(m.week_start)||!day(m.week_end)||m.week_start>m.week_end)continue;
-  const keys=Object.entries(m?.['0']?.teams??{}).filter(([k])=>/^\d+$/.test(k)).map(([,t])=>t?.team?.[0]?.find(x=>typeof x?.team_key==='string')?.team_key);
+  const keys=Object.entries(m?.['0']?.teams??{}).filter(([k])=>/^\d+$/.test(k)).map(([,t])=>{const meta=t?.team?.[0];return Array.isArray(meta)?meta.find(x=>typeof x?.team_key==='string')?.team_key:null;});
   if(keys.length!==2||new Set(keys).size!==2||!keys.includes(myKey))continue;
   const rival=keys.find(k=>k!==myKey);
   if(!/^478\.l\.85892\.t\.(?:[1-9]|1[0-4])$/.test(rival??''))continue;
@@ -21,10 +21,12 @@ function fixtureFromRaw(raw){
  return out;
 }
 export function historicalCoverage(rows,now=new Date()){
- const byWeek=new Map(),closed=new Map(),today=leagueToday(now);
+ const byWeek=new Map(),closed=new Map(),today=leagueToday(now);let unusableObservations=0;
  for(const row of rows){
-  if(!Number.isFinite(Date.parse(row.observed_at))||Date.parse(row.observed_at)>+now)continue;
-  for(const f of fixtureFromRaw(row.payload)){
+  if(!Number.isFinite(Date.parse(row?.observed_at))||Date.parse(row.observed_at)>+now){unusableObservations++;continue;}
+  const fixtures=fixtureFromRaw(row.payload);
+  if(fixtures.length!==1){unusableObservations++;continue;}
+  for(const f of fixtures){
    const key=f.week+'|'+f.weekStart+'|'+f.weekEnd+'|'+f.opponentId;
    const entry=byWeek.get(key)??{...f,observations:0,posteventCandidates:0,firstObserved:row.observed_at,lastObserved:row.observed_at};
    entry.observations++;
@@ -36,17 +38,22 @@ export function historicalCoverage(rows,now=new Date()){
   }
  }
  const conflicts=new Set([...closed.values()].filter((a,i,arr)=>arr.some(b=>a.week===b.week&&(a.opponentId!==b.opponentId||a.weekStart!==b.weekStart||a.weekEnd!==b.weekEnd))).map(a=>a.week));
- return {observations:rows.length,weeks:[...byWeek.values()].sort((a,b)=>a.week-b.week),closedTargets:[...closed.values()].filter(f=>!conflicts.has(f.week)).sort((a,b)=>a.week-b.week),conflictingWeeks:[...conflicts],legacySourceVerified:false,readOnly:true};
+ return {observations:rows.length,unusableObservations,weeks:[...byWeek.values()].sort((a,b)=>a.week-b.week),closedTargets:[...closed.values()].filter(f=>!conflicts.has(f.week)).sort((a,b)=>a.week-b.week),conflictingWeeks:[...conflicts],legacySourceVerified:false,readOnly:true};
 }
-export async function readHistoricalCoverage({transaction=withScopedTransaction,now=new Date()}={}){
- return transaction(async c=>{
-  const data=(await c.query("select payload,observed_at::text from sc3.yahoo_league_snapshot_history where league_id=85892 and section='scoreboard' and observed_at<=$1::timestamptz order by observed_at desc limit 500",[now])).rows;
-  const result=historicalCoverage(data,now);
+export function transientHistoryRead(error){
+ const code=String(error?.code??'');
+ return /^08/.test(code)||['53300','57P03','57014','40001','ECONNRESET','ETIMEDOUT'].includes(code)||/timeout exceeded when trying to connect|connection terminated unexpectedly/i.test(String(error?.message??''));
+}
+export async function readHistoricalCoverage({transaction=withScopedTransaction,now=new Date(),pause=ms=>new Promise(resolve=>setTimeout(resolve,ms))}={}){
+ const read=()=>transaction(async c=>{
+  const data=(await c.query("select payload,observed_at::text from sc3.yahoo_league_snapshot_history where league_id=85892 and section='scoreboard' and observed_at<=$1::timestamptz order by observed_at desc limit 501",[now])).rows;
+  const result={...historicalCoverage(data.slice(0,500),now),truncated:data.length>500};
   const exists=(await c.query("select to_regclass('sc3.p2_yahoo_final_observations') is not null as ready")).rows[0]?.ready;
   if(!exists)return {...result,archiveStatus:'UNAVAILABLE',verifiedFinals:null};
   const archive=(await c.query("select week,opponent_id,week_start::text,week_end::text,max(observed_at)::text as last_observed,count(*)::int as observations from sc3.p2_yahoo_final_observations where league_id=85892 and observed_at<=$1::timestamptz group by week,opponent_id,week_start,week_end order by week",[now])).rows;
   return {...result,archiveStatus:'READY',verifiedFinals:archive};
  });
+ try{return await read();}catch(error){if(!transientHistoryRead(error))throw error;await pause(200);return read();}
 }
 export function historicalScoreboardPath(week){
  if(!Number.isInteger(week)||week<1||week>30)throw Error('Invalid Yahoo week');
