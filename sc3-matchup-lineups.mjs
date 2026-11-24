@@ -85,7 +85,7 @@ export async function readMatchupLineups({now=new Date(),fetcher=fetch,includePr
     return {date,scheduleVerified:schedule.status==='fulfilled',baselineAligned:schedule.status==='fulfilled' && schedule.value.baselineAligned,lineups};
   }));
   const report = {
-    mode:'SC3_MATCHUP_LINEUPS',week:official.week,scoreboardObservedAt:official.observedAt,
+    mode:'SC3_MATCHUP_LINEUPS',week:official.week,weekStart:official.weekStart,weekEnd:official.weekEnd,scoreboardObservedAt:official.observedAt,
     observedAt:now.toISOString(),readOnly:true,scoreVerified:Boolean(scored),
     complete:days.every(day=>day.scheduleVerified&&day.lineups.every(team=>team.verified)),
     days:days.map(({date,scheduleVerified,lineups})=>({date,scheduleVerified,lineups:lineups.map(({id,verified})=>({id,verified}))})),
