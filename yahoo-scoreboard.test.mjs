@@ -101,3 +101,15 @@ test('official 9-CAT shooting percentages must agree with published makes and at
   partial.league[1].scoreboard[0].matchups[0].matchup['0'].teams['1'].team[1].team_stats.stats.filter(r=>r.stat.stat_id!=='9007006');
  assert.throws(()=>officialMatchupFromScoreboard(partial,opts),/shooting/);
 });
+
+test('unreal Yahoo week calendar dates must not qualify as verified current matchup',()=>{
+ for(const [field,value] of [['week_end','2026-11-31'],['week_start','2026-11-00'],['week_end','2026-11-99']]){
+  const broken=weekSixUnscored();
+  broken.league[1].scoreboard[0].matchups[0].matchup[field]=value;
+  assert.throws(
+   ()=>currentMatchupIdentityFromScoreboard(broken,weekSixOptions),
+   /current Yahoo matchup required|Yahoo matchup.*unavailable|Yahoo.*date/i,
+   field+'='+value+' is not a real calendar date'
+  );
+ }
+});
