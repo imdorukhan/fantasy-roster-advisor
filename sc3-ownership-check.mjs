@@ -17,5 +17,16 @@ export async function recheckOwnership(snapshot,{fetcher=fetch,collector=collect
  if(groups[1][2].some(p=>a.has(p.yahooId)))throw Error('Conflicting live Yahoo ownership');
  const summary=Object.fromEntries(groups.map(([key,data])=>[key,data]));
  const status=Object.values(summary).every(p=>p.added+p.removed+p.changed===0)?'MATCH':'CHANGED';
- return {status,...summary,readOnly:true};
+ const live=Object.fromEntries(groups.map(([key,data,players])=>[key,{count:players.length,observedAt:data.observedAt,players,source:'Yahoo live league player list'}]));
+ return {status,...summary,live,readOnly:true};
+}
+
+export async function stableLiveOwnership(snapshot,options={}){
+ const first=await recheckOwnership(snapshot,options);
+ if(first.status==='MATCH')return first;
+ // Membership changed since the saved batch. Require a separate complete pass
+ // with exact statuses, names, teams, and eligibility before use.
+ const second=await recheckOwnership(first.live,options);
+ if(second.status!=='MATCH')return {...first,status:'UNSTABLE',live:null,repeat:{freeAgents:second.freeAgents,waivers:second.waivers}};
+ return {...first,status:'LIVE_VERIFIED',live:second.live,repeat:{freeAgents:second.freeAgents,waivers:second.waivers}};
 }
