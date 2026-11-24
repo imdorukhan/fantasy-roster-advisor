@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {officialMatchupFromScoreboard,currentMatchupIdentityFromScoreboard,YAHOO_STAT_IDS} from './yahoo-scoreboard.mjs';
+import {officialMatchupFromScoreboard,currentMatchupIdentityFromScoreboard,currentMatchupCategoryCoverage,YAHOO_STAT_IDS} from './yahoo-scoreboard.mjs';
 import {categoryComparison} from './decision-core.mjs';
 const ours={'FG%':.50,'FT%':.875,'3PM':3,PTS:44,REB:15,AST:13,STL:7,BLK:4,TO:3};
 const opponent={'FG%':.48,'FT%':.850,'3PM':5,PTS:50,REB:20,AST:12,STL:4,BLK:2,TO:7};
@@ -112,4 +112,26 @@ test('unreal Yahoo week calendar dates must not qualify as verified current matc
    field+'='+value+' is not a real calendar date'
   );
  }
+});
+
+test('partially scored current Yahoo week reports only verified coverage, never a score',()=>{
+ const p=weekSixUnscored();
+ const teams=p.league[1].scoreboard[0].matchups[0].matchup['0'].teams;
+ for(const [index,values] of [['0',ours],['1',opponent]]){
+  for(const entry of teams[index].team[1].team_stats.stats){
+   const cat=Object.keys(YAHOO_STAT_IDS).find(k=>YAHOO_STAT_IDS[k]===String(entry.stat.stat_id));
+   entry.stat.value=cat==='FT%'?null:String(values[cat]);
+  }
+ }
+ const out=currentMatchupCategoryCoverage(p,weekSixOptions);
+ assert.equal(out.publishedCount,8);
+ assert.equal(out.totalCategories,9);
+ assert.deepEqual(out.missingCategories,['FT%']);
+ assert.equal(out.scoreVerified,false);
+ assert.equal('score' in out,false);
+ assert.equal('categoryValues' in out,false);
+ const corrupted=structuredClone(p);
+ const raw=corrupted.league[1].scoreboard[0].matchups[0].matchup['0'].teams['0'].team[1].team_stats.stats;
+ raw.find(x=>String(x.stat.stat_id)==='12').stat.value='not-a-score';
+ assert.throws(()=>currentMatchupCategoryCoverage(corrupted,weekSixOptions),/Invalid published/);
 });

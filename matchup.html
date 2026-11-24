@@ -70,7 +70,12 @@ async function refresh(){
    $('matchup-week-label').textContent='Week '+pending.week+' · '+pending.weekStart+' to '+pending.weekEnd;
    $('observed-time').textContent='Yahoo matchup observed '+new Date(pending.observedAt).toLocaleString();
    $('score-summary').textContent='Stats pending';
-   $('categories').innerHTML='<tr><td colspan="4">Current Yahoo week and opponent verified. Official 9-CAT totals have not been published.</td></tr>';
+   const coverage=pending.categoryCoverage;
+   const description=coverage?.scoreVerified===false&&Number.isInteger(coverage.publishedCount)&&coverage.totalCategories===9&&
+    Array.isArray(coverage.missingCategories)&&coverage.missingCategories.every(x=>['FG%','FT%','3PM','PTS','REB','AST','STL','BLK','TO'].includes(x))
+     ? ' Yahoo category values present: '+coverage.publishedCount+'/9; awaiting '+coverage.missingCategories.join(', ')+'.'
+     : '';
+   $('categories').innerHTML='<tr><td colspan="4">Current Yahoo week and opponent verified. Official 9-CAT result has not been published in full.'+esc(description)+'</td></tr>';
    $('swing').textContent='Category comparisons and projections are unavailable until official Yahoo totals are published.';
   }else{
    $('score-summary').textContent=state.requiresOwner?'Sign-in required':state.weekUnverified?'Week unverified':'Unverified';
