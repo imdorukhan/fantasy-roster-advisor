@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 import {NINE_CAT,categoryComparison} from './decision-core.mjs';
-export const MODEL_VERSION='sc3-bootstrap-v1';
+import {MODELS,modelWeights} from './sc3-model-weights.mjs';
+export const MODEL_VERSION='sc3-bootstrap-v2';
 export const RAW_KEYS=['3PM','PTS','REB','AST','STL','BLK','TO','FGM','FGA','FTM','FTA'];
 const day=x=>typeof x==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(x)&&Number.isFinite(Date.parse(x+'T12:00Z'))&&new Date(x+'T12:00Z').toISOString().slice(0,10)===x;
 export const validBox=s=>RAW_KEYS.every(k=>Number.isSafeInteger(s?.[k])&&s[k]>=0)&&s.FGM<=s.FGA&&s.FTM<=s.FTA&&s['3PM']<=s.FGM;
@@ -24,13 +25,14 @@ export function availableHistory(rows,asOf){
  if(!Number.isFinite(cutoff))throw Error('Invalid forecast cutoff');
  return rows.filter(r=>Number.isFinite(stamp(r.observed_at))&&Number.isFinite(stamp(r.tipoff))&&stamp(r.tipoff)<cutoff&&stamp(r.observed_at)<=cutoff&&stamp(r.observed_at)>=stamp(r.tipoff)&&validBox(r.stats));
 }
-export function forecastMatchup({report,official,logs,asOf,historyThrough,baselineAligned,injuryFeed=null,identityPairs=[],simulations=4000,seed=85892}){
+export function forecastMatchup({report,official,logs,asOf,historyThrough,baselineAligned,injuryFeed=null,identityPairs=[],simulations=4000,seed=85892,model='L10'}){
+ if(!MODELS.includes(model))return blocked('Unknown model');
  if(!Number.isInteger(simulations)||simulations<100||simulations>20000||!Number.isInteger(seed))return blocked('Invalid simulation parameters');
  const cutoff=stamp(asOf),baseline=stamp(official?.observedAt);
  if(!Number.isFinite(cutoff)||!Number.isFinite(baseline)||baseline>cutoff||cutoff-baseline>300000||!baselineAligned||!report?.complete)return blocked('Aligned fresh Yahoo scoreboard and complete lineups required');
  if(!day(historyThrough)||!report.teams||report.teams.length!==2||Number(report.teams[0].id)!==Number(official.ourTeam?.id)||Number(report.teams[1].id)!==Number(official.opponent?.id)||report.teams[0].id===report.teams[1].id||!validBaseline(official.ourTeam)||!validBaseline(official.opponent))return blocked('Verified team identities and shooting totals required');
  const history=new Map(),seen=new Set();
- for(const r of availableHistory(logs,asOf)){
+ for(const r of availableHistory(logs,asOf).sort((a,b)=>stamp(a.tipoff)-stamp(b.tipoff)||String(a.event_id).localeCompare(String(b.event_id)))){
   const key=r.yahoo_id+'|'+r.event_id;
   if(!r.event_id||seen.has(key))return blocked('Duplicate or missing history event ID');
   seen.add(key);if(!history.has(r.yahoo_id))history.set(r.yahoo_id,[]);history.get(r.yahoo_id).push(r.stats);
@@ -58,7 +60,8 @@ export function forecastMatchup({report,official,logs,asOf,historyThrough,baseli
     const decision=injuryDecision(verified?r:null,game.date);
     if(decision.uncertain)uncertain.add(p.yahooId);
     if(decision.exclude)excludedStarts++;
-    starters.push({side,samples,exclude:decision.exclude,uncertain:decision.uncertain});
+    const weights=modelWeights(samples.length,model);let cumulative=0;const cdf=weights.map(w=>cumulative+=w);cdf[cdf.length-1]=1;
+    starters.push({side,samples,cdf,exclude:decision.exclude,uncertain:decision.uncertain});
    }
   }
  }
@@ -67,7 +70,7 @@ export function forecastMatchup({report,official,logs,asOf,historyThrough,baseli
  const results=scenarios.map(s=>({id:s.id,exclude:s.exclude,stress:s.stress,counts:Object.fromEntries(NINE_CAT.map(k=>[k,{win:0,tie:0,loss:0}])),match:{win:0,tie:0,loss:0},wins:Array(10).fill(0)}));
  for(let n=0;n<simulations;n++){
   // Common random numbers across scenarios; preserve the complete box-score vector.
-  const draws=starters.map(p=>p.samples[Math.floor(rng()*p.samples.length)]);
+  const draws=starters.map(p=>{const rngValue=rng();return p.samples[p.cdf.findIndex(v=>v>rngValue)];});
   for(const s of results){
    const teams=[raw(official.ourTeam),raw(official.opponent)];
    starters.forEach((p,i)=>{if((!s.exclude||!p.exclude)&&(!s.stress||!p.uncertain))for(const k of RAW_KEYS)teams[p.side][k]+=draws[i][k];});
@@ -79,9 +82,14 @@ export function forecastMatchup({report,official,logs,asOf,historyThrough,baseli
   }
  }
  const proportions=o=>Object.fromEntries(Object.entries(o).map(([k,v])=>[k,v/simulations]));
- const inputsDigest=createHash('sha256').update(JSON.stringify({report,official,logs:availableHistory(logs,asOf),injury: freshInjury?[...injuryFeed.rows.entries()]:null,identityPairs,asOf})).digest('hex');
- return {available:true,inputsDigest,modelVersion:MODEL_VERSION,asOf,historyThrough,baselineObservedAt:official.observedAt,simulations,seed,conditional:true,calibrated:false,readOnly:true,
+ const inputsDigest=createHash('sha256').update(JSON.stringify({report,official,logs:availableHistory(logs,asOf),injury: freshInjury?[...injuryFeed.rows.entries()]:null,identityPairs,asOf,model})).digest('hex');
+ return {available:true,inputsDigest,modelVersion:MODEL_VERSION+':'+model,model,asOf,historyThrough,baselineObservedAt:official.observedAt,simulations,seed,conditional:true,calibrated:false,readOnly:true,
   coverage:{starterGames:starters.length,minSample:Number.isFinite(minSample)?minSample:null,injuryFeedVerified:freshInjury,uncertainPlayers:uncertain.size,excludedStarts},
   scenarios:results.map(s=>({id:s.id,matchup:proportions(s.match),categories:NINE_CAT.map(category=>({category,...proportions(s.counts[category])})),categoryWins:s.wins.map(v=>v/simulations),swingTargets:NINE_CAT.filter(k=>official.ourTeam.stats[k]!==undefined&&(k==='TO'?official.ourTeam.stats[k]>=official.opponent.stats[k]:official.ourTeam.stats[k]<=official.opponent.stats[k])).map(category=>({category,win:s.counts[category].win/simulations})).sort((a,b)=>b.win-a.win)})),
   limitations:['Conditional on fixed Yahoo starters and observed game samples; not calibrated real-world probabilities.','Resampling preserves within-game category correlation, not between-player or team correlation.','Injury scenario excludes reported out/doubtful starts before provider estimate; estimated return is not medical clearance. No unverified participation probabilities.','The uncertain-players-sit stress scenario excludes all matched uncertain starts; it is not a likely outcome or calibrated confidence interval.','No future trades, lineup changes, minutes regime changes or replacement-player effects modeled.']};
+}
+
+export function alternativeForecasts(args){
+ const results=MODELS.map(model=>forecastMatchup({...args,model}));
+ return {primary:results.find(f=>f.model==='L10')??results[2],alternatives:results,readOnly:true,selection:'L10 incumbent; alternative models are exploratory, not calibrated'};
 }
