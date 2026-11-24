@@ -29,10 +29,12 @@ test('future observations, duplicate games, bad denominators and incomplete cove
 test('injury exclusion is conditional, never an invented participation probability; turnovers use lower-is-better',()=>{
  const injuryFeed={observedAt:asOf,rows:new Map([['10',{name:'A',nbaTeam:'SAC',status:'Out',reportedReturnDate:'2026-11-27',reportAt:'2026-11-24T18:00:00Z'}]])};
  const f=forecastMatchup({...args,injuryFeed,identityPairs:[{yahoo_id:'10',espn_id:'10'}]});
- assert.equal(f.coverage.excludedStarts,1);assert.equal(f.scenarios.length,2);
+ assert.equal(f.coverage.excludedStarts,1);assert.equal(f.scenarios.length,3);
  assert.equal(f.scenarios[1].categories.find(c=>c.category==='TO').win,1);
  assert.equal(f.scenarios[1].categories.find(c=>c.category==='PTS').loss,1);
  assert.equal(injuryDecision({status:'Day-To-Day'},'2026-11-25').exclude,false);
+ const q=forecastMatchup({...args,injuryFeed:{...injuryFeed,rows:new Map([['10',{...injuryFeed.rows.get('10'),status:'Day-To-Day'}]])},identityPairs:[{yahoo_id:'10',espn_id:'10'}]});
+ assert.deepEqual(q.scenarios[0].matchup,q.scenarios[1].matchup);assert.equal(q.scenarios[2].categories.find(c=>c.category==='PTS').loss,1);
 });
 const source={source:'ESPN',sourceUrl:ESPN_INJURY_SOURCE,espnId:'10',reportAt:'2026-11-24T17:00:00Z',feedObservedAt:'2026-11-24T19:00:00Z',estimatedDate:'2026-11-26',status:'Out'};
 const f=returnForecast(source,asOf);
