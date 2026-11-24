@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import {NINE_CAT,categoryComparison} from './decision-core.mjs';
 export const MODEL_VERSION='sc3-bootstrap-v1';
 export const RAW_KEYS=['3PM','PTS','REB','AST','STL','BLK','TO','FGM','FGA','FTM','FTA'];
@@ -78,7 +79,8 @@ export function forecastMatchup({report,official,logs,asOf,historyThrough,baseli
   }
  }
  const proportions=o=>Object.fromEntries(Object.entries(o).map(([k,v])=>[k,v/simulations]));
- return {available:true,modelVersion:MODEL_VERSION,asOf,historyThrough,baselineObservedAt:official.observedAt,simulations,seed,conditional:true,calibrated:false,readOnly:true,
+ const inputsDigest=createHash('sha256').update(JSON.stringify({report,official,logs:availableHistory(logs,asOf),injury: freshInjury?[...injuryFeed.rows.entries()]:null,identityPairs,asOf})).digest('hex');
+ return {available:true,inputsDigest,modelVersion:MODEL_VERSION,asOf,historyThrough,baselineObservedAt:official.observedAt,simulations,seed,conditional:true,calibrated:false,readOnly:true,
   coverage:{starterGames:starters.length,minSample:Number.isFinite(minSample)?minSample:null,injuryFeedVerified:freshInjury,uncertainPlayers:uncertain.size,excludedStarts},
   scenarios:results.map(s=>({id:s.id,matchup:proportions(s.match),categories:NINE_CAT.map(category=>({category,...proportions(s.counts[category])})),categoryWins:s.wins.map(v=>v/simulations),swingTargets:NINE_CAT.filter(k=>official.ourTeam.stats[k]!==undefined&&(k==='TO'?official.ourTeam.stats[k]>=official.opponent.stats[k]:official.ourTeam.stats[k]<=official.opponent.stats[k])).map(category=>({category,win:s.counts[category].win/simulations})).sort((a,b)=>b.win-a.win)})),
   limitations:['Conditional on fixed Yahoo starters and observed game samples; not calibrated real-world probabilities.','Resampling preserves within-game category correlation, not between-player or team correlation.','Injury scenario excludes reported out/doubtful starts before provider estimate; estimated return is not medical clearance. No unverified participation probabilities.','The uncertain-players-sit stress scenario excludes all matched uncertain starts; it is not a likely outcome or calibrated confidence interval.','No future trades, lineup changes, minutes regime changes or replacement-player effects modeled.']};
