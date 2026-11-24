@@ -175,7 +175,7 @@ export async function buildStreamingPlan(availability, yahooRows, {now=new Date(
       return {available:false,reason:missing.join(' and ')+' coverage unavailable',week,acquisitions,days:coverage};
     }
     // Player-specific scenarios do not use free-agent membership to model starts.
-    if(!skipWaiverPlan&&ownershipCheck?.status==='MATCH'){
+    if(!skipWaiverPlan&&['MATCH','LIVE_VERIFIED'].includes(ownershipCheck?.status)){
       metadata.push(...availability.freeAgents.players);
       metadata.observation={status:'verified',...ownershipCheck.freeAgents};
     }else if(!skipWaiverPlan){
