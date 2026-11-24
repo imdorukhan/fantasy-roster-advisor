@@ -1,4 +1,4 @@
-import {datedYahooRows,upcomingTeams} from './sc3-streaming-plan.mjs';
+import {datedYahooRows,upcomingTeams,fetchScheduleSource} from './sc3-streaming-plan.mjs';
 import {leagueToday,officialMatchupFromScoreboard,currentMatchupIdentityFromScoreboard} from './yahoo-scoreboard.mjs';
 import {bridgeSnapshots} from './sc3-yahoo-bridge.mjs';
 import {readMatchupProjection} from './sc3-matchup-projection.mjs';
@@ -64,9 +64,7 @@ export async function readMatchupLineups({now=new Date(),fetcher=fetch,includePr
   if(!dates.length||dates.at(-1)!==official.weekEnd)throw Error('Yahoo matchup date range could not be verified');
 
   async function source(url, format) {
-    const response = await fetcher(url,{signal:AbortSignal.timeout(8000)});
-    if (!response.ok || response.redirected) throw Error('Source unavailable');
-    return response[format]();
+    return fetchScheduleSource(url,format,fetcher);
   }
   const baseline = scored&&includeProjection&&!freshness(scored.observedAt,{now:now.getTime()}).valid
     ? await readYahooPageBaseline(scored,now,fetcher).catch(()=>scored)
