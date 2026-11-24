@@ -57,6 +57,12 @@ test('verified Week 6 lineups are independently available before Yahoo publishes
  assert.equal(report.teams[0].players.find(p=>p.name==='G')?.games.length,7);
  assert.match(report.projection.blocked.join(' '),/Official Yahoo 9-CAT totals not yet verified/);
  assert.equal(report.projection.endOfWeek,null);
+ let retries=0;
+ const recovered=await readMatchupLineups({now,loadSnapshots:async()=>snapshots,fetcher:async url=>{
+  if(url.includes('dates=20261127')&&++retries===1)return {ok:false,status:503,redirected:false};
+  return fetcher(url);
+ }});
+ assert.equal(retries,2);assert.equal(recovered.complete,true);
  const missing=await readMatchupLineups({
   now,includeProjection:true,loadSnapshots:async()=>snapshots,
   fetcher:async url=>url.includes('/nba/85892/2?date=2026-11-23')
