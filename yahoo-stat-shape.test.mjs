@@ -10,6 +10,7 @@ test('owner-only Yahoo diagnostics reveal structural coverage mismatch without l
  assert.equal(shape.statBlocks,1);
  assert.equal(shape.coverageTypes.season,1);
  assert.equal(shape.statRows,1);
+ assert.equal(shape.coverageFingerprints['string:6:'+ (await import('node:crypto')).createHash('sha256').update('season').digest('hex').slice(0,12)],1);
  assert.ok(!JSON.stringify(shape).includes('TEST PRIVATE PLAYER'));
  assert.ok(!JSON.stringify(shape).includes('SECRET_STUB'));
  const r=await loadPlayerStats({gameKey:'478',playerIds:['42'],coverage:'average_season',diagnostics:true,

@@ -1,8 +1,10 @@
 // Counts-only response-shape diagnostics for an already authorized Yahoo API read.
 // Never returns names, IDs, raw stats, URLs, response bodies or credentials.
+import {createHash} from 'node:crypto';
 export function inspectYahooStatShape(raw,requestedIds=[]){
  const expected=new Set(requestedIds.map(String)),matched=new Set();
  const coverageTypes={average_season:0,season:0,lastweek:0,lastmonth:0,unknown:0};
+ const coverageFingerprints={};
  let playerContainers=0,statBlocks=0,matchingStatBlocks=0,statRows=0,missingIdContainers=0,visited=0,truncated=false;
  const walk=(value,depth=0)=>{
   if(!value||typeof value!=='object'||depth>24)return;
@@ -20,7 +22,13 @@ export function inspectYahooStatShape(raw,requestedIds=[]){
     statBlocks++;
     if(matchedId)matchingStatBlocks++;
     statRows+=Array.isArray(stats.stats)?stats.stats.length:0;
-    const name=String(stats.coverage_type??'');
+    const rawType=stats.coverage_type;
+    const kind=rawType===null?'null':typeof rawType;
+    const normalized=typeof rawType==='string'?rawType.trim().toLowerCase():kind;
+    const digest=createHash('sha256').update(normalized).digest('hex').slice(0,12);
+    const fingerprint=kind+':'+normalized.length+':'+digest;
+    coverageFingerprints[fingerprint]=(coverageFingerprints[fingerprint]||0)+1;
+    const name=String(rawType??'');
     if(Object.prototype.hasOwnProperty.call(coverageTypes,name)&&name!=='unknown')coverageTypes[name]++;
     else coverageTypes.unknown++;
    }
@@ -29,5 +37,5 @@ export function inspectYahooStatShape(raw,requestedIds=[]){
  };
  walk(raw);
  return {schema:'counts_only',playerContainers,matchingPlayerIds:matched.size,missingIdContainers,
-  statBlocks,matchingStatBlocks,statRows,coverageTypes,truncated};
+  statBlocks,matchingStatBlocks,statRows,coverageTypes,coverageFingerprints,truncated};
 }
