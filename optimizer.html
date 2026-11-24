@@ -83,9 +83,15 @@ function renderProjection(projection){
  const scenario=projection.endOfWeek;
  const outcome=scenario?'<p><strong>Estimated week-end score '+scenario.score.ours+' – '+scenario.score.opponent+' – '+scenario.score.ties+'</strong></p><div class="scroll"><table><thead><tr><th>Category</th><th>Our estimated total</th><th>Opponent estimated total</th><th>Margin</th></tr></thead><tbody>'+scenario.rows.map(row=>'<tr><td>'+esc(row.category)+'</td><td>'+fmt(row.ours,row.category)+'</td><td>'+fmt(row.opponent,row.category)+'</td><td>'+gap(row.absoluteGap,row.category)+'</td></tr>').join('')+'</tbody></table></div>'
   :'<p>Full week-end projection unavailable.</p><ul>'+projection.blocked.map(reason=>'<li>'+esc(reason)+'</li>').join('')+'</ul>';
- panel.innerHTML=header+baseline+coverage+(totals?'<h3>Expected production from covered upcoming starts</h3>'+totals:'')+outcome;
+ panel.innerHTML=header+baseline+coverage+(totals?'<h3>Expected production from covered upcoming starts</h3>'+totals:'')+outcome+renderForecast(projection.forecast);
 }
 
+function renderForecast(f){
+ if(!f?.available)return '<h3>Matchup Forecast</h3><p>'+esc(f?.reason||'Probabilistic forecast is not enabled in this environment')+'</p>';
+ const percent=v=>(100*v).toFixed(1)+'%';
+ return '<h3>Matchup Forecast · '+esc(f.simulations)+' simulations</h3><p>Conditional empirical frequencies, not calibrated win probabilities. '+esc(f.coverage.starterGames)+' verified starter games; minimum sample '+esc(f.coverage.minSample??'—')+'. Injury feed '+(f.coverage.injuryFeedVerified?'observed':'unavailable')+'; '+esc(f.coverage.uncertainPlayers)+' matched uncertain players.</p>'+
+ f.scenarios.map(s=>'<h4>'+esc(s.id.replaceAll('_',' '))+'</h4><p>Win '+percent(s.matchup.win)+' · Tie '+percent(s.matchup.tie)+' · Loss '+percent(s.matchup.loss)+'</p><div class="scroll"><table><thead><tr><th>Category</th><th>Win</th><th>Tie</th><th>Loss</th></tr></thead><tbody>'+s.categories.map(c=>'<tr><td>'+esc(c.category)+'</td><td>'+percent(c.win)+'</td><td>'+percent(c.tie)+'</td><td>'+percent(c.loss)+'</td></tr>').join('')+'</tbody></table></div><p>Potential swing categories (conditional win frequency): '+s.swingTargets.map(c=>esc(c.category)+' '+percent(c.win)).join(' · ')+'</p>').join('')+'<ul>'+f.limitations.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>';
+}
 async function readMatchupEndpoint(url){
  const options={credentials:'same-origin',cache:'no-store'};
  const first=await fetch(url,options);
@@ -101,7 +107,7 @@ async function refreshLineups(){
  q('projection').textContent='Checking player history coverage…';
  list.textContent='';
  try{
-  const response=await readMatchupEndpoint('/api/auto-data?sc3MatchupLineups=1&projection=1');
+  const response=await readMatchupEndpoint('/api/auto-data?sc3MatchupLineups=1&projection=1&forecast=1');
   if(!response.ok){
    const details=response.status===422?await response.json().catch(()=>null):null;
    if(explainUnavailable(status,response.status,details)){renderProjection(null);return;}
