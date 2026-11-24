@@ -137,12 +137,17 @@ export function currentMatchupCategoryCoverage(raw,opts={}){
   const key=metadata.find(x=>typeof x?.team_key==='string')?.team_key;
   if(!teams.some(team=>team.key===key)||byTeam.has(key))throw Error('Yahoo stat coverage team mismatch');
   const seen=new Map();
+  const attempts=new Map(stats.map(wrapper=>wrapper?.stat).filter(row=>row&&['9004003','9007006'].includes(String(row.stat_id))).map(row=>[String(row.stat_id),row.value]));
   for(const wrapper of stats){
    const row=wrapper?.stat,id=String(row?.stat_id??'');
    if(!Object.values(YAHOO_STAT_IDS).includes(id))continue;
    if(seen.has(id))throw Error('Duplicate Yahoo category');
    const value=row.value;
-   if(value===null||value===undefined||value===''){seen.set(id,false);continue;}
+   if(value===null||value===undefined||value===''){
+    const pairId=id===YAHOO_STAT_IDS['FT%']?'9007006':id===YAHOO_STAT_IDS['FG%']?'9004003':null;
+    // Yahoo publishes null percentages for an explicit 0/0 shot pair. Do not invent 0%.
+    seen.set(id,pairId&&attempts.get(pairId)==='0/0'?'NO_ATTEMPTS':false);continue;
+   }
    const n=Number(value);
    const percent=id===YAHOO_STAT_IDS['FG%']||id===YAHOO_STAT_IDS['FT%'];
    if(!Number.isFinite(n)||n<0||(percent&&n>1))throw Error('Invalid published Yahoo category');
@@ -153,6 +158,9 @@ export function currentMatchupCategoryCoverage(raw,opts={}){
  const missingCategories=Object.entries(YAHOO_STAT_IDS)
   .filter(([,id])=>teams.some(team=>byTeam.get(team.key)?.get(id)!==true))
   .map(([name])=>name);
- return {publishedCount:9-missingCategories.length,totalCategories:9,missingCategories,
+ const noAttemptCategories=Object.entries(YAHOO_STAT_IDS)
+  .filter(([,id])=>teams.every(team=>byTeam.get(team.key)?.get(id)==='NO_ATTEMPTS'))
+  .map(([name])=>name);
+ return {publishedCount:9-missingCategories.length,totalCategories:9,missingCategories,noAttemptCategories,
   scoreVerified:false,readOnly:true};
 }

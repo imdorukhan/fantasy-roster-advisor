@@ -47,8 +47,10 @@ function explainUnavailable(panel,code,body=null){
   const info=coverage?.scoreVerified===false&&Number.isInteger(coverage.publishedCount)&&coverage.totalCategories===9&&
    Array.isArray(coverage.missingCategories)&&coverage.missingCategories.every(x=>['FG%','FT%','3PM','PTS','REB','AST','STL','BLK','TO'].includes(x))
     ? ' Yahoo values present: '+coverage.publishedCount+'/9. Awaiting '+coverage.missingCategories.join(', ')+'.':'';
+  const noAttempts=Array.isArray(coverage?.noAttemptCategories)?coverage.noAttemptCategories.filter(x=>['FG%','FT%'].includes(x)):[];
+  const attemptNote=noAttempts.length?' Both teams have zero attempts in '+noAttempts.join(', ')+' in this snapshot; no percentage is inferred.':'';
   panel.textContent=body?.mode==='YAHOO_CURRENT_WEEK_STATS_PENDING'||body?.mode==='YAHOO_OFFICIAL_MATCHUP_STATS_PENDING'?
-   'Current Yahoo week and opponent are verified; full 9-CAT totals are not yet published.'+info+' Scores and projections remain unavailable.':
+   'Current Yahoo week and opponent are verified; full 9-CAT totals are not yet published.'+info+attemptNote+' Scores and projections remain unavailable.':
    'Current Yahoo matchup week is not independently verified yet. Prior-week results are not substituted.';
   return true;
  }

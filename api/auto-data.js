@@ -134,6 +134,24 @@ async function sc3CloudHealth(req,res){
 
 export const config={maxDuration:300};
 export default async function handler(req,res){
+ if(req.query?.sc3NbaHistorySync==='1'){
+  const {nbaHistoryCron}=await import('../sc3-freshness-sync.mjs');
+  return nbaHistoryCron(req,res);
+ }
+ if(req.query?.sc3ScoreboardSync==='1'){
+  const {yahooScoreboardCron}=await import('../sc3-freshness-sync.mjs');
+  return yahooScoreboardCron(req,res,{readScoreboard:async()=>{
+   const owner=await loadBackgroundYahooSession();
+   if(!owner)throw Error('Owner authorization unavailable');
+   const client=yahooSessionClient(owner,{read:(token,path)=>read(token,path,{require200:true})});
+   await client.ready();
+   return client.read('league/478.l.85892/scoreboard?format=json');
+  }});
+ }
+ if(req.query?.sc3P0Probe==='1'){
+  const {p0PreviewProbe}=await import('../sc3-p0-preview-probe.mjs');
+  return p0PreviewProbe(req,res);
+ }
  if(req.query?.sc3DepthProbe==='1'){
   const {depthPreviewProbe}=await import('../sc3-depth-sync.mjs');
   return depthPreviewProbe(req,res);

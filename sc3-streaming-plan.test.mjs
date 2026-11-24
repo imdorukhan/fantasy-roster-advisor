@@ -59,3 +59,24 @@ test('week six acquisition budget is readable before Yahoo publishes 9-CAT total
  duplicates.scoreboard.payload.league[1].scoreboard['0'].matchups['1']=structuredClone(duplicates.scoreboard.payload.league[1].scoreboard['0'].matchups['0']);
  assert.throws(()=>yahooWindow(duplicates,new Date('2026-11-23T13:00:00.000Z')),/Exactly one official current Yahoo matchup required/);
 });
+
+import {fetchScheduleSource} from './sc3-streaming-plan.mjs';
+test('ESPN schedule retries transient 503 and accepts verified empty game day',async()=>{
+ let calls=0;
+ const empty={leagues:[{slug:'nba'}],events:[]};
+ const result=await fetchScheduleSource('https://example.invalid','json',async()=>{
+  calls++;
+  return calls===1?{ok:false,status:503}:{ok:true,json:async()=>empty};
+ });
+ assert.equal(calls,2);
+ assert.equal(upcomingTeams(result,'2026-11-26',new Date('2026-11-24T10:00Z')).gameCount,0);
+});
+test('schedule source fails closed on redirects, malformed bodies and persistent transient failure',async()=>{
+ let calls=0;
+ await assert.rejects(fetchScheduleSource('https://example.invalid','json',async()=>{calls++;return {ok:true,redirected:true}}),{code:'source_redirect'});
+ assert.equal(calls,1);
+ await assert.rejects(fetchScheduleSource('https://example.invalid','json',async()=>({ok:true,json:async()=>{throw Error('private body')}})),{code:'source_invalid_body'});
+ calls=0;
+ await assert.rejects(fetchScheduleSource('https://example.invalid','json',async()=>{calls++;return {ok:false,status:429}}),{code:'source_http_transient'});
+ assert.equal(calls,2);
+});

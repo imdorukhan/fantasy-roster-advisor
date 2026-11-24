@@ -135,3 +135,24 @@ test('partially scored current Yahoo week reports only verified coverage, never 
  raw.find(x=>String(x.stat.stat_id)==='12').stat.value='not-a-score';
  assert.throws(()=>currentMatchupCategoryCoverage(corrupted,weekSixOptions),/Invalid published/);
 });
+
+test('explicit 0/0 Yahoo FT attempts explain null FT% without inventing a numeric score',()=>{
+ const p=weekSixUnscored();
+ const teams=p.league[1].scoreboard[0].matchups[0].matchup['0'].teams;
+ for(const [index,values] of [['0',ours],['1',opponent]]){
+  const stats=teams[index].team[1].team_stats.stats;
+  for(const entry of stats){
+   const cat=Object.keys(YAHOO_STAT_IDS).find(k=>YAHOO_STAT_IDS[k]===String(entry.stat.stat_id));
+   entry.stat.value=cat==='FT%'?null:String(values[cat]);
+  }
+  stats.push({stat:{stat_id:'9007006',value:'0/0'}});
+ }
+ const result=currentMatchupCategoryCoverage(p,weekSixOptions);
+ assert.deepEqual(result.noAttemptCategories,['FT%']);
+ assert.equal(result.publishedCount,8);
+ assert.equal(result.scoreVerified,false);
+ assert.equal('score' in result,false);
+ assert.throws(()=>officialMatchupFromScoreboard(p,weekSixOptions),/Missing official FT%/);
+ teams['1'].team[1].team_stats.stats.at(-1).stat.value='0/2';
+ assert.deepEqual(currentMatchupCategoryCoverage(p,weekSixOptions).noAttemptCategories,[]);
+});

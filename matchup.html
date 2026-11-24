@@ -75,7 +75,9 @@ async function refresh(){
     Array.isArray(coverage.missingCategories)&&coverage.missingCategories.every(x=>['FG%','FT%','3PM','PTS','REB','AST','STL','BLK','TO'].includes(x))
      ? ' Yahoo category values present: '+coverage.publishedCount+'/9; awaiting '+coverage.missingCategories.join(', ')+'.'
      : '';
-   $('categories').innerHTML='<tr><td colspan="4">Current Yahoo week and opponent verified. Official 9-CAT result has not been published in full.'+esc(description)+'</td></tr>';
+   const noAttempts=Array.isArray(coverage?.noAttemptCategories)?coverage.noAttemptCategories.filter(x=>['FG%','FT%'].includes(x)):[];
+   const attemptNote=noAttempts.length?' Both teams have zero attempts in '+noAttempts.join(', ')+' in this snapshot; no percentage is inferred.':'';
+   $('categories').innerHTML='<tr><td colspan="4">Current Yahoo week and opponent verified. Official 9-CAT result has not been published in full.'+esc(description+attemptNote)+'</td></tr>';
    $('swing').textContent='Category comparisons and projections are unavailable until official Yahoo totals are published.';
   }else{
    $('score-summary').textContent=state.requiresOwner?'Sign-in required':state.weekUnverified?'Week unverified':'Unverified';
