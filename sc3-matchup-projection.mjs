@@ -95,13 +95,23 @@ export async function readMatchupProjection(report,official,options){
  const linked=catalog.length&&missing.length?await verifyMissingYahooPlayers(missing,catalog,options.fetcher):[];
  const pairs=[...verified,...linked.map(row=>({yahoo_id:row.yahooId,espn_id:row.espnId}))];
  const logs=historyThrough&&pairs.length?await withScopedTransaction(async client=>(await client.query(`
-     select i.yahoo_id,g.stats
+     select i.yahoo_id,g.stats,g.event_id,g.tipoff::text,g.observed_at::text
      from jsonb_to_recordset($1::jsonb) as i(yahoo_id text,espn_id text)
      cross join lateral (
-       select l.stats from sc3.sc3_nba_game_logs l
+       select l.stats,l.event_id,l.tipoff,l.observed_at from sc3.sc3_nba_game_logs l
        join sc3.sc3_nba_sync_days d using(game_day)
-       where l.espn_id=i.espn_id and l.game_day<=$2::date and d.status='complete'
+       where l.espn_id=i.espn_id and l.game_day<=$2::date and d.status='complete' and l.observed_at<=$3::timestamptz and d.observed_at<=$3::timestamptz
        order by l.game_day desc,l.tipoff desc,l.event_id desc limit 10
-     ) g`,[JSON.stringify(pairs),historyThrough])).rows):[];
- return matchupProjection(report,official,logs,historyThrough,options);
+     ) g`,[JSON.stringify(pairs),historyThrough,options.now])).rows):[];
+ const projection=matchupProjection(report,official,logs,historyThrough,options);
+ if(options.includeForecast){
+  const {forecastMatchup}=await import('./sc3-forecast.mjs');
+  if(!projection.endOfWeek)projection.forecast={available:false,reason:projection.blocked.join('; '),readOnly:true};
+  else{
+   const {fetchEspnInjuryFeed}=await import('./sc3-injury-feed.mjs');
+   const feed=await fetchEspnInjuryFeed({now:new Date(),fetcher:options.fetcher}).catch(()=>null);
+   projection.forecast=forecastMatchup({report,official,logs,historyThrough,baselineAligned:options.baselineAligned,asOf:new Date().toISOString(),identityPairs:pairs,injuryFeed:feed});
+  }
+ }
+ return projection;
 }
