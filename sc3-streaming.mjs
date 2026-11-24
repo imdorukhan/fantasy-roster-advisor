@@ -1,6 +1,7 @@
 import {withScopedTransaction} from './sc3-postgres.mjs';
 import {buildStreamingPlan} from './sc3-streaming-plan.mjs';
 import {attachVerifiedDepth} from './sc3-verified-depth.mjs';
+import {recheckOwnership} from './sc3-ownership-check.mjs';
 
 const leagueId = 85892;
 const maxAgeMs = 30 * 60 * 60 * 1000;
@@ -66,5 +67,9 @@ export async function readStreamingAvailability({includeWaiverImpact=false}={}) 
   const ranked=attachVerifiedDepth(verified,depthRows);
   const result={...ranked,depthCoverage:{...ranked.depthCoverage,queryAvailable:depthQueryAvailable}};
   const yahooRows=Object.fromEntries(rows.map(row=>[row.section,row]));
-  return {...result,plan:await buildStreamingPlan(result,yahooRows,{includeWaiverImpact})};
+  const ownershipCheck=await recheckOwnership(verified).catch(()=>({status:'UNAVAILABLE',readOnly:true}));
+  // Do not recommend a pickup on a changed or incomplete ownership observation.
+  const plan=ownershipCheck.status==='MATCH'?await buildStreamingPlan(result,yahooRows,{includeWaiverImpact,ownershipCheck}):
+    {available:false,reason:ownershipCheck.status==='CHANGED'?'Live Yahoo ownership differs from saved snapshot; await next verified sync':'Live Yahoo ownership verification unavailable',waiverPlan:null};
+  return {...result,ownershipCheck,plan};
 }
