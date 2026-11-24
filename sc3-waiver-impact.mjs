@@ -3,7 +3,7 @@ import {readYahooPageBaseline,verifyMissingYahooPlayers} from './sc3-projection-
 import {leagueToday} from './yahoo-scoreboard.mjs';
 import {withScopedTransaction} from './sc3-postgres.mjs';
 import {teamCode} from './sc3-depth-store.mjs';
-import {missingHistoryCatalog,recoverHistoryCatalog} from './sc3-catalog-recovery.mjs';
+import {missingHistoryCatalog,recoverHistoryCatalog,readDepthAliases,canonicalizeDepthAliases} from './sc3-catalog-recovery.mjs';
 
 const raw=[...NINE_CAT.filter(cat=>!cat.includes('%')),'FGM','FGA','FTM','FTA'];
 function valid(stats){
@@ -95,7 +95,7 @@ export async function enrichWaiverImpact(waiverPlan,matchup,{now,fetcher=fetch})
  const baseline=await readYahooPageBaseline(matchup,now,fetcher).catch(()=>null);
  if(!baseline)return {...waiverPlan,impactStatus:'Current Yahoo matchup baseline unavailable',impactCoverage:0};
  const ids=candidates.map(p=>p.yahooId);
- const {known,catalog,historyThrough,occupied,missingSeeds}=await withScopedTransaction(async c=>{
+ const {known,catalog,historyThrough,occupied,missingSeeds,depthAliases}=await withScopedTransaction(async c=>{
   const historyThrough=(await c.query("select max(game_day)::text as latest from sc3.sc3_nba_sync_days where status='complete' and game_day<$1::date",[leagueToday(now)])).rows[0]?.latest??null;
   const allLinks=(await c.query("select yahoo_id,espn_id from sc3.sc3_player_identity where status='verified'")).rows;
   const known=allLinks.filter(r=>ids.includes(r.yahoo_id));
@@ -107,15 +107,17 @@ export async function enrichWaiverImpact(waiverPlan,matchup,{now,fetcher=fetch})
     from sc3.espn_player_identity e where e.birth_date is not null
   `,[historyThrough])).rows;
   const missingSeeds=await missingHistoryCatalog(c,historyThrough);
-  return {known,catalog,historyThrough,occupied,missingSeeds};
+  const depthAliases=await readDepthAliases(c);
+  return {known,catalog,historyThrough,occupied,missingSeeds,depthAliases};
  });
  const yesterday=new Date(Date.parse(leagueToday(now)+'T12:00:00Z')-86400_000).toISOString().slice(0,10);
  if(!historyThrough||historyThrough<yesterday)return {...waiverPlan,impactStatus:'Latest NBA history has not synced',impactCoverage:0};
  const recovery=await recoverHistoryCatalog(candidates,missingSeeds,fetcher);
  const expanded=[...catalog,...recovery.profiles];
- const precheck=planWaiverIdentityChecks(candidates,known,expanded,{occupied:[...occupied,...known],missingSeeds});
+ const canonical=canonicalizeDepthAliases(candidates,expanded,depthAliases,now);
+ const precheck=planWaiverIdentityChecks(canonical,known,expanded,{occupied:[...occupied,...known],missingSeeds});
  const occupiedIds=new Set([...known,...occupied].map(p=>String(p.espn_id)));
- const linked=precheck.checked.length?(await verifyMissingYahooPlayers(precheck.checked,expanded,fetcher)).filter(p=>!occupiedIds.has(String(p.espnId))):[];
+ const linked=precheck.checked.length?(await verifyMissingYahooPlayers(precheck.checked,expanded,fetcher)).filter(p=>!occupiedIds.has(String(p.espnId))&&(!canonical.find(c=>c.yahooId===p.yahooId)?.depthAliasEspnId||canonical.find(c=>c.yahooId===p.yahooId).depthAliasEspnId===String(p.espnId))):[];
  const pairs=[...known,...linked.map(row=>({yahoo_id:row.yahooId,espn_id:row.espnId}))];
  const logs=pairs.length?await withScopedTransaction(async c=>(await c.query(`
   select i.yahoo_id,g.stats from jsonb_to_recordset($1::jsonb) as i(yahoo_id text,espn_id text)
@@ -126,5 +128,5 @@ export async function enrichWaiverImpact(waiverPlan,matchup,{now,fetcher=fetch})
   ) g`,[JSON.stringify(pairs),historyThrough])).rows):[];
  const rows=applyWaiverImpact(waiverPlan.rows,logs,baseline);
  return {...waiverPlan,rows,impactCoverage:rows.filter(row=>row.impact).length,impactChecked:candidates.length,
-  impactDiagnostics:{...waiverImpactCoverage(candidates,rows,pairs,logs,precheck),catalogRecovery:{attempted:recovery.attempted,recovered:recovery.profiles.length,missingHistoryIds:missingSeeds.length}},historyThrough,impactObservedAt:baseline.observedAt,displayImpactCoverage:rows.slice(0,25).filter(row=>row.impact).length};
+  impactDiagnostics:{...waiverImpactCoverage(candidates,rows,pairs,logs,precheck),catalogRecovery:{attempted:recovery.attempted,recovered:recovery.profiles.length,missingHistoryIds:missingSeeds.length,verifiedDepthAliases:linked.filter(p=>canonical.some(c=>c.yahooId===p.yahooId&&c.depthAliasEspnId===String(p.espnId))).length}},historyThrough,impactObservedAt:baseline.observedAt,displayImpactCoverage:rows.slice(0,25).filter(row=>row.impact).length};
 }
