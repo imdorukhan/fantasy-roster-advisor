@@ -27,7 +27,7 @@ export async function readLeagueRosters(){
   const links=[...perf.links].map(([yahoo_id,espn_id])=>({yahoo_id,espn_id,persisted:perf.persistedLinks?.has(yahoo_id)??null}));
   const counts=new Map(perf.report.players.map(p=>[String(p.id),p.season?.games??0]));
   const info=profileCoverage(players,links,counts);
-  byId=new Map(info.map(p=>[p.yahooId,{...p,analytics:byEspn.get(p.espnId)??null}]));
+  byId=new Map(info.map(p=>[p.yahooId,{...p,analytics:byEspn.has(p.espnId)?{season:byEspn.get(p.espnId).season,fresh:perf.fresh,historyEnd:perf.historyEnd}:null}]));
   coverage={total:players.length,linked:info.filter(p=>p.espnId).length,withGames:info.filter(p=>p.games>0).length,threeGames:info.filter(p=>p.games>=3).length,persisted:info.filter(p=>p.persisted===true).length,historyThrough:perf.historyEnd,fresh:perf.fresh};
  }catch{}
  const teams=d.teams.map(t=>({...t,players:t.players.map(p=>({...p,profileCoverage:byId.get(p.yahooId)??null}))}));
