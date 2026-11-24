@@ -110,8 +110,9 @@ export async function readMatchupProjection(report,official,options){
   if(!projection.endOfWeek)projection.forecast={available:false,reason:projection.blocked.join('; '),readOnly:true};
   else{
    const {fetchEspnInjuryFeed}=await import('./sc3-injury-feed.mjs');
-   const feed=await fetchEspnInjuryFeed({now:new Date(),fetcher:options.fetcher}).catch(()=>null);
-   const suite=alternativeForecasts({report,official,logs,historyThrough,baselineAligned:options.baselineAligned,asOf:new Date().toISOString(),identityPairs:pairs,injuryFeed:feed});
+   const {readOfficialInjuries}=await import('./sc3-nba-official-injuries.mjs');
+   const [feed,nba]=await Promise.all([fetchEspnInjuryFeed({now:new Date(),fetcher:options.fetcher}).catch(()=>null),readOfficialInjuries({fetcher:options.fetcher}).catch(()=>null)]);
+   const suite=alternativeForecasts({report,official,logs,historyThrough,baselineAligned:options.baselineAligned,asOf:new Date().toISOString(),identityPairs:pairs,injuryFeed:feed,officialInjuries:nba});
    projection.forecast=suite.primary;projection.alternativeForecasts=suite.alternatives;
   }
  }
