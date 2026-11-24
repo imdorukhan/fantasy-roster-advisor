@@ -7,7 +7,7 @@ import {runP21Cycle} from './sc3-p21-cycle.mjs';
 import {NINE_CAT,categoryComparison} from './decision-core.mjs';
 const box={PTS:11,REB:4,AST:3,STL:1,BLK:1,TO:1,FGM:4,FGA:8,FTM:2,FTA:2,'3PM':1,MIN:25};
 const stamp=d=>'2026-11-'+String(d).padStart(2,'0')+'T02:00:00Z';
-const logs=Array.from({length:20},(_,i)=>({espn_id:'1',event_id:String(i+1),tipoff:stamp(i+1),observed_at:stamp(i+1).replace('02:','08:'),stats:{...box,PTS:i+1}}));
+const logs=Array.from({length:20},(_,i)=>({espn_id:'1',event_id:String(i+1),tipoff:stamp(i+1),observed_at:stamp(i+1).replace('02:','08:'),stats:{...box,PTS:i+1,REB:2+i%5,AST:1+i%4,STL:i%3,BLK:i%2,TO:i%4,FGM:3+i%3,FGA:8,FTM:1+i%2,FTA:2,'3PM':i%3}}));
 test('all seven models use normalized weights; shooting estimates pool attempts and omit zero attempts',()=>{
  for(const m of MODELS)assert.ok(Math.abs(modelWeights(20,m).reduce((a,b)=>a+b,0)-1)<1e-12);
  assert.equal(modelWeights(20,'L3').filter(Boolean).length,3);
