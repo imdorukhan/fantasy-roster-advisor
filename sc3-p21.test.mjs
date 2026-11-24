@@ -54,3 +54,13 @@ test('collection cycle refuses implicit shared database or missing collectors',a
  await assert.rejects(runP21Cycle(),/Dedicated/);
  await assert.rejects(runP21Cycle({writerTransaction:async()=>{}}),/collectors/);
 });
+
+test('coverage-based chronology uses only observation timing and preserves chronological separation',()=>{
+ const backfilled=logs.map((r,i)=>i<12?{...r,observed_at:'2026-11-13T00:00:00Z'}:r);
+ const a=compareModels(backfilled,{asOf:'2026-11-24T00:00:00Z',split:'observation-coverage'});
+ assert.equal(a.validationStart,'2026-11-13');assert.equal(a.testStart,'2026-11-17');
+ assert.ok(a.counts.validation>0&&a.counts.test>0);
+ const changed=backfilled.map((r,i)=>i>=16?{...r,stats:{...r.stats,PTS:1000}}:r);
+ const b=compareModels(changed,{asOf:'2026-11-24T00:00:00Z',split:'observation-coverage'});
+ assert.equal(a.selected,b.selected);assert.deepEqual(a.validation,b.validation);
+});
