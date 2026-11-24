@@ -41,7 +41,7 @@ export function rankWaiverOpportunities(candidates,days,starters,{dropId=null}={
 
 export async function readWaiverOpportunities(waivers,days,starters,budget,fetcher=fetch,{rankAll=false}={}){
  let verified=waivers.players.filter(p=>p.nbaTeam&&p.eligiblePositions?.length);
- let source='Yahoo SC3 waiver snapshot';
+ let source=waivers.source||'Yahoo SC3 waiver snapshot';
  if(verified.length<waivers.count){
   const url='https://basketball.fantasysports.yahoo.com/nba/85892/players?status=W';
   const response=await fetcher(url,{signal:AbortSignal.timeout(7500),redirect:'error'});
