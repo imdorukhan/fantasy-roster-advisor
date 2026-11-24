@@ -50,14 +50,17 @@ export function parseOfficialPages(pages,catalog,{url,publishedAt,observedAt}){
  const lookup=new Map();
  for(const p of catalog){const key=normalize(p.name)+'|'+teamCode(p.team);if(!lookup.has(key))lookup.set(key,[]);lookup.get(key).push(p);}
  const rows=[],notSubmitted=[],matchedKeys=new Set(),teamGroups=new Set();let gameDate=null,matchup=null,club=null,parsed=0,unmatched=0;
- for(const page of pages){
+ for(const [index,page] of pages.entries()){
   const lines=pageLines(page);
   const header=lines.find(l=>/^Injury Report:/.test(l.all));
   const h=header?.all.match(/^Injury Report:\s*(\d{1,2})\/(\d{1,2})\/(\d{2})\s*(\d{1,2}):(\d{2})\s*(AM|PM)$/);
   if(!h||easternStamp(2000+Number(h[3]),+h[1],+h[2],+h[4],+h[5],h[6])!==publishedAt)throw Error('NBA report title mismatch');
   const tableHeader=lines.find(l=>l.all.includes('Game Date')&&l.all.includes('Player Name')&&l.all.includes('Current Status'));
-  if(!tableHeader)throw Error('NBA report table header missing');
-  for(const l of lines.filter(x=>x.y<tableHeader.y&&!/^Page \d+ of \d+$/.test(x.all))){
+  if(index===0&&!tableHeader)throw Error('NBA report table header missing');
+  const footer=lines.find(l=>/^Page \d+ of \d+$/.test(l.all));
+  if(footer?.all!=='Page '+(index+1)+' of '+pages.length)throw Error('NBA report page sequence mismatch');
+  // The real PDF repeats the report title, but omits column headers on continuation pages.
+  for(const l of lines.filter(x=>x.y<(tableHeader?.y??header.y)&&x.y>footer.y)){
    const [date,,game,team,player,status,reason]=l.cells;
    if(date){
     const m=date.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(!m)throw Error('NBA game date format changed');
@@ -76,7 +79,7 @@ export function parseOfficialPages(pages,catalog,{url,publishedAt,observedAt}){
    const espnId=String(candidates[0].espnId),key=espnId+'|'+gameDate;
    if(!/^\d{1,12}$/.test(espnId)||matchedKeys.has(key))throw Error('Duplicate NBA report identity');
    matchedKeys.add(key);
-   rows.push({espnId,name:candidates[0].name,nbaTeam:club,gameDate,status,reason,source:'NBA_OFFICIAL',sourceUrl:url,publishedAt,observedAt,kind:'GAME_STATUS_NOT_RETURN_ESTIMATE'});
+   rows.push({espnId,name:candidates[0].name,nbaTeam:club,gameDate,status,reasonExcerpt:reason||null,source:'NBA_OFFICIAL',sourceUrl:url,publishedAt,observedAt,kind:'GAME_STATUS_NOT_RETURN_ESTIMATE'});
   }
  }
  if(!teamGroups.size||(!parsed&&!notSubmitted.length))throw Error('NBA report coverage unavailable');
