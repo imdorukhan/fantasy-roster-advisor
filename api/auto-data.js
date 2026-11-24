@@ -195,9 +195,28 @@ export default async function handler(req,res){
    return response(res,200,await readLeagueRosters());
   }catch{return response(res,503,{error:'Verified Yahoo league rosters unavailable'});}
  }
+ if(req.query?.sc3P22Collect==='1'){
+  const {p22Cron}=await import('../sc3-p22-writer.mjs');
+  const collectors={
+   collectESPN:async()=> (await import('../sc3-injury-feed.mjs')).fetchEspnInjuryFeed(),
+   collectCBS:async()=> (await import('../sc3-cbs-injuries.mjs')).readCBSInjuries(),
+   collectOfficial:async()=> (await import('../sc3-nba-official-injuries.mjs')).readOfficialInjuries(),
+   collectMatchup:async()=> (await import('../sc3-matchup-lineups.mjs')).readMatchupLineups({includeProjection:true,includeForecast:true}),
+   loadTargets:async()=> (await (await import('../sc3-final-archive.mjs')).readHistoricalCoverage()).closedTargets,
+   readWeek:async path=>{
+    if(!/^league\/478\.l\.85892\/scoreboard;week=(?:[1-9]|[12]\d|30)\?format=json$/.test(path))throw Error('Unexpected historical read path');
+    const owner=await loadBackgroundYahooSession();
+    if(!owner)throw Error('Owner authorization unavailable');
+    const client=yahooSessionClient(owner,{read:(token,path)=>read(token,path,{require200:true})});
+    await client.ready();
+    return client.read(path);
+   }
+  };
+  return p22Cron(req,res,{collectors});
+ }
  if(req.query?.sc3P2Lab==='1'){
   if(!await requireSc3Read(req,res))return;
-  if(process.env.VERCEL_ENV!=='preview'||process.env.SC3_P2_PREVIEW!=='1')return response(res,404,{error:'Not found'});
+  if(!(process.env.VERCEL_ENV==='preview'&&process.env.SC3_P2_PREVIEW==='1'||process.env.VERCEL_ENV==='production'&&process.env.SC3_P2_READ_ENABLED==='1'))return response(res,404,{error:'Not found'});
   try{
    const {readReturnLedger}=await import('../sc3-return-store.mjs');
    const {readGameBacktest}=await import('../sc3-walk-forward.mjs');
@@ -216,7 +235,7 @@ export default async function handler(req,res){
   if(!await requireSc3Read(req,res))return;
   try{
    const {readMatchupLineups}=await import('../sc3-matchup-lineups.mjs');
-   return response(res,200,await readMatchupLineups({includeProjection:req.query?.projection==='1',includeForecast:req.query?.forecast==='1'&&process.env.VERCEL_ENV==='preview'&&process.env.SC3_P2_PREVIEW==='1'}));
+   return response(res,200,await readMatchupLineups({includeProjection:req.query?.projection==='1',includeForecast:req.query?.forecast==='1'&&(process.env.VERCEL_ENV==='preview'&&process.env.SC3_P2_PREVIEW==='1'||process.env.VERCEL_ENV==='production'&&process.env.SC3_P2_READ_ENABLED==='1')}));
   }catch(error){const result=safeMatchupFailure(error);return response(res,result.status,result.body);}
  }
  if(req.query?.sc3Streaming==='1'){
