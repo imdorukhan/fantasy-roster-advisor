@@ -1,4 +1,4 @@
-import {teamCode} from './sc3-depth-store.mjs';
+import {teamCode,teams as nbaTeams} from './sc3-depth-store.mjs';
 import {withScopedTransaction} from './sc3-postgres.mjs';
 export const CBS_SOURCE='https://www.cbssports.com/nba/injuries/';
 const norm=s=>String(s??'').normalize('NFKD').replace(/\p{Diacritic}/gu,'').toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -18,7 +18,7 @@ export function parseCBSInjuries(html,catalog,now=new Date()){
  let parsed=0;
  for(const table of html.matchAll(/<h4\b[^>]*class="TableBase-title[^"]*"[^>]*>([\s\S]*?)<\/h4>[\s\S]*?(<table\b[\s\S]*?<\/table>)/gi)){
   const team=teamCode(table[1].match(/href="\/nba\/teams\/([A-Z]{2,3})\//i)?.[1]?.toUpperCase()??'');
-  if(!/^[A-Z]{3}$/.test(team)||teams.has(team))throw Error('Unverified CBS team section');teams.add(team);
+  if(!nbaTeams.includes(team)||teams.has(team))throw Error('Unverified CBS team section');teams.add(team);
   for(const tr of table[2].matchAll(/<tr\b[^>]*class="TableBase-bodyTr"[^>]*>([\s\S]*?)<\/tr>/gi)){
    const cells=[...tr[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(m=>m[1]);
    if(cells.length!==5)throw Error('Invalid CBS player row');
