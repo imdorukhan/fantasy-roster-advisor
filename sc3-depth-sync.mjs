@@ -82,18 +82,29 @@ export async function depthSync(req,res,{env=process.env,collect=collectDepth,sa
   if (!authorized(req,env.CRON_SECRET)) return res.status(401).json({error:'Unauthorized'});
   if (env.SC3_SHARED_DB !== '1' || env.SC3_DEPTH_SYNC_ENABLED !== '1') return res.status(404).json({error:'Sync disabled'});
   let committed = false;
+  let stage = 'collect';
   const finish = (http,body) => {const result={mode:'SC3_DEPTH_SYNC',completedAt:new Date().toISOString(),committed,...body};log('SC3_DEPTH_SYNC '+JSON.stringify(result));return res.status(http).json(result);};
   try {
     const batch = await collect();
+    stage = 'validate';
     validateRows(batch.rows);
     if (env.SC3_DEPTH_SYNC_WRITE !== '1') return finish(200,{status:'VALIDATED',teams:30,positions:150,rows:batch.rows.length,observedAt:batch.observedAt,source:batch.source,snapshotWrites:0});
+    stage = 'save';
     let saved;
     try {saved=await save(batch);committed=true;}
-    catch {try {const checked=await verify(batch);committed=true;return finish(200,{status:'PASS',...checked,snapshotWrites:1,changed:null,notify:true});} catch {committed=null;throw fail('write_outcome_unverified');}}
+    catch {try {stage = 'verify';const checked=await verify(batch);committed=true;return finish(200,{status:'PASS',...checked,snapshotWrites:1,changed:null,notify:true});} catch {committed=null;throw fail('write_outcome_unverified');}}
+    stage = 'verify';
     const checked = await verify(batch);
     return finish(200,{status:'PASS',...checked,...saved,snapshotWrites:1,notify:saved.changed});
   } catch (error) {
     const codes=['invalid_team_coverage','invalid_player_row','invalid_player_identity','source_http_unavailable','invalid_observation','older_observation','incomplete_database_write','readback_failed','write_outcome_unverified'];
-    return finish(503,{status:'FAILED',category:codes.includes(error?.code)?error.code:'depth_sync_unavailable',snapshotWrites:committed===null?null:committed?1:0,notify:true});
+    const knownValidationErrors = new Map([
+      ['Incomplete depth chart','incomplete_depth_coverage'],
+      ['Incomplete team/position coverage','incomplete_depth_coverage'],
+      ['Invalid depth row','invalid_depth_row'],
+      ['Invalid depth ordering','invalid_depth_ordering']
+    ]);
+    const category = codes.includes(error?.code)?error.code:(knownValidationErrors.get(error?.message)||'depth_sync_unavailable');
+    return finish(503,{status:'FAILED',stage,category,snapshotWrites:committed===null?null:committed?1:0,notify:true});
   }
 }
