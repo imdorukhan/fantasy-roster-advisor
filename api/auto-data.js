@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import {parseMatchup} from '../matchup-data.mjs';
 import {loadPlayerStats} from '../yahoo-player-stats.mjs';
 import {dataHealth} from '../decision-core.mjs';
+import {teamCode,teams as depthTeams} from '../sc3-depth-store.mjs';
 import {requireSc3Read} from '../sc3-read-access.mjs';
 import {sc3ProductionEnabled} from '../sc3-yahoo-bridge.mjs';
 import {officialMatchupFromScoreboard,currentMatchupIdentityFromScoreboard,currentMatchupCategoryCoverage} from '../yahoo-scoreboard.mjs';
@@ -71,14 +72,17 @@ export async function buildAutoData({start=localDay(),length=7}={}){
  return {mode:'PUBLIC_READ_ONLY',observedAt:new Date().toISOString(),sourceLinks:{yahooOurRoster:YAHOO+'5',yahooOpponentRoster:YAHOO+'13',espn:'https://www.espn.com/nba/schedule'},teams:[{id:5,name:'Salary CAPtain',players:next(rosters[0])},{id:opponentId,name:opponentRoster?'Current Yahoo opponent':'Opponent not verified',players:next(rosters[1])}],window:{start,end:dates.at(-1),days:length},schedule,coverage:{yahooOurRoster:!!rosters[0],yahooOpponentRoster:!!rosters[1],espnDatesFetched:datesFetched,espnDatesRequested:length},errors,opponentIdVerified:opponentId!==null,notes:['Public Yahoo roster may reflect a different selected date or locked lineup; verify current status from source','Upcoming NBA games are schedule opportunities, not guaranteed active fantasy starts','No free agents or add/drop recommendations are inferred without verified ownership']};
 }
 const depthCache=new Map();
-async function espnDepth(abbr){
+export async function espnDepth(abbr){
+ abbr=teamCode(abbr);
+ if(!depthTeams.includes(abbr))throw Error('Unknown NBA team');
  const cached=depthCache.get(abbr);if(cached&&Date.now()-cached.at<3600000)return cached.value;
  const root='https://site.api.espn.com/apis/site/v2/sports/basketball/nba/';
  const teamsResponse=await fetch(root+'teams',{signal:AbortSignal.timeout(8000)});
  if(!teamsResponse.ok)throw Error('ESPN team catalog unavailable');
  const teamsJson=await teamsResponse.json();
  const teams=teamsJson.sports?.[0]?.leagues?.[0]?.teams||[];
- const match=teams.find(t=>t.team?.abbreviation?.toUpperCase()===abbr||t.team?.alternateColor===abbr);
+ const matches=teams.filter(t=>teamCode(t.team?.abbreviation)===abbr);
+ const match=matches.length===1?matches[0]:null;
  if(!match?.team?.id)throw Error('NBA team abbreviation not found');
  const response=await fetch(root+'teams/'+encodeURIComponent(match.team.id)+'/depthcharts',{signal:AbortSignal.timeout(8000)});
  if(!response.ok)throw Error('ESPN depth chart HTTP '+response.status);
@@ -130,6 +134,10 @@ async function sc3CloudHealth(req,res){
 
 export const config={maxDuration:300};
 export default async function handler(req,res){
+ if(req.query?.sc3DepthProbe==='1'){
+  const {depthPreviewProbe}=await import('../sc3-depth-sync.mjs');
+  return depthPreviewProbe(req,res);
+ }
  if(req.query?.sc3DepthSync==='1'){
   const {depthSync}=await import('../sc3-depth-sync.mjs');
   return depthSync(req,res);
@@ -196,7 +204,7 @@ export default async function handler(req,res){
  if(req.query?.cron==='1')return backgroundLeagueSync(req,res);
  if(req.query?.depthTeam){
   const team=String(req.query.depthTeam).toUpperCase();
-  if(!/^[A-Z]{2,3}$/.test(team))return res.status(400).json({error:'Invalid NBA team'});
+  if(!/^[A-Z]{2,3}$/.test(team)||!depthTeams.includes(teamCode(team)))return res.status(400).json({error:'Invalid NBA team'});
   try{if((process.env.VERCEL_ENV==='preview'||sc3ProductionEnabled())&&process.env.SC3_SHARED_DB==='1'){const {readDepth}=await import('../sc3-depth-store.mjs');const data=await readDepth(team);res.setHeader('Cache-Control','private, no-store');return res.status(200).json(data)}const data=await espnDepth(team);res.setHeader('Cache-Control','public, s-maxage=3600');return res.status(200).json(data)}
   catch(e){return res.status(502).json({error:'ESPN depth chart unavailable',detail:e.message})}
  }
