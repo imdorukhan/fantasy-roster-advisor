@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
 import {NINE_CAT,categoryComparison} from './decision-core.mjs';
+import {teamCode} from './sc3-depth-store.mjs';
 import {MODELS,modelWeights} from './sc3-model-weights.mjs';
 export const MODEL_VERSION='sc3-bootstrap-v2';
 export const RAW_KEYS=['3PM','PTS','REB','AST','STL','BLK','TO','FGM','FGA','FTM','FTA'];
@@ -25,7 +26,7 @@ export function availableHistory(rows,asOf){
  if(!Number.isFinite(cutoff))throw Error('Invalid forecast cutoff');
  return rows.filter(r=>Number.isFinite(stamp(r.observed_at))&&Number.isFinite(stamp(r.tipoff))&&stamp(r.tipoff)<cutoff&&stamp(r.observed_at)<=cutoff&&stamp(r.observed_at)>=stamp(r.tipoff)&&validBox(r.stats));
 }
-export function forecastMatchup({report,official,logs,asOf,historyThrough,baselineAligned,injuryFeed=null,identityPairs=[],simulations=4000,seed=85892,model='L10'}){
+export function forecastMatchup({report,official,logs,asOf,historyThrough,baselineAligned,injuryFeed=null,officialInjuries=null,identityPairs=[],simulations=4000,seed=85892,model='L10'}){
  if(!MODELS.includes(model))return blocked('Unknown model');
  if(!Number.isInteger(simulations)||simulations<100||simulations>20000||!Number.isInteger(seed))return blocked('Invalid simulation parameters');
  const cutoff=stamp(asOf),baseline=stamp(official?.observedAt);
@@ -42,6 +43,9 @@ export function forecastMatchup({report,official,logs,asOf,historyThrough,baseli
  let minSample=Infinity,excludedStarts=0;
  const feedAt=stamp(injuryFeed?.observedAt);
  const freshInjury=Number.isFinite(feedAt)&&feedAt<=cutoff&&cutoff-feedAt<=86400000;
+ const nbaAt=stamp(officialInjuries?.observedAt),nbaPublished=stamp(officialInjuries?.publishedAt);
+ const freshOfficial=officialInjuries?.source==='NBA_OFFICIAL'&&Number.isFinite(nbaAt)&&Number.isFinite(nbaPublished)&&nbaPublished<=nbaAt&&nbaAt<=cutoff&&cutoff-nbaPublished<=86400000;
+ const officialByGame=new Map(freshOfficial?officialInjuries.rows.map(r=>[String(r.espnId)+'|'+r.gameDate,r]):[]);let officialMatchedStarts=0;
  for(let side=0;side<2;side++){
   for(const p of report.teams[side].players){
    if(p.unknownDates?.length)return blocked('Unknown schedule coverage');
@@ -57,7 +61,14 @@ export function forecastMatchup({report,official,logs,asOf,historyThrough,baseli
     const r=freshInjury?injuryFeed.rows.get(identities.get(p.yahooId)):null;
     const normalized=s=>String(s??'').normalize('NFKD').replace(/\p{Diacritic}/gu,'').toLowerCase().replace(/[^a-z0-9]/g,'');
     const verified=r&&normalized(r.name)===normalized(p.name)&&r.nbaTeam===game.nbaTeam&&stamp(r.reportAt)<=cutoff;
-    const decision=injuryDecision(verified?r:null,game.date);
+    let decision=injuryDecision(verified?r:null,game.date);
+    const nba=officialByGame.get(identities.get(p.yahooId)+'|'+game.date);
+    // An official game status only applies to that date and club; absence
+    // from a report is not medical clearance and NOT YET SUBMITTED is not a status.
+    if(nba&&normalized(nba.name)===normalized(p.name)&&teamCode(nba.nbaTeam)===teamCode(game.nbaTeam)&&nba.publishedAt===officialInjuries.publishedAt&&nba.observedAt===officialInjuries.observedAt){
+     officialMatchedStarts++;
+     decision={exclude:['Out','Doubtful'].includes(nba.status),uncertain:['Out','Doubtful','Questionable'].includes(nba.status)};
+    }
     if(decision.uncertain)uncertain.add(p.yahooId);
     if(decision.exclude)excludedStarts++;
     const weights=modelWeights(samples.length,model);let cumulative=0;const cdf=weights.map(w=>cumulative+=w);cdf[cdf.length-1]=1;
@@ -66,7 +77,7 @@ export function forecastMatchup({report,official,logs,asOf,historyThrough,baseli
   }
  }
  if(missing.length)return {...blocked('Minimum three observed complete games required for each starter'),missing,coveredStarts:starters.length};
- const rng=random(seed),scenarios=[{id:'ALL_STARTERS_PLAY',exclude:false,stress:false},{id:'REPORTED_OUT_EXCLUSION',exclude:true,stress:false},{id:'UNCERTAIN_PLAYERS_SIT',exclude:true,stress:true}].filter(s=>!s.exclude||freshInjury&&(!s.stress||uncertain.size>0));
+ const rng=random(seed),scenarios=[{id:'ALL_STARTERS_PLAY',exclude:false,stress:false},{id:'REPORTED_OUT_EXCLUSION',exclude:true,stress:false},{id:'UNCERTAIN_PLAYERS_SIT',exclude:true,stress:true}].filter(s=>!s.exclude||(freshInjury||freshOfficial)&&(!s.stress||uncertain.size>0));
  const results=scenarios.map(s=>({id:s.id,exclude:s.exclude,stress:s.stress,counts:Object.fromEntries(NINE_CAT.map(k=>[k,{win:0,tie:0,loss:0}])),match:{win:0,tie:0,loss:0},wins:Array(10).fill(0)}));
  for(let n=0;n<simulations;n++){
   // Common random numbers across scenarios; preserve the complete box-score vector.
@@ -82,11 +93,11 @@ export function forecastMatchup({report,official,logs,asOf,historyThrough,baseli
   }
  }
  const proportions=o=>Object.fromEntries(Object.entries(o).map(([k,v])=>[k,v/simulations]));
- const inputsDigest=createHash('sha256').update(JSON.stringify({report,official,logs:availableHistory(logs,asOf),injury: freshInjury?[...injuryFeed.rows.entries()]:null,identityPairs,asOf,model})).digest('hex');
+ const inputsDigest=createHash('sha256').update(JSON.stringify({report,official,logs:availableHistory(logs,asOf),injury: freshInjury?[...injuryFeed.rows.entries()]:null,officialInjuries:freshOfficial?officialInjuries:null,identityPairs,asOf,model})).digest('hex');
  return {available:true,inputsDigest,modelVersion:MODEL_VERSION+':'+model,model,asOf,historyThrough,baselineObservedAt:official.observedAt,simulations,seed,conditional:true,calibrated:false,readOnly:true,
-  coverage:{starterGames:starters.length,minSample:Number.isFinite(minSample)?minSample:null,injuryFeedVerified:freshInjury,uncertainPlayers:uncertain.size,excludedStarts},
+  coverage:{starterGames:starters.length,minSample:Number.isFinite(minSample)?minSample:null,injuryFeedVerified:freshInjury,officialInjuryVerified:freshOfficial,officialMatchedStarts,uncertainPlayers:uncertain.size,excludedStarts},
   scenarios:results.map(s=>({id:s.id,matchup:proportions(s.match),categories:NINE_CAT.map(category=>({category,...proportions(s.counts[category])})),categoryWins:s.wins.map(v=>v/simulations),swingTargets:NINE_CAT.filter(k=>official.ourTeam.stats[k]!==undefined&&(k==='TO'?official.ourTeam.stats[k]>=official.opponent.stats[k]:official.ourTeam.stats[k]<=official.opponent.stats[k])).map(category=>({category,win:s.counts[category].win/simulations})).sort((a,b)=>b.win-a.win)})),
-  limitations:['Conditional on fixed Yahoo starters and observed game samples; not calibrated real-world probabilities.','Resampling preserves within-game category correlation, not between-player or team correlation.','Injury scenario excludes reported out/doubtful starts before provider estimate; estimated return is not medical clearance. No unverified participation probabilities.','The uncertain-players-sit stress scenario excludes all matched uncertain starts; it is not a likely outcome or calibrated confidence interval.','No future trades, lineup changes, minutes regime changes or replacement-player effects modeled.']};
+  limitations:['Conditional on fixed Yahoo starters and observed game samples; not calibrated real-world probabilities.','Resampling preserves within-game category correlation, not between-player or team correlation.','Official NBA game status overrides ESPN only for a verified player, team and game date. Otherwise ESPN conditional exclusion uses its reported return estimate; neither source proves a future return. No unverified participation probabilities.','The uncertain-players-sit stress scenario excludes all matched uncertain starts; it is not a likely outcome or calibrated confidence interval.','No future trades, lineup changes, minutes regime changes or replacement-player effects modeled.']};
 }
 
 export function alternativeForecasts(args){
