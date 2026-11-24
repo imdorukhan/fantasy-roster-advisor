@@ -174,13 +174,16 @@ export async function buildStreamingPlan(availability, yahooRows, {now=new Date(
       if (daily.some(day => !day.schedule)) missing.push('ESPN schedule');
       return {available:false,reason:missing.join(' and ')+' coverage unavailable',week,acquisitions,days:coverage};
     }
-    if (availability.freeAgents.count > 0) {
-      await collect('FA', page => metadata.push(...page.players));
+    // Player-specific scenarios do not use free-agent membership to model starts.
+    if(!skipWaiverPlan){
+      const live=await collect('FA',page=>metadata.push(...page.players),{fetcher});
       const names = new Map(availability.freeAgents.players.map(player => [player.yahooId,player.name]));
       if (metadata.length !== names.size || metadata.some(player => names.get(player.yahooId)!==player.name ||
           !player.nbaTeam || !player.eligiblePositions?.length)) {
-        return {available:false,reason:'Current Yahoo free-agent team and position coverage unavailable',week,acquisitions,days:coverage};
+        return {available:false,reason:'Current Yahoo free-agent membership differs from verified snapshot or metadata is incomplete',week,acquisitions,days:coverage,availabilityCheck:{status:'mismatch',observedAt:live.observedAt,count:live.count,snapshotCount:names.size}};
       }
+      // Even a zero-count snapshot must be rechecked against the source.
+      metadata.observation={status:'verified',observedAt:live.observedAt,count:live.count,snapshotCount:names.size};
     }
     if(skipWaiverPlan)return {available:true,week,acquisitions,days:coverage,
       playerScenario:evaluationPlayer&&rankWaiverOpportunities([evaluationPlayer],daily,starters,{dropId})[0]};
@@ -199,7 +202,7 @@ export async function buildStreamingPlan(availability, yahooRows, {now=new Date(
         : {...waiverPlan,impactStatus:'Official Yahoo 9-CAT totals not yet verified',impactCoverage:0};
     }
     if(waiverPlan.rows)waiverPlan.rows=waiverPlan.rows.slice(0,25);
-    return {...result,week,acquisitions,days:coverage,waiverPlan};
+    return {...result,week,acquisitions,days:coverage,waiverPlan,availabilityCheck:metadata.observation};
   } catch {
     return {available:false,reason:'Streaming schedule or eligibility verification failed',week,acquisitions};
   }
