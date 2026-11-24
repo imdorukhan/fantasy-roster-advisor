@@ -15,6 +15,40 @@ test('complete source tables require every team, position, rank and ESPN identit
   }
   assert.throws(()=>validateRows([...rows,{...rows[0]}]));
 });
+test('duplicate ESPN depth rank fails closed with a specific safe diagnostic',async()=>{
+  const bad=tables();
+  bad[5].rows.push({text:'SF1 - Other Cleveland Player',name:'Other Cleveland Player',href:'https://www.espn.com/nba/player/_/id/979999/other'});
+  assert.throws(()=>parseTables(bad),/Invalid depth ordering/);
+  let saves=0;
+  const result=res();
+  await depthSync(req(),result,{
+    env:{CRON_SECRET:secret,SC3_SHARED_DB:'1',SC3_DEPTH_SYNC_ENABLED:'1',SC3_DEPTH_SYNC_WRITE:'1'},
+    collect:async()=>({rows:parseTables(bad),source:depthSource,observedAt:new Date().toISOString()}),
+    save:async()=>{saves++;},
+    log:()=>{}
+  });
+  assert.equal(result.code,503);
+  assert.equal(result.body.category,'invalid_depth_ordering');
+  assert.equal(result.body.stage,'collect');
+  assert.equal(result.body.snapshotWrites,0);
+  assert.equal(saves,0);
+});
+test('post-collection depth validation is identified without leaking unknown source errors',async()=>{
+  const env={CRON_SECRET:secret,SC3_SHARED_DB:'1',SC3_DEPTH_SYNC_ENABLED:'1',SC3_DEPTH_SYNC_WRITE:'1'};
+  const bad=parseTables(tables());bad[0].rank=2;
+  const invalid=res();
+  await depthSync(req(),invalid,{env,collect:async()=>({rows:bad,source:depthSource,observedAt:new Date().toISOString()}),save:()=>assert.fail('No write allowed'),log:()=>{}});
+  assert.equal(invalid.code,503);
+  assert.equal(invalid.body.category,'invalid_depth_ordering');
+  assert.equal(invalid.body.stage,'validate');
+  assert.equal(invalid.body.snapshotWrites,0);
+  const unexpected=res();
+  await depthSync(req(),unexpected,{env,collect:async()=>{throw Error('upstream diagnostic contains untrusted text')},save:()=>assert.fail('No write allowed'),log:()=>{}});
+  assert.equal(unexpected.code,503);
+  assert.equal(unexpected.body.category,'depth_sync_unavailable');
+  assert.equal(unexpected.body.stage,'collect');
+  assert.doesNotMatch(JSON.stringify(unexpected.body),/upstream diagnostic contains untrusted text/);
+});
 test('authorization and disable gates precede collection, dry run never saves',async()=>{
   let collected=0;const options={env:{CRON_SECRET:secret,SC3_SHARED_DB:'1',SC3_DEPTH_SYNC_ENABLED:'1'},collect:async()=>{collected++;return {rows:parseTables(tables()),source:depthSource,observedAt:new Date().toISOString()};},save:()=>assert.fail('Unexpected write'),log:()=>{}};
   const denied=res();await depthSync({method:'GET',headers:{}},denied,options);assert.equal(denied.code,401);assert.equal(collected,0);
