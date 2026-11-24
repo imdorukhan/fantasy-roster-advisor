@@ -1,13 +1,12 @@
 import {matchPlayers} from './player-identity.mjs';
-import {teamCode} from './sc3-depth-store.mjs';
 
 // Use a verified complete Yahoo roster and independent ESPN catalog.
 // Existing one-to-one verified links cannot be overwritten by fallback evidence.
 export function rosterIdentityFallback(players,known,catalog){
  const occupied=new Set(known.map(r=>String(r.espn_id)));
  const ids=new Set(known.map(r=>String(r.yahoo_id)));
- const matches=matchPlayers(players.filter(p=>!ids.has(String(p.yahooId))),catalog.filter(p=>!occupied.has(String(p.espnId))));
- return matches.filter(r=>r.status==='verified').map(r=>({yahoo_id:r.yahooId,espn_id:r.espnId,status:'verified',evidence:r.evidence,source:'verified roster and ESPN catalog',persisted:false}));
+ const matches=matchPlayers(players.filter(p=>!ids.has(String(p.yahooId))),catalog);
+ return matches.filter(r=>r.status==='verified'&&!occupied.has(String(r.espnId))).map(r=>({yahoo_id:r.yahooId,espn_id:r.espnId,status:'verified',evidence:r.evidence,source:'verified roster and ESPN catalog',persisted:false}));
 }
 export function profileCoverage(players,links,gameCounts){
  const byId=new Map(links.map(r=>[String(r.yahoo_id),r]));
@@ -19,7 +18,6 @@ export function profileCoverage(players,links,gameCounts){
    persisted:link?link.persisted!==false:null};
  });
 }
-export const normalizeTeam=teamCode;
 
 export async function readRosterIdentityInputs(c,now=Date.now()){
  const row=(await c.query("select payload,observed_at::text from sc3.yahoo_league_snapshots where league_id=85892 and section='all_rosters' and source='Yahoo Fantasy Sports API'")).rows[0];
