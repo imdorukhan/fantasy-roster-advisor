@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "@sparticuz/chromium": "153.0.0",
+    "pdfjs-dist": "6.5.438",
     "pg": "8.23.1",
     "puppeteer-core": "25.18.1"
   },
