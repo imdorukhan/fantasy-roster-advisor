@@ -39,10 +39,14 @@ export function historicalCoverage(rows,now=new Date()){
  return {observations:rows.length,weeks:[...byWeek.values()].sort((a,b)=>a.week-b.week),closedTargets:[...closed.values()].filter(f=>!conflicts.has(f.week)).sort((a,b)=>a.week-b.week),conflictingWeeks:[...conflicts],legacySourceVerified:false,readOnly:true};
 }
 export async function readHistoricalCoverage({transaction=withScopedTransaction,now=new Date()}={}){
- const data=await transaction(async c=>(await c.query("select payload,observed_at::text from sc3.yahoo_league_snapshot_history where league_id=85892 and section='scoreboard' and observed_at<=$1::timestamptz order by observed_at desc limit 500",[now])).rows);
- const result=historicalCoverage(data,now);
- try{const archive=await transaction(async c=>(await c.query("select week,opponent_id,week_start::text,week_end::text,max(observed_at)::text as last_observed,count(*)::int as observations from sc3.p2_yahoo_final_observations where league_id=85892 and observed_at<=$1::timestamptz group by week,opponent_id,week_start,week_end order by week",[now])).rows);
- return {...result,archiveStatus:'READY',verifiedFinals:archive};}catch{return {...result,archiveStatus:'UNAVAILABLE',verifiedFinals:null};}
+ return transaction(async c=>{
+  const data=(await c.query("select payload,observed_at::text from sc3.yahoo_league_snapshot_history where league_id=85892 and section='scoreboard' and observed_at<=$1::timestamptz order by observed_at desc limit 500",[now])).rows;
+  const result=historicalCoverage(data,now);
+  const exists=(await c.query("select to_regclass('sc3.p2_yahoo_final_observations') is not null as ready")).rows[0]?.ready;
+  if(!exists)return {...result,archiveStatus:'UNAVAILABLE',verifiedFinals:null};
+  const archive=(await c.query("select week,opponent_id,week_start::text,week_end::text,max(observed_at)::text as last_observed,count(*)::int as observations from sc3.p2_yahoo_final_observations where league_id=85892 and observed_at<=$1::timestamptz group by week,opponent_id,week_start,week_end order by week",[now])).rows;
+  return {...result,archiveStatus:'READY',verifiedFinals:archive};
+ });
 }
 export function historicalScoreboardPath(week){
  if(!Number.isInteger(week)||week<1||week>30)throw Error('Invalid Yahoo week');
