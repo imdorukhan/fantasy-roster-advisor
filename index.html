@@ -14,8 +14,8 @@
 <div class="banner">Yahoo roster, acquisition and availability snapshots show their observation times. Decisions are read-only.</div>
 <section id="overview" class="view"><div class="hero"><div><div class="eyebrow">YOUR TEAM · #5</div><h2>Salary CAPtain</h2><p>14-team H2H categories · 9-CAT fantasy basketball</p></div><div class="hero-logo">♛</div></div><div class="stats">
 <div class="stat"><div class="small">Roster players</div><div class="val" id="team-count">—</div><div class="sub">Includes Yahoo roster slots</div></div>
-<div class="stat"><div class="small">Weekly adds used</div><div class="val">—</div><div class="sub">Awaiting live Yahoo league settings</div></div>
-<div class="stat"><div class="small">FAB remaining</div><div class="val">—</div><div class="sub">Awaiting live Yahoo budget</div></div>
+<div class="stat"><div class="small">Weekly adds used</div><div class="val" id="live-adds-used">—</div><div class="sub" id="live-adds-context">Awaiting verified Yahoo league settings</div></div>
+<div class="stat"><div class="small">FAB remaining</div><div class="val" id="live-fab-balance">—</div><div class="sub" id="live-fab-context">Awaiting verified Yahoo budget</div></div>
 <div class="stat"><div class="small">IL slots occupied</div><div class="val" id="live-il-count">—</div><div class="sub">Current roster slots · capacity unverified</div></div></div>
 <div class="card" style="margin-bottom:16px"><h3>Yahoo League Data · Source of Truth</h3><div id="league-data-health" class="small">Loading authenticated league data…</div><div id="league-teams" class="small" style="margin-top:8px">Checking league teams…</div></div><div class="grid2"><div class="card"><h3>Action Center · Live</h3><div id="live-actions" class="empty">Waiting for Yahoo API roster…</div></div><div class="card"><h3>Acquisition Intelligence</h3><div id="acquisition-summary" class="notice" role="status">Checking Yahoo acquisition data…</div><p class="subtitle" style="margin-top:12px">Use Free Agents for verified availability. Pickup recommendations remain disabled until matchup and waiver data are confirmed.</p><button class="button" data-go="freeagents">Browse free agents →</button></div></div>
 <div class="section-head"><h3>Yahoo Current Roster</h3><button class="button" data-go="roster">View full roster →</button></div><div class="card" id="overview-roster">Loading roster…</div></section>
@@ -31,6 +31,7 @@ import {playerLink} from "./player-dialog.mjs";
 import {getLeagueData,leagueHealth} from './league-data.js';
 import {rosterStatSource} from './sc3-roster-stat-source.mjs';
 import {keepCutEvidence} from './sc3-keepcut-evidence.mjs';
+import {verifiedAcquisitionSummary} from './sc3-acquisition-summary.mjs';
 const names={overview:['Fantasy Command Center','Your team intelligence, all in one place.'],roster:['My Roster','Who is on Salary CAPtain, by position.'],drop:['Keep or Cut','Identify performance decline without overreacting to three games.'],injury:['Injury Return Radar','Track recovery news and possible pickup opportunities.'],waiver:['Waiver Planner','Manage weekly acquisition budget and pending claims.'],freeagents:['Streaming Optimizer','Check which Yahoo free agents are available to stream.'],sources:['Source Accuracy Lab','Learn which injury return forecasts become reliable over time.']};
 function go(v){if(!names[v])return;document.querySelectorAll('.view').forEach(e=>e.classList.toggle('hidden',e.id!==v));document.querySelectorAll('.nav button').forEach(e=>e.classList.toggle('active',e.dataset.view===v));document.querySelector('#page-title').textContent=names[v][0];document.querySelector('#page-desc').textContent=names[v][1];if(v==='freeagents')loadFreeAgents();if(v==='waiver')loadFreeAgents(true);if(v==='sources')loadSystemHealth();location.hash=v;window.scrollTo({top:0,behavior:'smooth'})}
 document.querySelectorAll('[data-view]').forEach(el=>el.addEventListener('click',()=>go(el.dataset.view)));document.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>go(el.dataset.go)));
@@ -294,19 +295,30 @@ document.querySelector('#injury-refresh').addEventListener('click',()=>{
  loadRoster({refresh:true}).catch(()=>{document.querySelector('#injury-source-status').textContent='Unable to refresh verified injury evidence.';});
 });
 document.querySelector('#roster-search').addEventListener('input',e=>renderRoster(e.target.value));
+function updateAcquisitionDisplay(d){
+ const a=verifiedAcquisitionSummary(d);
+ document.getElementById('live-adds-used').textContent=a?String(a.used):'—';
+ document.getElementById('live-adds-context').textContent=a
+  ?a.remaining+' of '+a.limit+' remaining · verified Yahoo '+new Date(a.observedAt).toLocaleString()
+  :'Awaiting verified Yahoo league settings';
+ document.getElementById('live-fab-balance').textContent=a&&a.fab!==null?'$'+a.fab:'—';
+ document.getElementById('live-fab-context').textContent=a&&a.fab!==null
+  ?'Verified Yahoo '+new Date(a.observedAt).toLocaleString()
+  :'Verified FAB balance unavailable';
+ document.getElementById('acquisition-summary').textContent=a
+  ? a.remaining+' of '+a.limit+' weekly adds remaining · '+(a.fab===null?'FAB unavailable':'$'+a.fab+' FAB')+' · '+d.ilCount+' players in IL · Yahoo observed '+new Date(a.observedAt).toLocaleString()
+  :'Current Yahoo add budget and FAB unavailable.';
+}
 async function loadAllLeaguePlayers(){
  const status=document.querySelector('#league-rosters-status'),body=document.querySelector('#league-rosters-body');
+ updateAcquisitionDisplay(null);
  status.textContent='Loading all league team rosters from Yahoo API…';
  try{
   const r=await fetch('/api/auto-data?sc3LeagueRosters=1',{credentials:'same-origin',cache:'no-store'});
   if(r.status===401){status.innerHTML='Yahoo owner sign-in required for league rosters. <a href="/api/auth/yahoo/login?owner=1">Sign in with Yahoo</a>.';body.textContent='';return;}
   const d=await r.json();if(!r.ok||d.mode!=='YAHOO_ALL_ROSTERS')throw Error(d.error||'Yahoo API unavailable');
   allLeaguePlayers=d.teams.flatMap(t=>t.players.map(p=>({...p,fantasyTeam:t.name||t.key})));
-  const acquisition=document.querySelector('#acquisition-summary');
-  const a=d.acquisitions;
-  acquisition.textContent=a
-   ? a.remaining+' of '+a.limit+' weekly adds remaining · '+(a.fab===null?'FAB unavailable':'$'+a.fab+' FAB')+' · '+d.ilCount+' players in IL · Yahoo observed '+new Date(a.observedAt).toLocaleString()
-   : 'Current Yahoo add budget and FAB unavailable.';
+  updateAcquisitionDisplay(d);
   status.textContent=d.teamCount+' teams · '+d.playerCount+' roster entries · '+new Date(d.observedAt).toLocaleString()+(d.errors.length?' · '+d.errors.length+' teams unavailable':'');
   body.innerHTML=allLeaguePlayers.map(p=>'<tr><td>'+playerLink(p)+'</td><td>'+esc(p.fantasyTeam)+'</td><td>'+esc(p.nbaTeam||'—')+'</td><td>'+esc((p.eligiblePositions||[]).join(', ')||'Unavailable')+'</td>'+statCells(p)+'</tr>').join('')||'<tr><td colspan="26">No verified roster players.</td></tr>';
  }catch(e){status.textContent='Yahoo all-rosters unavailable: '+e.message;body.innerHTML='';}
