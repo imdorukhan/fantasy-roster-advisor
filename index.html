@@ -54,6 +54,14 @@ async function loadP2Lab(){
   }
   const cb=j.cbsEvidence;
   p.innerHTML+=cb?'<h4>CBS Sports injury evidence</h4><p>'+esc(cb.matched)+' matched athlete observations · '+esc(cb.lowerBounds)+' explicit earliest-return bounds · '+esc(cb.teamGroups)+' team tables. Not saved; lower bounds are not point estimates.</p><details><summary>Matched injury rows</summary><table><thead><tr><th>Player</th><th>Updated</th><th>Earliest date</th></tr></thead><tbody>'+cb.rows.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.reportDate)+'</td><td>'+esc(x.earliestReturn||"Unavailable")+'</td></tr>').join('')+'</tbody></table></details>':'<p>CBS source unavailable.</p>';
+  const gate=c?.promotion;
+  if(gate)p.innerHTML+='<h4>Model promotion gate</h4><p>Incumbent '+esc(gate.incumbent)+' · Challenger '+esc(gate.challenger||'None')+' · '+(gate.eligible?'Eligible for owner review':'Not eligible')+'</p><ul>'+gate.reasons.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>';
+  const nba=j.nbaOfficialEvidence;
+  p.innerHTML+=nba?'<h4>Official NBA game report</h4><p>'+esc(nba.matched)+'/'+esc(nba.parsed)+' athlete rows matched · '+esc(nba.notSubmitted.length)+' team/game reports not yet submitted · <a target="_blank" rel="noopener noreferrer" href="'+esc(nba.url)+'">Published PDF</a> · '+esc(nba.publishedAt)+'. Game status is not a return forecast.</p><details><summary>Official matched game statuses</summary><table><thead><tr><th>Player</th><th>Game</th><th>Status</th></tr></thead><tbody>'+nba.rows.map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+esc(x.gameDate)+'</td><td>'+esc(x.status)+'</td></tr>').join('')+'</tbody></table></details>':'<p>Official NBA report unavailable; no clearance inferred.</p>';
+  const cbm=j.cbsMetrics;
+  p.innerHTML+='<h4>CBS lower-bound settlement</h4><p>'+esc(cbm?.status||'UNAVAILABLE')+' · '+esc(cbm?.independentReturnEvents??'Unavailable')+' independent returns · violation rate '+n(cbm?.violationRate)+' · lower 95% adherence '+n(cbm?.boundAdherenceLower95)+'. Pending is not success.</p>';
+  const hc=j.historyCoverage;
+  p.innerHTML+=hc?'<h4>Yahoo final settlement coverage</h4><p>Legacy observations '+esc(hc.observations)+' · Final archive '+esc(hc.archiveStatus)+'. Legacy source provenance is not sufficient to settle a forecast.</p><table><thead><tr><th>Week</th><th>Observations</th><th>Legacy postevent candidates</th></tr></thead><tbody>'+hc.weeks.map(w=>'<tr><td>'+esc(w.week)+'</td><td>'+esc(w.observations)+'</td><td>'+esc(w.posteventCandidates)+'</td></tr>').join('')+'</tbody></table>':'<p>Yahoo historical coverage unavailable.</p>';
  }catch{p.textContent='P2 ledger/backtest unavailable. No source score inferred.';}
 }
 document.getElementById('p2-lab-refresh').addEventListener('click',loadP2Lab);
