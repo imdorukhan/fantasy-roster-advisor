@@ -199,6 +199,8 @@ test('the full SC3 Yahoo sync replaces the temporary diagnostic and legacy cron'
   const config = JSON.parse(readFileSync(new URL('./vercel.json', import.meta.url), 'utf8'));
   assert.deepEqual(config.crons, [
     {path: '/api/auto-data?sc3YahooSync=1', schedule: '30 16 * * *'},
-    {path: '/api/auto-data?sc3DepthSync=1', schedule: '0 19 * * *'}
+    {path: '/api/auto-data?sc3DepthSync=1', schedule: '0 19 * * *'},
+    {path: '/api/auto-data?sc3NbaHistorySync=1', schedule: '0 11 * * *'},
+    {path: '/api/auto-data?sc3ScoreboardSync=1', schedule: '0 12 * * *'}
   ]);
 });
