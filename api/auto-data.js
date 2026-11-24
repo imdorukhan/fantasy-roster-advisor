@@ -479,7 +479,16 @@ async function liveHandler(req,res){
    }
    if(!sources.teams&&!sources.roster)return response(res,502,{mode:'YAHOO_LEAGUE_UNAVAILABLE',errors});
    const staleSections=Object.keys(sources).filter(k=>now-Date.parse(timestamps[k])>=maxAge);
-   return response(res,200,{mode:'YAHOO_LEAGUE_DATA',leagueId:85892,teamId:5,teamKey:unique[0].key,observedAt:new Date().toISOString(),source:'Yahoo Fantasy Sports API via Supabase',readOnly:true,sections:sources,sectionTimestamps:timestamps,staleSections,dbBacked:Object.keys(stored).length>0,rosterPlayers:sources.roster?[...new Map(findPlayers(sources.roster).map(p=>[p.yahooId,p])).values()]:[],leagueTeams:sources.teams?[...new Map(findTeams(sources.teams).map(t=>[t.key,t])).values()]:[],errors});
+   const rosterPlayers=sources.roster?[...new Map(findPlayers(sources.roster).map(p=>[p.yahooId,p])).values()]:[];
+   const {attachOwnerInjuryEvidence}=await import('../sc3-owner-injury-evidence.mjs');
+   const injuryEvidence=await attachOwnerInjuryEvidence(rosterPlayers,timestamps.roster,{
+    enabled:sc3ProductionEnabled(),
+    read:async(players,at)=>{
+     const {readInjuryEvidence}=await import('../sc3-injury-evidence.mjs');
+     return readInjuryEvidence(players,at);
+    }
+   });
+   return response(res,200,{mode:'YAHOO_LEAGUE_DATA',leagueId:85892,teamId:5,teamKey:unique[0].key,observedAt:new Date().toISOString(),source:'Yahoo Fantasy Sports API via Supabase',readOnly:true,sections:sources,sectionTimestamps:timestamps,staleSections,dbBacked:Object.keys(stored).length>0,rosterPlayers,leagueTeams:sources.teams?[...new Map(findTeams(sources.teams).map(t=>[t.key,t])).values()]:[],injuryEvidence,errors});
   }
   if(req.query?.matchup==='1'){
    const data=await client.read('team/'+encodeURIComponent(unique[0].key)+'/matchups?format=json');
