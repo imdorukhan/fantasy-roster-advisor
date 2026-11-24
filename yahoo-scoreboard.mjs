@@ -3,7 +3,9 @@
 import {categoryComparison} from './decision-core.mjs';
 export const YAHOO_STAT_IDS=Object.freeze({'FG%':'5','FT%':'8','3PM':'10',PTS:'12',REB:'15',AST:'16',STL:'17',BLK:'18',TO:'19'});
 const MY_KEY='478.l.85892.t.5';
-const validDay=s=>/^\d{4}-\d{2}-\d{2}$/.test(s);
+const validDay=s=>{if(typeof s!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;
+ const d=new Date(s+'T12:00:00Z');return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===s;
+};
 export const leagueToday=(now=new Date())=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
 function teamsFor(matchup){
  const list=matchup?.['0']?.teams;
