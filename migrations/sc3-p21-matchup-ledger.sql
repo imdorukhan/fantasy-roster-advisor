@@ -32,6 +32,7 @@ create trigger p2_matchup_immutable before update or delete or truncate on sc3.p
 create trigger p2_matchup_result_immutable before update or delete or truncate on sc3.p2_matchup_settlements for each statement execute function sc3.p2_reject_mutation();
 create trigger p2_cbs_immutable before update or delete or truncate on sc3.p2_cbs_observations for each statement execute function sc3.p2_reject_mutation();
 revoke all on sc3.p2_matchup_forecasts,sc3.p2_matchup_settlements,sc3.p2_cbs_observations from public,anon,authenticated,sc3_app;
+grant select on sc3.yahoo_league_snapshot_history to sc3_p2_writer;
 grant select on sc3.p2_matchup_forecasts,sc3.p2_matchup_settlements,sc3.p2_cbs_observations to sc3_app,sc3_p2_writer;
 grant insert(id,league_id,week,opponent_id,week_start,week_end,model_version,forecast_as_of,baseline_observed_at,history_through,inputs_digest,payload) on sc3.p2_matchup_forecasts to sc3_p2_writer;
 grant insert(forecast_id,final_observed_at,outcome) on sc3.p2_matchup_settlements to sc3_p2_writer;
