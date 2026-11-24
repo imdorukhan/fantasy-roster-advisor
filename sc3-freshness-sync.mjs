@@ -7,6 +7,7 @@ import {currentMatchupIdentityFromScoreboard,currentMatchupCategoryCoverage} fro
 // Recent gaps first, bounded by the serverless runtime. Never declare a
 // complete season merely because the selected subset succeeded.
 export function historyRefreshPlan({start,end,completeDays,limit=3}){
+ if(!Number.isInteger(limit)||limit<1||limit>3)throw Error('Invalid history refresh limit');
  const expected=dateRange(start,end);
  const complete=new Set(completeDays);
  const missing=expected.filter(d=>!complete.has(d));
@@ -17,10 +18,15 @@ export async function readHistoryPlan({now=new Date(),transaction=withScopedTran
  const end=latestExpectedDay(now);
  const boundary=(Number(end.slice(0,4))-(Number(end.slice(5,7))<10?1:0))+'-10-01';
  return transaction(async c=>{
-  const rows=(await c.query("select game_day::text,status from sc3.sc3_nba_sync_days where game_day between $1::date and $2::date order by game_day",[boundary,end])).rows;
+  const rows=(await c.query(`select d.game_day::text,d.status,
+   (d.player_rows=coalesce(g.rows,0) and d.completed_events=coalesce(g.events,0)) as coverage_verified
+   from sc3.sc3_nba_sync_days d left join (
+    select game_day,count(*) as rows,count(distinct event_id) as events
+    from sc3.sc3_nba_game_logs where game_day between $1::date and $2::date group by game_day
+   ) g using(game_day) where d.game_day between $1::date and $2::date order by d.game_day`,[boundary,end])).rows;
   const start=rows.find(r=>r.status==='complete')?.game_day;
   if(!start)throw Error('Season baseline unavailable');
-  return historyRefreshPlan({start,end,completeDays:rows.filter(r=>r.status==='complete').map(r=>r.game_day)});
+  return historyRefreshPlan({start,end,completeDays:rows.filter(r=>r.status==='complete'&&r.coverage_verified===true).map(r=>r.game_day)});
  });
 }
 export async function nbaHistoryCron(req,res,{env=process.env,now=new Date(),plan=readHistoryPlan,collect=ingestGameLogs,save=batch=>scopedSyncStore({}).save(batch),log=console.info}={}){
