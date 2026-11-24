@@ -43,5 +43,6 @@ export async function readGameBacktest({now=new Date(),transaction=withScopedTra
  where d.status='complete' and l.observed_at<=$1::timestamptz and d.observed_at<=$1::timestamptz
  and l.game_day >= (($1::timestamptz at time zone 'America/New_York')::date-45)
  order by l.espn_id,l.tipoff`,[now])).rows);
- return walkForwardGameTest(rows,{asOf:now.toISOString()});
+ const {compareModels}=await import('./sc3-model-comparison.mjs');
+ return {...walkForwardGameTest(rows,{asOf:now.toISOString()}),comparison:compareModels(rows,{asOf:now.toISOString()})};
 }
