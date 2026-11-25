@@ -95,13 +95,26 @@ export async function readMatchupProjection(report,official,options){
  const linked=catalog.length&&missing.length?await verifyMissingYahooPlayers(missing,catalog,options.fetcher):[];
  const pairs=[...verified,...linked.map(row=>({yahoo_id:row.yahooId,espn_id:row.espnId}))];
  const logs=historyThrough&&pairs.length?await withScopedTransaction(async client=>(await client.query(`
-     select i.yahoo_id,g.stats
+     select i.yahoo_id,g.stats,g.event_id,g.tipoff::text,g.observed_at::text
      from jsonb_to_recordset($1::jsonb) as i(yahoo_id text,espn_id text)
      cross join lateral (
-       select l.stats from sc3.sc3_nba_game_logs l
+       select l.stats,l.event_id,l.tipoff,l.observed_at from sc3.sc3_nba_game_logs l
        join sc3.sc3_nba_sync_days d using(game_day)
-       where l.espn_id=i.espn_id and l.game_day<=$2::date and d.status='complete'
-       order by l.game_day desc,l.tipoff desc,l.event_id desc limit 10
-     ) g`,[JSON.stringify(pairs),historyThrough])).rows):[];
- return matchupProjection(report,official,logs,historyThrough,options);
+       where l.espn_id=i.espn_id and l.game_day<=$2::date and l.game_day>=make_date(extract(year from $2::date)::int-case when extract(month from $2::date)<10 then 1 else 0 end,10,1) and d.status='complete' and l.observed_at<=$3::timestamptz and d.observed_at<=$3::timestamptz
+       order by l.game_day desc,l.tipoff desc,l.event_id desc limit 100
+     ) g`,[JSON.stringify(pairs),historyThrough,options.now])).rows):[];
+ const counts=new Map();const recent=logs.filter(r=>{const n=counts.get(r.yahoo_id)??0;counts.set(r.yahoo_id,n+1);return n<10;});
+ const projection=matchupProjection(report,official,recent,historyThrough,options);
+ if(options.includeForecast){
+  const {alternativeForecasts}=await import('./sc3-forecast.mjs');
+  if(!projection.endOfWeek)projection.forecast={available:false,reason:projection.blocked.join('; '),readOnly:true};
+  else{
+   const {fetchEspnInjuryFeed}=await import('./sc3-injury-feed.mjs');
+   const {readOfficialInjuries}=await import('./sc3-nba-official-injuries.mjs');
+   const [feed,nba]=await Promise.all([fetchEspnInjuryFeed({now:new Date(),fetcher:options.fetcher}).catch(()=>null),readOfficialInjuries({fetcher:options.fetcher}).catch(()=>null)]);
+   const suite=alternativeForecasts({report,official,logs,historyThrough,baselineAligned:options.baselineAligned,asOf:new Date().toISOString(),identityPairs:pairs,injuryFeed:feed,officialInjuries:nba});
+   projection.forecast=suite.primary;projection.alternativeForecasts=suite.alternatives;
+  }
+ }
+ return projection;
 }

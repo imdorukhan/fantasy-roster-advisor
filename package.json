@@ -2,7 +2,8 @@
   "dependencies": {
     "@sparticuz/chromium": "153.0.0",
     "pg": "8.23.1",
-    "puppeteer-core": "25.18.1"
+    "puppeteer-core": "25.18.1",
+    "unpdf": "2.2.2"
   },
   "type": "module"
 }

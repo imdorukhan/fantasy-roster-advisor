@@ -1,4 +1,4 @@
-import {datedYahooRows,upcomingTeams} from './sc3-streaming-plan.mjs';
+import {datedYahooRows,upcomingTeams,fetchScheduleSource} from './sc3-streaming-plan.mjs';
 import {leagueToday,officialMatchupFromScoreboard,currentMatchupIdentityFromScoreboard} from './yahoo-scoreboard.mjs';
 import {bridgeSnapshots} from './sc3-yahoo-bridge.mjs';
 import {readMatchupProjection} from './sc3-matchup-projection.mjs';
@@ -38,7 +38,7 @@ function groupPlayers(days, id) {
   return [...players.values()].sort((a,b)=>a.name.localeCompare(b.name));
 }
 
-export async function readMatchupLineups({now=new Date(),fetcher=fetch,includeProjection=false,loadSnapshots=bridgeSnapshots}={}) {
+export async function readMatchupLineups({now=new Date(),fetcher=fetch,includeProjection=false,includeForecast=false,loadSnapshots=bridgeSnapshots}={}) {
   const snapshots = await loadSnapshots();
   const scoreOptions={observedAt:snapshots.scoreboard?.observed_at,now};
   // Week identity and daily lineup coverage do not depend on published 9-CAT totals.
@@ -64,9 +64,7 @@ export async function readMatchupLineups({now=new Date(),fetcher=fetch,includePr
   if(!dates.length||dates.at(-1)!==official.weekEnd)throw Error('Yahoo matchup date range could not be verified');
 
   async function source(url, format) {
-    const response = await fetcher(url,{signal:AbortSignal.timeout(8000)});
-    if (!response.ok || response.redirected) throw Error('Source unavailable');
-    return response[format]();
+    return fetchScheduleSource(url,format,fetcher);
   }
   const baseline = scored&&includeProjection&&!freshness(scored.observedAt,{now:now.getTime()}).valid
     ? await readYahooPageBaseline(scored,now,fetcher).catch(()=>scored)
@@ -85,7 +83,7 @@ export async function readMatchupLineups({now=new Date(),fetcher=fetch,includePr
     return {date,scheduleVerified:schedule.status==='fulfilled',baselineAligned:schedule.status==='fulfilled' && schedule.value.baselineAligned,lineups};
   }));
   const report = {
-    mode:'SC3_MATCHUP_LINEUPS',week:official.week,scoreboardObservedAt:official.observedAt,
+    mode:'SC3_MATCHUP_LINEUPS',week:official.week,weekStart:official.weekStart,weekEnd:official.weekEnd,scoreboardObservedAt:official.observedAt,
     observedAt:now.toISOString(),readOnly:true,scoreVerified:Boolean(scored),
     complete:days.every(day=>day.scheduleVerified&&day.lineups.every(team=>team.verified)),
     days:days.map(({date,scheduleVerified,lineups})=>({date,scheduleVerified,lineups:lineups.map(({id,verified})=>({id,verified}))})),
@@ -94,7 +92,7 @@ export async function readMatchupLineups({now=new Date(),fetcher=fetch,includePr
   if(includeProjection){
     if(!scored)report.projection={teams:[],blocked:['Official Yahoo 9-CAT totals not yet verified'],endOfWeek:null,readOnly:true};
     else {
-      try{report.projection=await readMatchupProjection(report,baseline,{now,fetcher,baselineAligned:days.every(day=>day.baselineAligned)});}
+      try{report.projection=await readMatchupProjection(report,baseline,{now,fetcher,includeForecast,baselineAligned:days.every(day=>day.baselineAligned)});}
       catch{report.projection={teams:[],blocked:['Verified NBA history unavailable'],endOfWeek:null,readOnly:true};}
     }
   }

@@ -98,6 +98,9 @@ export function currentMatchupIdentityFromScoreboard(raw,opts={}){
 }
 export function officialMatchupFromScoreboard(raw,{observedAt,now=new Date(),teamKey=MY_KEY,maxAgeMs=30*60*60*1000}={}){
  const {matchup}=selectCurrentMatchup(raw,{observedAt,now,teamKey,maxAgeMs});
+ return normalizeMatchup(matchup,{teamKey,observedAt});
+}
+function normalizeMatchup(matchup,{teamKey,observedAt}){
  const teams=teamsFor(matchup);
  const ours=teams.find(t=>t.key===teamKey),opponent=teams.find(t=>t.key!==teamKey);
  if(teams.length!==2||!ours||!opponent||!Number.isInteger(Number(matchup.week))||Number(matchup.week)<1)throw Error('Opponent or week not verified');
@@ -163,4 +166,15 @@ export function currentMatchupCategoryCoverage(raw,opts={}){
   .map(([name])=>name);
  return {publishedCount:9-missingCategories.length,totalCategories:9,missingCategories,noAttemptCategories,
   scoreVerified:false,readOnly:true};
+}
+
+export function finalMatchupFromHistory(raw,record,{observedAt,now=new Date()}={}){
+ const t=Date.parse(observedAt);
+ if(!Array.isArray(raw?.league)||!raw.league.some(x=>x?.league_key==='478.l.85892'))return null;
+ if(!Number.isFinite(t)||t>+now||!validDay(record.weekEnd)||leagueToday(new Date(t))<=record.weekEnd||record.leagueId!==85892)return null;
+ const matchups=raw?.league?.[1]?.scoreboard?.[0]?.matchups;
+ if(!matchups)return null;
+ const matches=Object.entries(matchups).filter(([k])=>/^\d+$/.test(k)).map(([,v])=>v?.matchup).filter(m=>m?.status==='postevent'&&Number(m.week)===record.week&&m.week_start===record.weekStart&&m.week_end===record.weekEnd).filter(m=>{try{const keys=teamsFor(m).map(t=>t.key);return keys.length===2&&keys.includes(MY_KEY)&&keys.includes('478.l.85892.t.'+record.opponentId);}catch{return false;}});
+ if(matches.length!==1)return null;
+ try{return {...normalizeMatchup(matches[0],{teamKey:MY_KEY,observedAt}),finalVerified:true};}catch{return null;}
 }
