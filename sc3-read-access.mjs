@@ -15,6 +15,9 @@ export async function requireSc3Read(req,res,{env=process.env,verify=hasProducti
   return false;
  }
  if(hasStageRead(req,env))return true;
+ if(env.SC3_STAGE_RECEIVER==='1'&&req.headers?.host===env.VERCEL_URL&&env.VERCEL_URL!=='salarycaptain.vercel.app'){
+  res.status(401).json({error:'Active staging grant required'});return false;
+ }
  try{
   if(await verifyProductionOwner(req,{verify}))return true;
  }catch{

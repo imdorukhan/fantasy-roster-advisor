@@ -1,8 +1,9 @@
+import {stageWindow,stageGrantTimes} from './sc3-stage-window.mjs';
 import {createHash,createPrivateKey,createPublicKey,randomBytes,sign,verify,timingSafeEqual} from 'node:crypto';
 export const CANONICAL='salarycaptain.vercel.app';
 const path='/api/auto-data';
 const pending='__Host-sc3_stage_pending',binding='__Host-sc3_stage_binding',session='__Host-sc3_stage_grant';
-const SCOPE='sc3-acceptance-read-v1', TTL=300, HANDOFF=60;
+const SCOPE='sc3-acceptance-read-v1';
 const noncePattern=/^[A-Za-z0-9_-]{43}$/;
 const hostPattern=/^salarycaptain-[a-z0-9]+-dorukkosar-4371\.vercel\.app$/;
 const deploymentPattern=/^dpl_[A-Za-z0-9]{15,64}$/;
@@ -54,8 +55,8 @@ export function allowedStageRead(req){
  if(exactQuery(q,['sc3Player','id'])||exactQuery(q,['sc3Player','id','dropId']))return q.sc3Player==='1'&&/^\d{1,10}$/.test(q.id)&&(q.dropId===undefined||/^\d{1,10}$/.test(q.dropId));
  return false;
 }
-function mint(target,digest,env,now){
- const payload={v:1,iss:CANONICAL,aud:target.audience,dpl:target.id,scope:SCOPE,nonce:digest,iat:now,exp:now+TTL,handoff:now+HANDOFF};
+function mint(target,digest,env,now,w){
+ const payload={v:2,iss:CANONICAL,aud:target.audience,dpl:target.id,scope:SCOPE,nonce:digest,...stageGrantTimes(w,now)};
  const data=Buffer.from(JSON.stringify(payload)).toString('base64url');
  return data+'.'+sign(null,Buffer.from(data),keyFrom(env.SC3_STAGE_SIGNING_KEY,true)).toString('base64url');
 }
@@ -66,7 +67,9 @@ function claims(grant,target,proof,env,now,{exchange=false}={}){
   if(bits.length!==2||!bits.every(x=>/^[A-Za-z0-9_-]+$/.test(x)))return null;
   if(!verify(null,Buffer.from(bits[0]),keyFrom(env.SC3_STAGE_VERIFY_KEY),Buffer.from(bits[1],'base64url')))return null;
   const p=JSON.parse(Buffer.from(bits[0],'base64url').toString('utf8'));
-  if(p.v!==1||p.iss!==CANONICAL||p.aud!==target.audience||p.dpl!==target.id||p.scope!==SCOPE||!Number.isSafeInteger(p.iat)||!Number.isSafeInteger(p.exp)||!Number.isSafeInteger(p.handoff)||p.exp!==p.iat+TTL||p.handoff!==p.iat+HANDOFF||p.iat>now||p.exp<=now||exchange&&p.handoff<=now||!noncePattern.test(p.nonce))return null;
+  const w=stageWindow(env,now);if(!w)return null;
+  const expected=stageGrantTimes(w,p.iat);
+  if(p.v!==2||p.windowStart!==w.start||p.windowEnd!==w.end||p.iat<w.start||p.iss!==CANONICAL||p.aud!==target.audience||p.dpl!==target.id||p.scope!==SCOPE||!Number.isSafeInteger(p.iat)||!Number.isSafeInteger(p.exp)||!Number.isSafeInteger(p.handoff)||p.exp!==expected.exp||p.handoff!==expected.handoff||p.iat>now||p.exp<=now||exchange&&p.handoff<=now||!noncePattern.test(p.nonce))return null;
   if(!timingSafeEqual(Buffer.from(p.nonce),Buffer.from(hash(proof))))return null;
   return p;
  }catch{return null;}
@@ -117,26 +120,28 @@ export async function stageAuth(req,res,{env=process.env,owner=async()=>false,no
  const q=req.query??{},action=q.sc3StageAuth;
  if(String(req.url??'').split('?')[0]!==path||!exactQuery(q,action==='approve'&&req.method==='GET'?['sc3StageAuth','challenge']:['sc3StageAuth']))return error(res,400,'Invalid staging request');
  const target=receiver(req,env),iss=issuer(req,env);
- if(!target&&!iss)return error(res,404,'Staging authorization disabled');
+ const atStart=now(),window=stageWindow(env,atStart);
+ if((!target&&!iss)||!window)return error(res,404,'Staging authorization disabled');
  if(action==='begin'&&target&&req.method==='GET'){
   if(!localNavigation(req))return error(res,403,'Invalid start origin');
   const proof=random();if(!noncePattern.test(proof))return error(res,503,'Staging unavailable');
   try{keyFrom(env.SC3_STAGE_VERIFY_KEY)}catch{return error(res,503,'Staging key unavailable')}
-  res.setHeader('Set-Cookie',[setCookie(pending,proof,300,'None'),setCookie(binding,'',0),setCookie(session,'',0)]);
+  res.setHeader('Set-Cookie',[setCookie(pending,proof,Math.min(300,window.end-atStart),'None'),setCookie(binding,'',0),setCookie(session,'',0)]);
   const challenge=hash(proof);
   return html(res,'Staged acceptance','<p>Read-only access for this exact deployment. Continue to canonical owner approval.</p><p><a href="'+esc(url(CANONICAL,'approve')+'&challenge='+challenge)+'">Continue to owner approval</a></p>');
  }
  if(action==='approve'&&iss){
   if(req.method==='GET'){
    if(!noncePattern.test(q.challenge))return error(res,400,'Invalid challenge');
-   return html(res,'Approve staged acceptance','<p>Approve five minutes of read-only acceptance for '+esc(iss.audience)+' ('+esc(iss.id)+'). No fantasy transactions or writer access.</p>'+form(url(CANONICAL,'approve'),'challenge',q.challenge,'Approve read-only access'),origin(CANONICAL));
+   return html(res,'Approve staged acceptance','<p>Approve up to five minutes of read-only acceptance for '+esc(iss.audience)+' ('+esc(iss.id)+'). No fantasy transactions or writer access.</p>'+form(url(CANONICAL,'approve'),'challenge',q.challenge,'Approve read-only access'),origin(CANONICAL));
   }
   if(req.method==='POST'){
    if(req.headers?.origin!==origin(CANONICAL)||req.headers?.['sec-fetch-site']&&req.headers['sec-fetch-site']!=='same-origin')return error(res,403,'Invalid approval origin');
    const challenge=bodyField(req,'challenge');if(!noncePattern.test(challenge??''))return error(res,400,'Invalid challenge');
    try{if(!await owner(req))return error(res,401,'Yahoo owner sign-in required');
-    const grant=mint(iss,challenge,env,now());
-    return html(res,'Complete staged acceptance','<p>Grant expires in one minute unless transferred to the approved deployment. It does not contain your Yahoo session.</p>'+form(url(iss.audience,'exchange'),'grant',grant,'Open staged acceptance'),origin(iss.audience));
+    const at=now(),w=stageWindow(env,at);if(!w)return error(res,404,'Staging authorization disabled');
+    const grant=mint(iss,challenge,env,at,w);
+    return html(res,'Complete staged acceptance','<p>Grant must be transferred within one minute or before the release window closes. It does not contain your Yahoo session.</p>'+form(url(iss.audience,'exchange'),'grant',grant,'Open staged acceptance'),origin(iss.audience));
    }catch{return error(res,503,'Staging approval unavailable')}
   }
  }
@@ -155,7 +160,7 @@ export async function stageAuth(req,res,{env=process.env,owner=async()=>false,no
  }
  if(action==='status'&&target&&req.method==='GET'){
   const p=sessionClaims(req,env,now());if(!p)return error(res,401,'Staging grant required');
-  return res.status(200).json({mode:'SC3_STAGED_ACCEPTANCE',deploymentId:target.id,expiresAt:new Date(p.exp*1000).toISOString(),readOnly:true,checks:['sc3LeagueRosters=1','live=1&officialMatchup=1','sc3Streaming=1&waiverImpact=1','sc3MatchupLineups=1&projection=1&forecast=1','sc3P2Lab=1']});
+  return res.status(200).json({mode:'SC3_STAGED_ACCEPTANCE',deploymentId:target.id,expiresAt:new Date(p.exp*1000).toISOString(),windowEndsAt:new Date(p.windowEnd*1000).toISOString(),readOnly:true,checks:['sc3LeagueRosters=1','live=1&officialMatchup=1','sc3Streaming=1&waiverImpact=1','sc3MatchupLineups=1&projection=1&forecast=1','sc3P2Lab=1']});
  }
  if(action==='clear'&&target&&req.method==='POST'){
   if(req.headers?.origin!==origin(target.audience)||!localNavigation(req))return error(res,403,'Invalid clear origin');

@@ -23,7 +23,8 @@ const playwright=playwrightModule?await import(pathToFileURL(resolve(playwrightM
 const {stageAuth,hasStageRead}=await import('../sc3-stage-auth.mjs');
 const host='salarycaptain-fixture123-dorukkosar-4371.vercel.app',id='dpl_fixture1234567890123456',path='/api/auto-data';
 const {privateKey,publicKey}=generateKeyPairSync('ed25519');
-const flags={VERCEL_ENV:'production',SC3_SHARED_DB:'1',SC3_PRODUCTION_READS:'1'};
+const fixedStart=Math.floor(Date.now()/1000)-10,fixedEnd=fixedStart+1800;
+const flags={SC3_STAGE_NOT_BEFORE:String(fixedStart),SC3_STAGE_NOT_AFTER:String(fixedEnd),VERCEL_ENV:'production',SC3_SHARED_DB:'1',SC3_PRODUCTION_READS:'1'};
 const issuer={...flags,SC3_STAGE_ISSUER:'1',SC3_STAGE_TARGET_HOST:host,SC3_STAGE_TARGET_DEPLOYMENT_ID:id,SC3_STAGE_SIGNING_KEY:privateKey.export({format:'der',type:'pkcs8'}).toString('base64')};
 const receiver={...flags,SC3_STAGE_RECEIVER:'1',VERCEL_URL:host,VERCEL_DEPLOYMENT_ID:id,SC3_STAGE_VERIFY_KEY:publicKey.export({format:'der',type:'spki'}).toString('base64')};
 const synthetic='a'.repeat(43);
@@ -93,7 +94,11 @@ try{
   clockOffset=301;
   assert.equal((await page.goto(root(host)+'sc3StageAuth=status')).status(),401);
   assert.equal((await page.goto(root(host)+'sc3LeagueRosters=1')).status(),401);
-  console.log(JSON.stringify({engine,thirdPartyPhaseoutFlag:strict,exchangeHttp:exchangeStatus,landingHttp:first,statusHttp:200,allowedHttp:200,writerHttp:401,otherContextHttp:401,wrongDeploymentHttp:401,crossSiteHttp:401,expiredHttp:401,outcome:'accepted'}));
+  clockOffset=fixedEnd-Math.floor(Date.now()/1000);
+  assert.equal((await page.goto(root(host)+'sc3StageAuth=begin')).status(),404);
+  assert.equal((await page.goto(root(host)+'sc3StageAuth=status')).status(),404);
+  assert.equal((await page.goto(root(host)+'sc3LeagueRosters=1')).status(),401);
+  console.log(JSON.stringify({engine,windowClosed:true,thirdPartyPhaseoutFlag:strict,exchangeHttp:exchangeStatus,landingHttp:first,statusHttp:200,allowedHttp:200,writerHttp:401,otherContextHttp:401,wrongDeploymentHttp:401,crossSiteHttp:401,expiredHttp:401,outcome:'accepted'}));
   await browser.close();browser=undefined;
  }
 }finally{
