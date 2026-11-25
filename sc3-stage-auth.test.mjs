@@ -40,8 +40,8 @@ test('fixture owner consent issues deployment-bound signed capability; no owner 
  assert.deepEqual(Object.keys(p).sort(),['aud','dpl','exp','handoff','iat','iss','nonce','scope','v'].sort());
  assert.equal(p.exp-p.iat,300);assert.equal(p.handoff-p.iat,60);assert.equal(p.nonce,f.challenge);assert.equal(p.aud,target);assert.equal(p.dpl,id);
  assert.notEqual(p.nonce,proof);assert.equal(f.approval.headers['Set-Cookie'],undefined);
- const ex=await exchange(f);assert.equal(ex.code,303);assert.equal(ex.headers.Location,'https://'+target+path+'?sc3StageAuth=status');
- assert.ok(!ex.headers.Location.includes(f.grant));assert.equal(ex.headers['Set-Cookie'].length,3);
+ const ex=await exchange(f);assert.equal(ex.code,200);assert.equal(ex.headers.Location,undefined);assert.ok(ex.body.includes('href="https://'+target+path+'?sc3StageAuth=status"'));
+ assert.ok(!ex.body.includes(f.grant));assert.ok(!ex.body.includes(proof));assert.match(ex.headers['Cache-Control'],/no-store/);assert.match(ex.headers['Content-Security-Policy'],/form-action 'none'/);assert.equal(ex.headers['Set-Cookie'].length,3);
  assert.match(ex.headers['Set-Cookie'][0],/Max-Age=0/);assert.match(ex.headers['Set-Cookie'][1],/HttpOnly; SameSite=Lax; Max-Age=300/);
  const cookie=cookiesFrom(ex);
  const status=await call(request(target,{sc3StageAuth:'status'},'GET',{cookie}),rec);assert.equal(status.code,200);assert.equal(status.body.readOnly,true);assert.equal(status.body.deploymentId,id);
@@ -100,4 +100,38 @@ test('actual production read gate preserves owner auth and denies stage grant on
   if(!expected)assert.equal(r.code,401);
  }
  const r=response();assert.equal(await requireSc3Read(request(CANONICAL,{sc3LeagueRosters:'1'},'GET',{cookie:'yahoo_session='+'b'.repeat(43)}),r,{env:base,verify:async()=>true}),true);
+});
+
+test('committed landing creates a new navigation without relaxing status or read checks',async()=>{
+ const f=await issue();
+ const ex=await exchange(f,rec,at,{'sec-fetch-site':'cross-site','sec-fetch-mode':'navigate','sec-fetch-dest':'document'});
+ assert.equal(ex.code,200);const cookie=cookiesFrom(ex);
+ for(const site of ['cross-site','same-site']){
+  const r=await call(request(target,{sc3StageAuth:'status'},'GET',{cookie,'sec-fetch-site':site}),rec);assert.equal(r.code,401);
+  assert.equal(hasStageRead(request(target,{sc3LeagueRosters:'1'},'GET',{cookie,'sec-fetch-site':site}),rec,at),false);
+ }
+ for(const site of ['same-origin','none']){
+  const r=await call(request(target,{sc3StageAuth:'status'},'GET',{cookie,'sec-fetch-site':site}),rec);assert.equal(r.code,200);
+ }
+ assert.equal((await exchange(f,rec,at,{'sec-fetch-mode':'cors'})).code,403);
+ assert.equal((await exchange(f,rec,at,{'sec-fetch-dest':'iframe'})).code,403);
+ assert.equal((await call(request(target,{sc3StageAuth:'begin'},'GET',{'sec-fetch-site':'cross-site'}),rec)).code,403);
+ assert.equal((await call(request(target,{sc3StageAuth:'clear'},'POST',{origin:'https://'+target,'sec-fetch-site':'cross-site',cookie}),rec)).code,403);
+});
+test('receiver is production-only and rejects private key or mixed issuer configuration',async()=>{
+ const f=await issue(),cookie=cookiesFrom(await exchange(f));
+ for(const env of [{...rec,VERCEL_ENV:'preview'},{...rec,SC3_STAGE_SIGNING_KEY:'fixture-private-key-present'},{...rec,SC3_STAGE_ISSUER:'1'},{...rec,SC3_PRODUCTION_READS:'0'},{...rec,SC3_ISOLATED:'1'}]){
+  assert.equal((await exchange(f,env)).code,404);
+  assert.equal(hasStageRead(request(target,{sc3LeagueRosters:'1'},'GET',{cookie}),env,at),false);
+ }
+});
+test('ordinary browser proof consumption, expiry and stateless replay limitation are explicit',async()=>{
+ const f=await issue(),ex=await exchange(f);
+ assert.match(ex.headers['Set-Cookie'][0],/Max-Age=0/);
+ assert.equal((await exchange({...f,pending:cookiesFrom(ex)})).code,401);
+ // A captured original proof and grant can still be replayed within 60s.
+ assert.equal((await exchange(f,rec,at+59)).code,200);
+ assert.equal((await exchange(f,rec,at+60)).code,401);
+ const cookie=cookiesFrom(ex);
+ assert.equal((await call(request(target,{sc3StageAuth:'status'},'GET',{cookie}),rec,{now:at+300})).code,401);
 });

@@ -29,13 +29,13 @@ function keyFrom(raw,privateKey=false){
  return key;
 }
 function receiver(req,env){
- if(env.SC3_STAGE_RECEIVER!=='1'||!['production','preview'].includes(env.VERCEL_ENV)||env.SC3_SHARED_DB!=='1')return null;
+ if(env.SC3_STAGE_RECEIVER!=='1'||env.VERCEL_ENV!=='production'||env.SC3_SHARED_DB!=='1'||env.SC3_PRODUCTION_READS!=='1'||env.SC3_ISOLATED==='1'||env.SC3_STAGE_ISSUER==='1'||env.SC3_STAGE_SIGNING_KEY)return null;
  const audience=env.VERCEL_URL,id=env.VERCEL_DEPLOYMENT_ID;
  if(!hostPattern.test(audience??'')||!deploymentPattern.test(id??'')||host(req)!==audience)return null;
  return {audience,id};
 }
 function issuer(req,env){
- if(env.SC3_STAGE_ISSUER!=='1'||env.VERCEL_ENV!=='production'||env.SC3_ISOLATED==='1'||host(req)!==CANONICAL)return null;
+ if(env.SC3_STAGE_ISSUER!=='1'||env.VERCEL_ENV!=='production'||env.SC3_ISOLATED==='1'||env.SC3_STAGE_RECEIVER==='1'||env.SC3_SHARED_DB!=='1'||env.SC3_PRODUCTION_READS!=='1'||host(req)!==CANONICAL)return null;
  const audience=env.SC3_STAGE_TARGET_HOST,id=env.SC3_STAGE_TARGET_DEPLOYMENT_ID;
  return hostPattern.test(audience??'')&&deploymentPattern.test(id??'')?{audience,id}:null;
 }
@@ -71,9 +71,12 @@ function claims(grant,target,proof,env,now,{exchange=false}={}){
   return p;
  }catch{return null;}
 }
+// Reject same-site sibling origins as well as cross-site requests. Older browsers
+// may omit Fetch Metadata; the existing signed capability and proof still apply.
+function localNavigation(req){const site=req.headers?.['sec-fetch-site'];return site===undefined||site==='same-origin'||site==='none';}
 function sessionClaims(req,env,now){
  const target=receiver(req,env);
- if(!target||req.headers?.['sec-fetch-site']==='cross-site')return null;
+ if(!target||!localNavigation(req))return null;
  return claims(cookieValue(req,session),target,cookieValue(req,binding),env,now);
 }
 export function hasStageRead(req,env=process.env,now=epoch()){
@@ -85,6 +88,7 @@ function headers(res,formAction="'none'"){
  res.setHeader('Referrer-Policy','strict-origin');
  res.setHeader('X-Content-Type-Options','nosniff');
  res.setHeader('X-Frame-Options','DENY');
+ res.setHeader('Cross-Origin-Opener-Policy','same-origin');
  res.setHeader('Content-Security-Policy',"default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action "+formAction);
 }
 function html(res,title,body,formAction){
@@ -111,10 +115,11 @@ function error(res,status,message){return res.status(status).json({error:message
 export async function stageAuth(req,res,{env=process.env,owner=async()=>false,now=epoch,random=()=>randomBytes(32).toString('base64url')}={}){
  headers(res);
  const q=req.query??{},action=q.sc3StageAuth;
- if(!exactQuery(q,action==='approve'&&req.method==='GET'?['sc3StageAuth','challenge']:['sc3StageAuth']))return error(res,400,'Invalid staging request');
+ if(String(req.url??'').split('?')[0]!==path||!exactQuery(q,action==='approve'&&req.method==='GET'?['sc3StageAuth','challenge']:['sc3StageAuth']))return error(res,400,'Invalid staging request');
  const target=receiver(req,env),iss=issuer(req,env);
  if(!target&&!iss)return error(res,404,'Staging authorization disabled');
  if(action==='begin'&&target&&req.method==='GET'){
+  if(!localNavigation(req))return error(res,403,'Invalid start origin');
   const proof=random();if(!noncePattern.test(proof))return error(res,503,'Staging unavailable');
   try{keyFrom(env.SC3_STAGE_VERIFY_KEY)}catch{return error(res,503,'Staging key unavailable')}
   res.setHeader('Set-Cookie',[setCookie(pending,proof,300,'None'),setCookie(binding,'',0),setCookie(session,'',0)]);
@@ -136,20 +141,24 @@ export async function stageAuth(req,res,{env=process.env,owner=async()=>false,no
   }
  }
  if(action==='exchange'&&target&&req.method==='POST'){
-  if(req.headers?.origin!==origin(CANONICAL))return error(res,403,'Invalid transfer origin');
+  const mode=req.headers?.['sec-fetch-mode'],dest=req.headers?.['sec-fetch-dest'];
+  if(req.headers?.origin!==origin(CANONICAL)||mode!==undefined&&mode!=='navigate'||dest!==undefined&&dest!=='document')return error(res,403,'Invalid transfer origin');
   const grant=bodyField(req,'grant'),proof=cookieValue(req,pending),at=now();
   const p=claims(grant,target,proof,env,at,{exchange:true});
   if(!p)return error(res,401,'Invalid or expired staging grant');
   const lifetime=p.exp-at;
   res.setHeader('Set-Cookie',[setCookie(pending,'',0,'None'),setCookie(binding,proof,lifetime),setCookie(session,grant,lifetime)]);
-  res.setHeader('Location',url(target.audience,'status'));return res.status(303).end();
+  // A redirect preserves the cross-site Fetch Metadata taint. Commit a new
+  // staged document instead; the explicit link initiates a same-origin GET.
+  // No grant, proof, or owner metadata is reflected into the landing body.
+  return html(res,'Staged acceptance transfer received','<p>Continue to verify your short-lived read-only access.</p><p><a href="'+esc(url(target.audience,'status'))+'">Continue to staged status</a></p>');
  }
  if(action==='status'&&target&&req.method==='GET'){
   const p=sessionClaims(req,env,now());if(!p)return error(res,401,'Staging grant required');
   return res.status(200).json({mode:'SC3_STAGED_ACCEPTANCE',deploymentId:target.id,expiresAt:new Date(p.exp*1000).toISOString(),readOnly:true,checks:['sc3LeagueRosters=1','live=1&officialMatchup=1','sc3Streaming=1&waiverImpact=1','sc3MatchupLineups=1&projection=1&forecast=1','sc3P2Lab=1']});
  }
  if(action==='clear'&&target&&req.method==='POST'){
-  if(req.headers?.origin!==origin(target.audience))return error(res,403,'Invalid clear origin');
+  if(req.headers?.origin!==origin(target.audience)||!localNavigation(req))return error(res,403,'Invalid clear origin');
   res.setHeader('Set-Cookie',[setCookie(pending,'',0,'None'),setCookie(binding,'',0),setCookie(session,'',0)]);
   return res.status(200).json({cleared:true});
  }
