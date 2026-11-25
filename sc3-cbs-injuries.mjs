@@ -39,8 +39,8 @@ export function parseCBSInjuries(html,catalog,now=new Date()){
  if(teams.size<10||parsed<30)throw Error('CBS coverage unavailable');
  return {source:'CBS',observedAt:now.toISOString(),teamGroups:teams.size,parsed,rows:rows.filter(p=>!ambiguous.has(p.espnId)),readOnly:true};
 }
-export async function readCBSInjuries({fetcher=fetch,transaction=withScopedTransaction,now}={}){
- const catalog=await transaction(async c=>(await c.query('select espn_id as "espnId",name,nba_team as team from sc3.espn_player_identity')).rows);
+export async function readCBSInjuries({fetcher=fetch,transaction=withScopedTransaction,now,catalog:providedCatalog}={}){
+ const catalog=providedCatalog??await transaction(async c=>(await c.query('select espn_id as "espnId",name,nba_team as team from sc3.espn_player_identity')).rows);
  const r=await fetcher(CBS_SOURCE,{redirect:'error',signal:AbortSignal.timeout(8000),cache:'no-store',headers:{'User-Agent':'Mozilla/5.0'}});
  if(!r.ok||r.redirected)throw Error('CBS source unavailable');
  const html=await r.text();
