@@ -14,7 +14,10 @@ import {stageIssuer,CANONICAL} from '../sc3-stage-issuer.mjs';
 import {verifyProductionOwner} from '../sc3-read-access.mjs';
 import puppeteer from 'puppeteer-core';
 const receiverPath=process.argv[2],chrome=process.argv[3];
-if(!receiverPath||!chrome)throw Error('Supply checked-out PR21 receiver module and isolated browser executable');
+const engine=process.env.SC3_TEST_ENGINE??'chromium';
+const playwrightModule=process.env.SC3_TEST_PLAYWRIGHT_MODULE;
+if(!receiverPath||(!chrome&&!playwrightModule)||!['chromium','firefox','webkit'].includes(engine)||engine!=='chromium'&&!playwrightModule)throw Error('Supply checked-out PR21 receiver and isolated browser executable or test-only Playwright module');
+const playwright=playwrightModule?await import(pathToFileURL(resolve(playwrightModule))):null;
 const {stageAuth,hasStageRead}=await import(pathToFileURL(resolve(receiverPath)));
 const host='salarycaptain-fixture123-dorukkosar-4371.vercel.app',id='dpl_fixture1234567890123456',path='/api/auto-data';
 const {privateKey,publicKey}=generateKeyPairSync('ed25519');
@@ -22,6 +25,7 @@ const flags={VERCEL_ENV:'production',SC3_SHARED_DB:'1',SC3_PRODUCTION_READS:'1'}
 const issuer={...flags,SC3_STAGE_ISSUER:'1',SC3_STAGE_TARGET_HOST:host,SC3_STAGE_TARGET_DEPLOYMENT_ID:id,SC3_STAGE_SIGNING_KEY:privateKey.export({format:'der',type:'pkcs8'}).toString('base64')};
 const receiver={...flags,SC3_STAGE_RECEIVER:'1',VERCEL_URL:host,VERCEL_DEPLOYMENT_ID:id,SC3_STAGE_VERIFY_KEY:publicKey.export({format:'der',type:'spki'}).toString('base64')};
 const synthetic='a'.repeat(43);
+let exchangeStatus=null,exchangeCount=0;
 const dir=await mkdtemp(join(tmpdir(),'sc3-browser-fixture-'));
 execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=loopback-fixture','-keyout',join(dir,'key.pem'),'-out',join(dir,'cert.pem')],{stdio:'ignore'});
 const server=httpsServer({key:await readFile(join(dir,'key.pem')),cert:await readFile(join(dir,'cert.pem'))},async(req,res)=>{
@@ -37,6 +41,7 @@ const server=httpsServer({key:await readFile(join(dir,'key.pem')),cert:await rea
   const q=Object.fromEntries(u.searchParams);let body='';for await(const chunk of req){body+=chunk;if(body.length>3000)throw Error('body limit');}
   const r={method:req.method,url:req.url,headers:req.headers,query:q,body};
   let status=200;const response={setHeader:(k,v)=>res.setHeader(k,v),status(n){status=n;return this},json(v){res.statusCode=status;res.setHeader('Content-Type','application/json');res.end(JSON.stringify(v));return this},send(v){res.statusCode=status;res.end(v);return this},end(){res.statusCode=status;res.end();return this}};
+  if(h===host&&q.sc3StageAuth==='exchange')res.once('finish',()=>{exchangeStatus=res.statusCode;exchangeCount++;});
   if(q.sc3StageAuth)return h===CANONICAL?await stageIssuer(r,response,{env:issuer,owner:r=>verifyProductionOwner(r,{verify:async sid=>sid===synthetic})}):await stageAuth(r,response,{env:receiver});
   // Fixture checks only; no Yahoo or DB code is invoked.
   if(h!==host||!hasStageRead(r,receiver))return send(401,{authorized:false});
@@ -55,9 +60,11 @@ await listen(proxy);
 const root=h=>'https://'+h+path+'?';
 let browser;
 try{
- for(const strict of [false,true]){
-  browser=await puppeteer.launch({executablePath:chrome,headless:true,acceptInsecureCerts:true,userDataDir:join(dir,strict?'strict':'normal'),args:['--no-sandbox','--disable-background-networking','--disable-sync','--no-first-run','--proxy-server=http://127.0.0.1:'+proxy.address().port,'--ignore-certificate-errors',...(strict?['--test-third-party-cookie-phaseout']:[])]});
-  const page=await browser.newPage();
+ for(const strict of engine==='chromium'&&!playwright?[false,true]:[false]){
+  exchangeStatus=null;exchangeCount=0;
+  browser=playwright?await playwright[engine].launch({headless:true,proxy:{server:'http://127.0.0.1:'+proxy.address().port}}):await puppeteer.launch({executablePath:chrome,headless:true,acceptInsecureCerts:true,userDataDir:join(dir,strict?'strict':'normal'),args:['--no-sandbox','--disable-background-networking','--disable-sync','--no-first-run','--proxy-server=http://127.0.0.1:'+proxy.address().port,'--ignore-certificate-errors',...(strict?['--test-third-party-cookie-phaseout']:[])]});
+  const context=playwright?await browser.newContext({ignoreHTTPSErrors:true}):null;
+  const page=context?await context.newPage():await browser.newPage();
   const read=async()=>JSON.parse(await page.$eval('body',e=>e.innerText));
   const click=async selector=>{const [r]=await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded'}),page.click(selector)]);return r?.status();};
   await page.goto(root(host)+'sc3StageAuth=begin');
@@ -67,20 +74,22 @@ try{
   assert.equal(await click('a'),200);
   assert.equal(await click('button'),200);
   const first=await click('button');
-  const transfer=first===200||first===401;
-  assert.ok(transfer);
+  assert.ok(first===200||first===401);
+  assert.equal(exchangeCount,1);
+  assert.ok([303,401].includes(exchangeStatus));
   const sameSite=await page.goto(root(host)+'sc3StageAuth=status');
   const status=await read();
   const accepted=sameSite.status()===200&&status.readOnly===true;
   if(!accepted){
    assert.equal(sameSite.status(),401);
-   console.log(JSON.stringify({engine:'chromium',thirdPartyPhaseoutFlag:strict,redirectHttp:first,statusHttp:sameSite.status(),outcome:'blocked-fail-closed'}));
+   console.log(JSON.stringify({engine,thirdPartyPhaseoutFlag:strict,exchangeHttp:exchangeStatus,redirectHttp:first,statusHttp:sameSite.status(),outcome:'blocked-fail-closed'}));
   }else{
    const allowed=await page.goto(root(host)+'sc3LeagueRosters=1');assert.equal(allowed.status(),200);assert.equal((await read()).authorized,true);
    const denied=await page.goto(root(host)+'sc3YahooSync=1');assert.equal(denied.status(),401);
-   const isolated=await browser.createBrowserContext();const other=await isolated.newPage();
+   assert.equal(exchangeStatus,303);
+   const isolated=playwright?await browser.newContext({ignoreHTTPSErrors:true}):await browser.createBrowserContext();const other=await isolated.newPage();
    assert.equal((await other.goto(root(host)+'sc3LeagueRosters=1')).status(),401);await isolated.close();
-   console.log(JSON.stringify({engine:'chromium',thirdPartyPhaseoutFlag:strict,redirectHttp:first,statusHttp:sameSite.status(),allowedHttp:200,writerHttp:401,otherContextHttp:401,outcome:'accepted'}));
+   console.log(JSON.stringify({engine,thirdPartyPhaseoutFlag:strict,exchangeHttp:exchangeStatus,redirectHttp:first,statusHttp:sameSite.status(),allowedHttp:200,writerHttp:401,otherContextHttp:401,outcome:'accepted'}));
   }
   await browser.close();browser=undefined;
  }

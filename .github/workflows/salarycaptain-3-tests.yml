@@ -1,7 +1,7 @@
 name: Salary CAPtain 3.0 Tests
 on:
   pull_request:
-    branches: [main, feature/salarycaptain-3-expanded]
+    branches: [main, feature/salarycaptain-3-expanded, release/sc3-p1-564058b]
   push:
     branches: [feature/salarycaptain-3-expanded, feature/sc3-issuer-bootstrap-20261125]
 permissions:
