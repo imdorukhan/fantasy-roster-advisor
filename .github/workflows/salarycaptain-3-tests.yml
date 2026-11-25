@@ -3,7 +3,7 @@ on:
   pull_request:
     branches: [main, feature/salarycaptain-3-expanded]
   push:
-    branches: [feature/salarycaptain-3-expanded]
+    branches: [feature/salarycaptain-3-expanded, feature/sc3-issuer-bootstrap-20261125]
 permissions:
   contents: read
 jobs:

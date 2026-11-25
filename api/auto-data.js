@@ -134,6 +134,11 @@ async function sc3CloudHealth(req,res){
 
 export const config={maxDuration:300};
 export default async function handler(req,res){
+ if(Object.hasOwn(req.query??{},'sc3StageAuth')){
+  const {stageIssuer}=await import('../sc3-stage-issuer.mjs');
+  const {verifyProductionOwner}=await import('../sc3-read-access.mjs');
+  return stageIssuer(req,res,{owner:verifyProductionOwner});
+ }
  if(req.query?.sc3NbaHistorySync==='1'){
   const {nbaHistoryCron}=await import('../sc3-freshness-sync.mjs');
   return nbaHistoryCron(req,res);
