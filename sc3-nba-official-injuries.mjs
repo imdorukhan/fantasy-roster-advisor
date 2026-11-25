@@ -134,9 +134,9 @@ export async function discoverOfficialReport({fetcher=fetch,now}={}){
  if(!candidates.length)throw Error('Fresh official report unavailable');
  return {...candidates[0].selected,indexUrl:candidates[0].indexUrl,indexCoverage:accessible.length};
 }
-export async function readOfficialInjuries({fetcher=fetch,transaction=withScopedTransaction,now,extract=extractOfficialPages}={}){
+export async function readOfficialInjuries({fetcher=fetch,transaction=withScopedTransaction,now,extract=extractOfficialPages,catalog:providedCatalog}={}){
  const [catalog,selected]=await Promise.all([
-  transaction(async c=>(await c.query('select espn_id as "espnId",name,nba_team as team from sc3.espn_player_identity')).rows),
+  providedCatalog??transaction(async c=>(await c.query('select espn_id as "espnId",name,nba_team as team from sc3.espn_player_identity')).rows),
   discoverOfficialReport({fetcher,now})
  ]);
  const r=await fetcher(selected.url,{redirect:'error',signal:AbortSignal.timeout(10000),cache:'no-store'});

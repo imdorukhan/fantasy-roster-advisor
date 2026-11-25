@@ -25,26 +25,74 @@ export function pgConfig(env=process.env){
    }
   }catch{ /* Raw password in an exact fixed envelope; never log it. */ }
   if(!password)throw Error('SC3 database password segment invalid');
-  return {host,port:5432,database:'postgres',user,password,ssl:{ca:supabaseRoots,rejectUnauthorized:true,minVersion:'TLSv1.2'},connectionTimeoutMillis:10000,statement_timeout:20000,max:2};
+  return {host,port:5432,database:'postgres',user,password,ssl:{ca:supabaseRoots,rejectUnauthorized:true,minVersion:'TLSv1.2'},connectionTimeoutMillis:5000,statement_timeout:20000,query_timeout:22000,idleTimeoutMillis:1000,allowExitOnIdle:true,max:1};
  }
  // These error labels describe only the public connection envelope.
  if(!/^postgres(?:ql)?:\/\//.test(raw))throw Error('SC3 database URL scheme missing');
  if(!approved.some(({user})=>raw.startsWith('postgresql://'+user+':')||raw.startsWith('postgres://'+user+':')))throw Error('SC3 database URL role mismatch');
  throw Error('SC3 database URL endpoint mismatch');
 }
-let pool;
-export async function scopedPool(){if(!pool){const config=pgConfig();const {Pool}=await import('pg');pool=new Pool(config)}return pool}
-export async function withScopedTransaction(fn,{pool:provided,readOnly=true}={}){
- const p=provided||await scopedPool(),c=await p.connect();
- try{await c.query(readOnly?'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY':'BEGIN');await c.query("SET LOCAL search_path TO pg_catalog, sc3");
- const check=await c.query("select current_user as role, session_user as login, has_schema_privilege(current_user,'sc3','USAGE') as allowed, exists(select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p','v','m') and (has_table_privilege(current_user,c.oid,'SELECT') or has_table_privilege(current_user,c.oid,'INSERT') or has_table_privilege(current_user,c.oid,'UPDATE') or has_table_privilege(current_user,c.oid,'DELETE'))) as legacy_access");
- const row=check.rows[0];if(row?.role!=='sc3_app'||row.login!=='sc3_app'||row.allowed!==true||row.legacy_access!==false)throw Error('Scoped role verification failed');
- const result=await fn(c);await c.query('COMMIT');return result;
- }catch(e){try{await c.query('ROLLBACK')}catch{}throw e}finally{
-  // Serverless instances may freeze before idle pool timers fire. Return the SC3 role slot immediately.
-  if(!provided&&process.env.VERCEL==='1')c.release(true);
-  else c.release();
+// One pool initialization per process, even when cold-start requests overlap.
+// Never replay a transaction (especially a write) after an ambiguous result.
+export function createPoolProvider(create){
+ let pending;
+ return function get(){
+  if(!pending)pending=Promise.resolve().then(create).catch(error=>{pending=undefined;throw error});
+  return pending;
+ };
+}
+export const scopedPool=createPoolProvider(async()=>{
+ const {Pool}=await import('pg');
+ const p=new Pool(pgConfig());
+ // pg emits idle client errors; do not leak provider messages or connection strings.
+ p.on('error',()=>{});
+ return p;
+});
+export function isConnectionCapacityError(error){
+ return ['53300','57P03','08001','08006','ECONNRESET','ETIMEDOUT'].includes(error?.code)
+  || /too many connections for role|remaining connection slots|timeout exceeded when trying to connect|connection terminated unexpectedly/i.test(String(error?.message??''));
+}
+export async function acquireScopedClient(pool,{pause=ms=>new Promise(r=>setTimeout(r,ms))}={}){
+ for(let attempt=0;;attempt++){
+  try{return await pool.connect();}
+  catch(error){if(attempt>=2||!isConnectionCapacityError(error))throw error;await pause(150*(attempt+1));}
  }
+}
+export const SC3_IDLE_TRANSACTION_MS=15000;
+const roleSQL="select current_user as role, session_user as login, has_schema_privilege(current_user,'sc3','USAGE') as allowed, exists(select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relkind in ('r','p','v','m') and (has_table_privilege(current_user,c.oid,'SELECT') or has_table_privilege(current_user,c.oid,'INSERT') or has_table_privilege(current_user,c.oid,'UPDATE') or has_table_privilege(current_user,c.oid,'DELETE'))) as legacy_access";
+async function verifyScopedRole(c){
+ const row=(await c.query(roleSQL)).rows[0];
+ if(row?.role!=='sc3_app'||row.login!=='sc3_app'||row.allowed!==true||row.legacy_access!==false)throw Error('Scoped role verification failed');
+}
+// The server-side timeout MUST be installed before BEGIN: a frozen serverless
+// instance can stop immediately after any await, even the BEGIN acknowledgement.
+// No reliance on JS idle timers for reclaiming role slots.
+export async function managedTransaction(fn,{pool,readOnly=true,verify,acquire=acquireScopedClient}){
+ const c=await acquire(pool);
+ let began=false,connectionFailed=false;
+ const onError=()=>{connectionFailed=true;};
+ c.on?.('error',onError);
+ try{
+  await c.query("SET idle_in_transaction_session_timeout TO '"+SC3_IDLE_TRANSACTION_MS+"ms'");
+  began=true; // BEGIN may succeed server-side even if its acknowledgement is lost.
+  await c.query(readOnly?'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY':'BEGIN');
+  await c.query("SET LOCAL search_path TO pg_catalog, sc3");
+  await verify(c);
+  const result=await fn(c);
+  await c.query('COMMIT');
+  began=false;
+  return result;
+ }catch(error){
+  if(began&&!connectionFailed){try{await c.query('ROLLBACK')}catch{}}
+  throw error;
+ }finally{
+  // Destroy rather than return an idle client. A frozen instance's timers
+  // cannot be trusted and failed/ambiguous transactions must never be reused.
+  try{c.release(true)}finally{c.removeListener?.('error',onError);}
+ }
+}
+export async function withScopedTransaction(fn,{pool:provided,readOnly=true}={}){
+ return managedTransaction(fn,{pool:provided||await scopedPool(),readOnly,verify:verifyScopedRole});
 }
 export function latestExpectedDay(now=new Date()){
  const eastern=new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);

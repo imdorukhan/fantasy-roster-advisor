@@ -1,0 +1,9 @@
+# P0 connection recovery — release gate
+Production remains on the previous P1 deployment. Do not change the global role connection limit, activate P2, run migrations, or register cron jobs for this repair.
+- A singleton initialization promise prevents duplicate pools in one cold process. Pool max=1 is per instance, not a global semaphore.
+- Set session idle_in_transaction_session_timeout before BEGIN. Destroy every checked-out client, including after errors. Retry only connection acquisition on bounded transient errors. Never replay a transaction after a lost acknowledgement.
+- P2 Lab reads DB sequentially, shares one identity catalog between NBA and CBS, and performs external fetches outside transactions.
+- In a protected Preview validate all P1 endpoints and P2 Lab, no write flags, source coverage, and connection counts. Do not stress shared production DB; use disposable CI PostgreSQL with independent pools and a login limited to four connections.
+- If connection exhaustion recurs, inspect pg_stat_activity using only non-sensitive metadata. Terminate only positively identified abandoned read-only sessions; never assume a generic BEGIN was read-only. Verify backend identity, state, age and transaction mode again immediately before termination. The prior incident cleared without termination.
+- A future production deployment requires explicit authorization, a staged production build and owner acceptance before traffic promotion. Current main includes the rolled-back P2 code; rollback target remains 564058b. The P2 read flag remains off.
+- Consider a role-level idle transaction timeout as a separate approved defense-in-depth change; do not change the production database role in this PR. Serverless instances can still contend across deployments, so monitor global role capacity.
