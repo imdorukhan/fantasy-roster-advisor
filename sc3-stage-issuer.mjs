@@ -1,10 +1,11 @@
+import {stageWindow,stageGrantTimes} from './sc3-stage-window.mjs';
 import {createPrivateKey,sign} from 'node:crypto';
 export const CANONICAL='salarycaptain.vercel.app';
 const path='/api/auto-data',approval='https://'+CANONICAL+path+'?sc3StageAuth=approve';
 const noncePattern=/^[A-Za-z0-9_-]{43}$/;
 const hostPattern=/^salarycaptain-[a-z0-9]+-dorukkosar-4371\.vercel\.app$/;
 const deploymentPattern=/^dpl_[A-Za-z0-9]{15,64}$/;
-const scope='sc3-acceptance-read-v1',TTL=300,HANDOFF=60;
+const scope='sc3-acceptance-read-v1';
 const epoch=()=>Math.floor(Date.now()/1000);
 function exact(q,keys){return q&&Object.keys(q).length===keys.length&&keys.every(k=>Object.hasOwn(q,k)&&typeof q[k]==='string');}
 function target(req,env){
@@ -18,9 +19,9 @@ function signingKey(raw){
  if(key.asymmetricKeyType!=='ed25519')throw Error('Unexpected signing key');
  return key;
 }
-function mint(t,challenge,env,at){
+function mint(t,challenge,env,at,w){
  if(!Number.isSafeInteger(at)||at<0)throw Error('Invalid clock');
- const payload={v:1,iss:CANONICAL,aud:t.audience,dpl:t.id,scope,nonce:challenge,iat:at,exp:at+TTL,handoff:at+HANDOFF};
+ const payload={v:2,iss:CANONICAL,aud:t.audience,dpl:t.id,scope,nonce:challenge,...stageGrantTimes(w,at)};
  const body=Buffer.from(JSON.stringify(payload)).toString('base64url');
  return body+'.'+sign(null,Buffer.from(body),signingKey(env.SC3_STAGE_SIGNING_KEY)).toString('base64url');
 }
@@ -56,17 +57,18 @@ export async function stageIssuer(req,res,{env=process.env,owner=async()=>false,
  headers(res);
  const q=req.query??{};
  if(String(req.url??'').split('?')[0]!==path||!exact(q,req.method==='GET'?['sc3StageAuth','challenge']:['sc3StageAuth'])||q.sc3StageAuth!=='approve')return error(res,400,'Invalid staging approval request');
- const t=target(req,env);if(!t)return error(res,404,'Staging issuer disabled');
+ const t=target(req,env);if(!t||!stageWindow(env,now()))return error(res,404,'Staging issuer disabled');
  if(!['GET','POST'].includes(req.method)){res.setHeader('Allow','GET, POST');return error(res,405,'Method not allowed');}
  if(req.method==='POST'&&(req.headers?.origin!=='https://'+CANONICAL||req.headers?.['sec-fetch-site']&&req.headers['sec-fetch-site']!=='same-origin'))return error(res,403,'Invalid approval origin');
  const challenge=req.method==='GET'?q.challenge:bodyChallenge(req);
  if(!noncePattern.test(challenge??''))return error(res,400,'Invalid challenge');
  try{
   if(!await owner(req))return error(res,401,'Yahoo owner sign-in required');
+  const at=now(),w=stageWindow(env,at);if(!w)return error(res,404,'Staging issuer disabled');
   if(req.method==='GET'){
-   return html(res,'Approve staged acceptance','<p>Approve five minutes of read-only acceptance for '+esc(t.audience)+' ('+esc(t.id)+'). No fantasy transactions or writer access.</p>'+form(approval,'challenge',challenge,'Approve read-only access'),'https://'+CANONICAL);
+   return html(res,'Approve staged acceptance','<p>Approve up to five minutes of read-only acceptance for '+esc(t.audience)+' ('+esc(t.id)+'). No fantasy transactions or writer access.</p>'+form(approval,'challenge',challenge,'Approve read-only access'),'https://'+CANONICAL);
   }
-  const grant=mint(t,challenge,env,now());
-  return html(res,'Complete staged acceptance','<p>Grant expires in one minute unless transferred to the approved deployment. It does not contain your Yahoo session.</p>'+form('https://'+t.audience+path+'?sc3StageAuth=exchange','grant',grant,'Open staged acceptance'),'https://'+t.audience);
+  const grant=mint(t,challenge,env,at,w);
+  return html(res,'Complete staged acceptance','<p>Grant must be transferred within one minute or before the release window closes. It does not contain your Yahoo session.</p>'+form('https://'+t.audience+path+'?sc3StageAuth=exchange','grant',grant,'Open staged acceptance'),'https://'+t.audience);
  }catch{return error(res,503,'Staging approval unavailable');}
 }
